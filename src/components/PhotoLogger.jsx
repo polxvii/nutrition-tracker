@@ -117,22 +117,11 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
   return (
     <div className="space-y-3">
       {!preview ? (
-        <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-8 text-slate-300">
-          <span className="text-3xl">📷</span>
-          <span className="mt-1 text-sm">Take or choose a photo</span>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={pickFile}
-          />
-        </label>
-      ) : (
-        <div className="space-y-1">
-          <img src={preview} alt="meal" className="max-h-56 w-full rounded-xl object-cover" />
-          <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
-            change photo
+        <div className="grid grid-cols-2 gap-2">
+          {/* Take photo — capture hints the camera on mobile */}
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-7 text-slate-300 hover:border-green-500">
+            <span className="text-3xl">📷</span>
+            <span className="mt-1 text-sm">Take photo</span>
             <input
               type="file"
               accept="image/*"
@@ -141,6 +130,32 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
               onChange={pickFile}
             />
           </label>
+          {/* Upload — no capture, opens the gallery / file picker */}
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-7 text-slate-300 hover:border-green-500">
+            <span className="text-3xl">🖼️</span>
+            <span className="mt-1 text-sm">Upload</span>
+            <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
+          </label>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <img src={preview} alt="meal" className="max-h-56 w-full rounded-xl object-cover" />
+          <div className="flex gap-4">
+            <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
+              📷 retake
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={pickFile}
+              />
+            </label>
+            <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
+              🖼️ upload
+              <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
+            </label>
+          </div>
         </div>
       )}
 
