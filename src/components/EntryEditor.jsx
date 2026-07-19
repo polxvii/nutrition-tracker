@@ -131,7 +131,7 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
       )}
 
       <Field label="Date">
-        <Input type="date" value={f.date} max={todayISODate()} onChange={set('date')} />
+        <Input type="date" value={f.date} onChange={set('date')} />
       </Field>
 
       {!isEx && (

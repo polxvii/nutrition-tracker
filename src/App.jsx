@@ -49,7 +49,7 @@ export default function App() {
   // Main app shell (mobile-first, capped width, bottom nav).
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main className="flex-1 overflow-y-auto pb-[calc(4.5rem_+_env(safe-area-inset-bottom))]">
         <Routes>
           <Route path="/" element={<Today />} />
           <Route path="/calendar" element={<Calendar />} />

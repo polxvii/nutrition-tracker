@@ -373,7 +373,7 @@ export default function Today() {
       <header className="flex items-center justify-between pt-4">
         <button
           onClick={() => setDate(shiftDate(selectedDate, -1))}
-          className="px-2 text-xl text-slate-400 hover:text-white"
+          className="rounded-xl px-4 py-2 text-3xl leading-none text-slate-300 hover:text-white active:bg-slate-800"
           aria-label="Previous day"
         >
           ‹
@@ -385,15 +385,13 @@ export default function Today() {
           <input
             type="date"
             value={selectedDate}
-            max={todayISODate()}
             onChange={(e) => e.target.value && setDate(e.target.value)}
             className="mt-0.5 bg-transparent text-xs text-slate-500 outline-none"
           />
         </div>
         <button
           onClick={() => setDate(shiftDate(selectedDate, 1))}
-          disabled={isToday}
-          className="px-2 text-xl text-slate-400 hover:text-white disabled:opacity-30"
+          className="rounded-xl px-4 py-2 text-3xl leading-none text-slate-300 hover:text-white active:bg-slate-800"
           aria-label="Next day"
         >
           ›
@@ -420,7 +418,7 @@ export default function Today() {
             )}
             <div className="text-sm text-slate-400">kcal {remaining >= 0 ? 'left' : 'over'}</div>
             {totals.burned > 0 && (
-              <div className="mt-1 text-xs text-slate-500">🔥 {Math.round(totals.burned)} burned</div>
+              <div className="mt-1 text-sm text-slate-400">🔥 {Math.round(totals.burned)} burned</div>
             )}
           </div>
         </div>
