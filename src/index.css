@@ -10,6 +10,12 @@ body,
   height: 100%;
 }
 
+/* Keep content clear of the iPhone notch / front camera in standalone PWA
+   mode (viewport-fit=cover). No effect on devices without a safe area. */
+#root {
+  padding-top: env(safe-area-inset-top);
+}
+
 body {
   margin: 0;
   background-color: #020617; /* slate-950 — lets slate-900 cards stand out */

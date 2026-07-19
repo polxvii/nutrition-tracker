@@ -6,6 +6,7 @@ import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import ProgressRing from '../components/ProgressRing'
 import AddFoodForm, { MEALS } from '../components/AddFoodForm'
 import PhotoLogger from '../components/PhotoLogger'
+import FrequentPicker from '../components/FrequentPicker'
 import { Button, Card } from '../components/ui'
 
 const num = (v) => {
@@ -34,9 +35,22 @@ export default function Today() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showPhoto, setShowPhoto] = useState(false)
+  const [showFrequent, setShowFrequent] = useState(false)
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const closePanels = () => {
+    setShowForm(false)
+    setShowPhoto(false)
+    setShowFrequent(false)
+    setRepeatOpen(false)
+  }
+  const togglePanel = (isOpen, open) => () => {
+    const next = !isOpen
+    closePanels()
+    open(next)
+  }
 
   const setDate = (d) =>
     setParams(d === todayISODate() ? {} : { date: d }, { replace: true })
@@ -55,7 +69,7 @@ export default function Today() {
         .from('frequent_foods')
         .select('*')
         .order('times_used', { ascending: false })
-        .limit(20),
+        .limit(100),
     ])
     setLogs(logsRes.data ?? [])
     setFrequents(freqRes.data ?? [])
@@ -198,13 +212,12 @@ export default function Today() {
   }
 
   function toggleRepeat() {
-    setRepeatOpen((o) => {
-      const next = !o
-      if (next) setRepeatFrom(shiftDate(selectedDate, -1))
-      return next
-    })
-    setShowForm(false)
-    setShowPhoto(false)
+    const next = !repeatOpen
+    closePanels()
+    if (next) {
+      setRepeatFrom(shiftDate(selectedDate, -1))
+      setRepeatOpen(true)
+    }
   }
 
   async function copyFromDay() {
@@ -343,29 +356,27 @@ export default function Today() {
       </Card>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-2">
-        <Button
-          onClick={() => {
-            setShowForm((s) => !s)
-            setShowPhoto(false)
-            setRepeatOpen(false)
-          }}
-        >
-          ＋ Add
-        </Button>
-        <Button
-          onClick={() => {
-            setShowPhoto((s) => !s)
-            setShowForm(false)
-            setRepeatOpen(false)
-          }}
-        >
-          📷 Photo
+      <div className="grid grid-cols-2 gap-2">
+        <Button onClick={togglePanel(showForm, setShowForm)}>＋ Add food</Button>
+        <Button onClick={togglePanel(showPhoto, setShowPhoto)}>📷 Photo</Button>
+        <Button variant="ghost" onClick={togglePanel(showFrequent, setShowFrequent)}>
+          ⭐ Frequent
         </Button>
         <Button variant="ghost" onClick={toggleRepeat}>
-          🔁 Repeat
+          🔁 Repeat day
         </Button>
       </div>
+
+      {showFrequent && (
+        <Card>
+          <FrequentPicker
+            items={frequents}
+            onAdd={quickAddFrequent}
+            onDelete={(f) => deleteFrequent(f.id)}
+            onClose={() => setShowFrequent(false)}
+          />
+        </Card>
+      )}
 
       {showPhoto && (
         <Card>
@@ -405,35 +416,6 @@ export default function Today() {
             busy={busy}
           />
         </Card>
-      )}
-
-      {/* Frequent foods */}
-      {frequents.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-medium text-slate-300">Frequent foods</h2>
-          <div className="flex flex-wrap gap-2">
-            {frequents.map((f) => (
-              <span
-                key={f.id}
-                className="flex items-center rounded-full border border-slate-700 bg-slate-800 py-1 pl-3 pr-1 text-sm text-slate-200"
-              >
-                <button onClick={() => quickAddFrequent(f)} className="hover:text-green-400">
-                  {f.food_name}
-                  <span className="ml-1 text-xs text-slate-500">
-                    {Math.round(f.calories)} kcal
-                  </span>
-                </button>
-                <button
-                  onClick={() => deleteFrequent(f.id)}
-                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-slate-500 hover:bg-slate-700 hover:text-red-400"
-                  aria-label="Remove frequent food"
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
       )}
 
       {/* Log list */}
