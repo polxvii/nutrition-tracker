@@ -47,17 +47,15 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <Field label="Food name">
-            <Input
-              value={f.food_name}
-              onChange={set('food_name')}
-              placeholder="e.g. Grilled chicken breast 150g"
-              autoFocus
-            />
-          </Field>
-        </div>
+      <Field label="Food name">
+        <Input
+          value={f.food_name}
+          onChange={set('food_name')}
+          placeholder="e.g. Grilled chicken breast 150g"
+          autoFocus
+        />
+      </Field>
+      <div className="grid grid-cols-[auto_1fr] gap-3">
         <Field label="Meal">
           <Select value={f.meal_type} onChange={set('meal_type')}>
             {MEALS.map((m) => (
@@ -68,16 +66,15 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
           </Select>
         </Field>
         <Field label="Amount">
-          <div className="flex gap-1">
+          <div className="grid grid-cols-[1fr_auto] gap-1">
             <Input
               type="number"
               inputMode="decimal"
               value={f.grams}
               onChange={set('grams')}
               placeholder="opt."
-              className="flex-1"
             />
-            <Select value={f.unit} onChange={set('unit')} className="w-20">
+            <Select value={f.unit} onChange={set('unit')}>
               {UNITS.map((u) => (
                 <option key={u} value={u}>
                   {u}

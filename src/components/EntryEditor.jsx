@@ -78,7 +78,7 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
       </Field>
 
       {!isEx && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-[auto_1fr] gap-3">
           <Field label="Meal">
             <Select value={f.meal_type} onChange={set('meal_type')}>
               {MEALS.map((m) => (
@@ -89,16 +89,15 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
             </Select>
           </Field>
           <Field label="Amount">
-            <div className="flex gap-1">
+            <div className="grid grid-cols-[1fr_auto] gap-1">
               <Input
                 type="number"
                 inputMode="decimal"
                 value={f.grams}
                 onChange={setGrams}
                 placeholder="opt."
-                className="flex-1"
               />
-              <Select value={f.unit} onChange={set('unit')} className="w-20">
+              <Select value={f.unit} onChange={set('unit')}>
                 {UNITS.map((u) => (
                   <option key={u} value={u}>
                     {u}
