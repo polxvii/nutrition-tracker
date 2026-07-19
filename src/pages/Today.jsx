@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import ProgressRing from '../components/ProgressRing'
 import AddFoodForm, { MEALS } from '../components/AddFoodForm'
+import PhotoLogger from '../components/PhotoLogger'
 import { Button, Card } from '../components/ui'
 
 const num = (v) => {
@@ -32,6 +33,7 @@ export default function Today() {
   const [frequents, setFrequents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showPhoto, setShowPhoto] = useState(false)
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
   const [busy, setBusy] = useState(false)
@@ -133,6 +135,37 @@ export default function Today() {
     await load()
   }
 
+  async function handlePhotoLog(entries, { note, confidence, asFrequent }) {
+    setBusy(true)
+    const ts = timestampFor(selectedDate)
+    const rows = entries.map((e) => ({
+      user_id: user.id,
+      logged_at: ts,
+      source: 'photo',
+      meal_type: e.meal_type,
+      food_name: e.food_name,
+      grams: e.grams,
+      calories: e.calories,
+      protein_g: e.protein_g,
+      carbs_g: e.carbs_g,
+      fat_g: e.fat_g,
+      user_note: note,
+      ai_confidence: confidence,
+    }))
+    const { error } = await supabase.from('food_logs').insert(rows)
+    if (error) {
+      alert(error.message)
+      setBusy(false)
+      return
+    }
+    if (asFrequent) {
+      for (const e of entries) await upsertFrequent(e)
+    }
+    setShowPhoto(false)
+    setBusy(false)
+    await load()
+  }
+
   async function quickAddFrequent(f) {
     const ins = supabase.from('food_logs').insert({
       user_id: user.id,
@@ -171,6 +204,7 @@ export default function Today() {
       return next
     })
     setShowForm(false)
+    setShowPhoto(false)
   }
 
   async function copyFromDay() {
@@ -309,20 +343,39 @@ export default function Today() {
       </Card>
 
       {/* Quick actions */}
-      <div className="flex gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <Button
-          className="flex-1"
           onClick={() => {
             setShowForm((s) => !s)
+            setShowPhoto(false)
             setRepeatOpen(false)
           }}
         >
-          ＋ Add food
+          ＋ Add
+        </Button>
+        <Button
+          onClick={() => {
+            setShowPhoto((s) => !s)
+            setShowForm(false)
+            setRepeatOpen(false)
+          }}
+        >
+          📷 Photo
         </Button>
         <Button variant="ghost" onClick={toggleRepeat}>
-          🔁 Repeat day
+          🔁 Repeat
         </Button>
       </div>
+
+      {showPhoto && (
+        <Card>
+          <PhotoLogger
+            onSubmit={handlePhotoLog}
+            onCancel={() => setShowPhoto(false)}
+            busy={busy}
+          />
+        </Card>
+      )}
 
       {repeatOpen && (
         <Card className="space-y-2">

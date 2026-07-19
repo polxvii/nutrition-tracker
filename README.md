@@ -95,6 +95,23 @@ supabase/
   schema.sql   ← รันใน Supabase SQL Editor
 ```
 
-## 🔜 ถัดไป (Stage 2+)
-AI ถ่ายรูปวิเคราะห์อาหาร, barcode/USDA search, analytics dashboard (adaptive TDEE, weight trend)
+## 📸 Stage 2 — AI photo logging
+
+ถ่ายรูปอาหาร → Claude Vision ประเมิน macro แยกส่วน → แก้ portion ได้ → log
+
+**สถาปัตยกรรม:** รูปถูกย่อในเครื่อง → ส่งไป `POST /api/analyze` (serverless, **key อยู่ฝั่ง server เท่านั้น**) → Claude Vision → คืน JSON ผ่าน forced tool call
+- Local dev: จัดการโดย Vite plugin ใน `vite.config.js`
+- Production: Cloudflare Pages Function ที่ [functions/api/analyze.js](functions/api/analyze.js)
+- Logic กลาง: [server/analyzeFood.js](server/analyzeFood.js)
+
+### ตั้งค่า (ทำครั้งเดียว)
+1. เอา Anthropic API key จาก [console.anthropic.com](https://console.anthropic.com) → Settings → API keys
+2. **Local:** ใส่ใน `.env` (บรรทัด `ANTHROPIC_API_KEY=...` — **ห้ามมี** prefix `VITE_` เด็ดขาด ไม่งั้น key หลุดไป client) แล้ว **restart** `npm run dev`
+3. **Production (Cloudflare):** Workers & Pages → โปรเจค → Settings → **Environment variables** → เพิ่ม `ANTHROPIC_API_KEY` (เป็น secret) ทั้ง Production + Preview → redeploy
+
+> โมเดล default = `claude-sonnet-5` (เปลี่ยนได้ด้วย env `ANTHROPIC_MODEL`)
+> **ยังไม่ทำ:** เก็บรูปลง Supabase Storage (`photo_url` ยังเป็น null) — วิเคราะห์อย่างเดียว ไม่เซฟรูป
+
+## 🔜 ถัดไป (Stage 3+)
+barcode/USDA search, analytics dashboard (adaptive TDEE, weight trend), เก็บรูปลง Storage
 ดูรายละเอียดใน `nutrition-tracker-blueprint.md`
