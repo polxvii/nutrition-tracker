@@ -148,5 +148,16 @@ create policy weight_logs_all_own on public.weight_logs
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- =====================================================================
---  Done. Tables + RLS ready.
+--  Table privileges for API roles
+--  RLS above already restricts WHICH ROWS each user sees. These GRANTs
+--  just let the logged-in (authenticated) role reach the tables at all.
+--  `anon` (not logged in) is intentionally given nothing = fully locked.
+-- =====================================================================
+grant usage on schema public to authenticated;
+grant select, insert, update, delete
+  on public.profiles, public.food_logs, public.frequent_foods, public.weight_logs
+  to authenticated;
+
+-- =====================================================================
+--  Done. Tables + RLS + grants ready.
 -- =====================================================================
