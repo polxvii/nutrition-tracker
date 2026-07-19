@@ -5,6 +5,7 @@ export const MEALS = [
   { value: 'breakfast', label: 'Breakfast' },
   { value: 'lunch', label: 'Lunch' },
   { value: 'dinner', label: 'Dinner' },
+  { value: 'night', label: 'Night' },
   { value: 'snack', label: 'Snack' },
 ]
 

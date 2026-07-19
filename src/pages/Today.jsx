@@ -19,11 +19,12 @@ const num = (v) => {
 
 // Log sections in display order. 'other' catches food with no meal set;
 // 'exercise' holds burned-calorie entries (source === 'exercise').
-const GROUP_ORDER = ['breakfast', 'lunch', 'dinner', 'snack', 'other', 'exercise']
+const GROUP_ORDER = ['breakfast', 'lunch', 'dinner', 'night', 'snack', 'other', 'exercise']
 const GROUP_LABELS = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
   dinner: 'Dinner',
+  night: 'Night',
   snack: 'Snack',
   other: 'Other',
   exercise: 'Exercise',
@@ -33,10 +34,10 @@ const MEAL_VALUES = MEALS.map((m) => m.value)
 // Default meal for a quick-add, based on the current time of day.
 function mealForNow() {
   const h = new Date().getHours()
+  if (h >= 21 || h < 4) return 'night'
   if (h < 11) return 'breakfast'
   if (h < 15) return 'lunch'
-  if (h < 21) return 'dinner'
-  return 'snack'
+  return 'dinner'
 }
 
 const dateObj = (dateStr) => new Date(dateStr + 'T00:00:00')
@@ -130,7 +131,7 @@ export default function Today() {
 
   // Group logs into meal sections (+ exercise) for the diary view.
   const groups = useMemo(() => {
-    const g = { breakfast: [], lunch: [], dinner: [], snack: [], other: [], exercise: [] }
+    const g = { breakfast: [], lunch: [], dinner: [], night: [], snack: [], other: [], exercise: [] }
     for (const l of logs) {
       if (l.source === 'exercise') g.exercise.push(l)
       else if (MEAL_VALUES.includes(l.meal_type)) g[l.meal_type].push(l)

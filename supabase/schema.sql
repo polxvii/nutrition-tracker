@@ -40,7 +40,7 @@ create table if not exists public.food_logs (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users (id) on delete cascade,
   logged_at     timestamptz not null default now(),
-  meal_type     text check (meal_type in ('breakfast','lunch','dinner','snack')),
+  meal_type     text check (meal_type in ('breakfast','lunch','dinner','night','snack')),
   food_name     text not null,
   source        text default 'manual',   -- manual / frequent / ai / barcode / usda
   grams         numeric(7,1),             -- amount value (unit below)
