@@ -30,12 +30,15 @@ const GROUP_LABELS = {
 const MEAL_VALUES = MEALS.map((m) => m.value)
 
 // Default meal for a quick-add, based on the current time of day.
+//   04:00–10:30 breakfast · 10:31–16:00 lunch · 16:01–21:00 dinner
+//   21:01–03:59 night. (Snack has no slot — pick it manually.)
 function mealForNow() {
-  const h = new Date().getHours()
-  if (h >= 21 || h < 4) return 'night'
-  if (h < 11) return 'breakfast'
-  if (h < 15) return 'lunch'
-  return 'dinner'
+  const now = new Date()
+  const m = now.getHours() * 60 + now.getMinutes()
+  if (m >= 240 && m <= 630) return 'breakfast' // 04:00–10:30
+  if (m >= 631 && m <= 960) return 'lunch' // 10:31–16:00
+  if (m >= 961 && m <= 1260) return 'dinner' // 16:01–21:00
+  return 'night' // 21:01–03:59
 }
 
 const dateObj = (dateStr) => new Date(dateStr + 'T00:00:00')
