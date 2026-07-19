@@ -370,7 +370,7 @@ export default function Today() {
   return (
     <div className="mx-auto max-w-md space-y-4 p-4">
       {/* Date navigation */}
-      <header className="flex items-center justify-between pt-4">
+      <header className="flex items-center justify-between">
         <button
           onClick={() => setDate(shiftDate(selectedDate, -1))}
           className="rounded-xl px-4 py-2 text-3xl leading-none text-slate-300 hover:text-white active:bg-slate-800"

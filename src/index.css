@@ -10,6 +10,13 @@ body,
   height: 100%;
 }
 
+/* Fill the *visible* viewport (dynamic units) so there are no blank bands
+   at the top/bottom in mobile Safari and in-app browsers, where 100% can
+   resolve taller than the area actually on screen. */
+html {
+  height: 100dvh;
+}
+
 /* Keep content clear of the iPhone notch / front camera in standalone PWA
    mode (viewport-fit=cover). No effect on devices without a safe area. */
 #root {
