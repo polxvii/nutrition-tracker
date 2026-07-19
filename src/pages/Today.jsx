@@ -7,13 +7,35 @@ import ProgressRing from '../components/ProgressRing'
 import AddFoodForm, { MEALS } from '../components/AddFoodForm'
 import PhotoLogger from '../components/PhotoLogger'
 import FrequentPicker from '../components/FrequentPicker'
+import ExerciseForm from '../components/ExerciseForm'
 import { Button, Card } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
   return Number.isNaN(n) ? 0 : n
 }
-const mealLabel = (v) => MEALS.find((m) => m.value === v)?.label ?? '-'
+
+// Log sections in display order. 'other' catches food with no meal set;
+// 'exercise' holds burned-calorie entries (source === 'exercise').
+const GROUP_ORDER = ['breakfast', 'lunch', 'dinner', 'snack', 'other', 'exercise']
+const GROUP_LABELS = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
+  other: 'Other',
+  exercise: 'Exercise',
+}
+const MEAL_VALUES = MEALS.map((m) => m.value)
+
+// Default meal for a quick-add, based on the current time of day.
+function mealForNow() {
+  const h = new Date().getHours()
+  if (h < 11) return 'breakfast'
+  if (h < 15) return 'lunch'
+  if (h < 21) return 'dinner'
+  return 'snack'
+}
 
 const dateObj = (dateStr) => new Date(dateStr + 'T00:00:00')
 // timestamp inside the selected local day (noon dodges timezone edges)
@@ -36,6 +58,7 @@ export default function Today() {
   const [showForm, setShowForm] = useState(false)
   const [showPhoto, setShowPhoto] = useState(false)
   const [showFrequent, setShowFrequent] = useState(false)
+  const [showExercise, setShowExercise] = useState(false)
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
   const [busy, setBusy] = useState(false)
@@ -44,6 +67,7 @@ export default function Today() {
     setShowForm(false)
     setShowPhoto(false)
     setShowFrequent(false)
+    setShowExercise(false)
     setRepeatOpen(false)
   }
   const togglePanel = (isOpen, open) => () => {
@@ -83,19 +107,36 @@ export default function Today() {
   const totals = useMemo(
     () =>
       logs.reduce(
-        (a, l) => ({
-          calories: a.calories + num(l.calories),
-          protein: a.protein + num(l.protein_g),
-          carbs: a.carbs + num(l.carbs_g),
-          fat: a.fat + num(l.fat_g),
-        }),
-        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+        (a, l) => {
+          if (l.source === 'exercise') {
+            a.burned += num(l.calories)
+            return a
+          }
+          a.calories += num(l.calories)
+          a.protein += num(l.protein_g)
+          a.carbs += num(l.carbs_g)
+          a.fat += num(l.fat_g)
+          return a
+        },
+        { calories: 0, burned: 0, protein: 0, carbs: 0, fat: 0 }
       ),
     [logs]
   )
 
+  // Group logs into meal sections (+ exercise) for the diary view.
+  const groups = useMemo(() => {
+    const g = { breakfast: [], lunch: [], dinner: [], snack: [], other: [], exercise: [] }
+    for (const l of logs) {
+      if (l.source === 'exercise') g.exercise.push(l)
+      else if (MEAL_VALUES.includes(l.meal_type)) g[l.meal_type].push(l)
+      else g.other.push(l)
+    }
+    return g
+  }, [logs])
+
   const goalCal = profile?.goal_calories ?? 0
-  const remaining = Math.round(goalCal - totals.calories)
+  // Remaining = goal − eaten + burned (exercise gives calories back).
+  const remaining = Math.round(goalCal - totals.calories + totals.burned)
 
   // ---- actions ----
   async function upsertFrequent(entry) {
@@ -155,7 +196,7 @@ export default function Today() {
     const rows = entries.map((e) => ({
       user_id: user.id,
       logged_at: ts,
-      source: 'photo',
+      source: 'ai',
       meal_type: e.meal_type,
       food_name: e.food_name,
       grams: e.grams,
@@ -180,12 +221,35 @@ export default function Today() {
     await load()
   }
 
+  async function handleAddExercise({ name, calories }) {
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').insert({
+      user_id: user.id,
+      logged_at: timestampFor(selectedDate),
+      source: 'exercise',
+      meal_type: null,
+      food_name: name,
+      calories,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+    })
+    if (error) {
+      alert(error.message)
+      setBusy(false)
+      return
+    }
+    setShowExercise(false)
+    setBusy(false)
+    await load()
+  }
+
   async function quickAddFrequent(f) {
     const ins = supabase.from('food_logs').insert({
       user_id: user.id,
       logged_at: timestampFor(selectedDate),
       source: 'frequent',
-      meal_type: null,
+      meal_type: mealForNow(),
       food_name: f.food_name,
       grams: f.default_grams,
       calories: f.calories,
@@ -352,19 +416,29 @@ export default function Today() {
               over
             </>
           )}
+          {totals.burned > 0 && (
+            <span className="text-slate-500"> · 🔥 {Math.round(totals.burned)} burned</span>
+          )}
         </p>
       </Card>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={togglePanel(showForm, setShowForm)}>＋ Add food</Button>
-        <Button onClick={togglePanel(showPhoto, setShowPhoto)}>📷 Photo</Button>
-        <Button variant="ghost" onClick={togglePanel(showFrequent, setShowFrequent)}>
-          ⭐ Frequent
-        </Button>
-        <Button variant="ghost" onClick={toggleRepeat}>
-          🔁 Repeat day
-        </Button>
+      <div className="space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          <Button onClick={togglePanel(showForm, setShowForm)}>＋ Add</Button>
+          <Button onClick={togglePanel(showPhoto, setShowPhoto)}>✨ AI</Button>
+          <Button variant="ghost" onClick={togglePanel(showFrequent, setShowFrequent)}>
+            ⭐ Saved
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="ghost" onClick={togglePanel(showExercise, setShowExercise)}>
+            🏃 Exercise
+          </Button>
+          <Button variant="ghost" onClick={toggleRepeat}>
+            🔁 Repeat day
+          </Button>
+        </div>
       </div>
 
       {showFrequent && (
@@ -374,6 +448,16 @@ export default function Today() {
             onAdd={quickAddFrequent}
             onDelete={(f) => deleteFrequent(f.id)}
             onClose={() => setShowFrequent(false)}
+          />
+        </Card>
+      )}
+
+      {showExercise && (
+        <Card>
+          <ExerciseForm
+            onSubmit={handleAddExercise}
+            onCancel={() => setShowExercise(false)}
+            busy={busy}
           />
         </Card>
       )}
@@ -432,33 +516,65 @@ export default function Today() {
             </p>
           </Card>
         ) : (
-          <div className="space-y-2">
-            {logs.map((l) => (
-              <div
-                key={l.id}
-                className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2.5"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm text-white">{l.food_name}</div>
-                  <div className="text-xs text-slate-500">
-                    {mealLabel(l.meal_type)} · {Math.round(num(l.protein_g))}P ·{' '}
-                    {Math.round(num(l.carbs_g))}C · {Math.round(num(l.fat_g))}F
+          <div className="space-y-3">
+            {GROUP_ORDER.map((key) => {
+              const g = groups[key]
+              if (!g.length) return null
+              const isEx = key === 'exercise'
+              const sub = g.reduce((s, l) => s + num(l.calories), 0)
+              return (
+                <div key={key}>
+                  <div className="mb-1 flex items-center justify-between px-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      {GROUP_LABELS[key]}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {isEx ? '−' : ''}
+                      {Math.round(sub)} kcal
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {g.map((l) => (
+                      <div
+                        key={l.id}
+                        className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm text-white">
+                            {isEx ? '🏃 ' : ''}
+                            {l.food_name}
+                          </div>
+                          {!isEx && (
+                            <div className="text-xs text-slate-500">
+                              {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C ·{' '}
+                              {Math.round(num(l.fat_g))}F
+                              {l.grams ? ` · ${Math.round(num(l.grams))}g` : ''}
+                            </div>
+                          )}
+                        </div>
+                        <div className="ml-3 flex items-center gap-3">
+                          <span
+                            className={`whitespace-nowrap text-sm font-medium ${
+                              isEx ? 'text-green-400' : 'text-slate-200'
+                            }`}
+                          >
+                            {isEx ? '−' : ''}
+                            {Math.round(num(l.calories))} kcal
+                          </span>
+                          <button
+                            onClick={() => deleteLog(l.id)}
+                            className="text-slate-500 hover:text-red-400"
+                            aria-label="Delete"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="ml-3 flex items-center gap-3">
-                  <span className="whitespace-nowrap text-sm font-medium text-slate-200">
-                    {Math.round(num(l.calories))} kcal
-                  </span>
-                  <button
-                    onClick={() => deleteLog(l.id)}
-                    className="text-slate-500 hover:text-red-400"
-                    aria-label="Delete"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

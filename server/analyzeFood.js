@@ -11,15 +11,16 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 // var (e.g. "gemini-3.5-flash" for the newest explicit version).
 const DEFAULT_MODEL = 'gemini-flash-latest'
 
-const SYSTEM_PROMPT = `You are a nutrition estimation assistant specialising in Thai food and made-to-order (ตามสั่ง) dishes. Analyse the food photo and estimate its nutrition.
+const SYSTEM_PROMPT = `You are a nutrition estimation assistant specialising in Thai food and made-to-order (ตามสั่ง) dishes. Estimate the nutrition of a meal from a photo, a text description, or both.
 
 Guidelines:
 - Break the meal into its distinct components (e.g. rice, protein, vegetables, sauce, fried egg, drink). One entry per component.
 - Estimate each component's weight in grams. Use visible reference objects for scale: a dinner plate is ~26 cm, a Thai spoon ~15 ml, a standard rice scoop (ทัพพี) ~100 g cooked rice, a soup bowl ~350 ml.
 - Account for cooking method — deep-fried and stir-fried dishes carry significant oil; Thai dishes often include sugar and coconut milk.
-- If the user provides a note, treat it as ground truth and prioritise it (stated amounts, ingredients, or cooking style override your visual guess).
+- If the user provides a note/description, treat it as ground truth and prioritise it (stated amounts, ingredients, or cooking style override any visual guess).
+- If there is no photo, estimate from the text description alone. If amounts are unstated, assume typical Thai portions and lower the confidence.
 - Give per-component calories, protein, carbs, and fat in grams.
-- Set overall confidence: "high" (clear photo, familiar dish, or a helpful note), "medium", or "low" (blurry, ambiguous, or portion hard to judge).
+- Set overall confidence: "high" (clear photo, familiar dish, or a detailed description), "medium", or "low" (blurry, ambiguous, or portion hard to judge).
 - Respond ONLY with a JSON object matching the required schema. No commentary, no markdown.`
 
 // Gemini responseSchema (OpenAPI subset — types are UPPERCASE).
@@ -59,24 +60,29 @@ export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note 
       500
     )
   }
-  if (!imageBase64) throw httpError('No image was provided.', 400)
+  const hasNote = !!(note && note.trim())
+  if (!imageBase64 && !hasNote) {
+    throw httpError('Describe the food or add a photo.', 400)
+  }
 
-  const userText =
-    note && note.trim()
-      ? `Estimate the nutrition for this meal.\nUser note (treat as ground truth): ${note.trim()}`
-      : 'Estimate the nutrition for this meal. No additional note was provided.'
+  let userText
+  if (imageBase64) {
+    userText = hasNote
+      ? `Estimate the nutrition for this meal shown in the photo.\nUser note (treat as ground truth): ${note.trim()}`
+      : 'Estimate the nutrition for this meal shown in the photo.'
+  } else {
+    userText = `Estimate the nutrition for this meal, described as:\n${note.trim()}`
+  }
+
+  const parts = []
+  if (imageBase64) {
+    parts.push({ inline_data: { mime_type: mediaType || 'image/jpeg', data: imageBase64 } })
+  }
+  parts.push({ text: userText })
 
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { inline_data: { mime_type: mediaType || 'image/jpeg', data: imageBase64 } },
-          { text: userText },
-        ],
-      },
-    ],
+    contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: 0.2,
       responseMimeType: 'application/json',

@@ -37,11 +37,15 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
   }
 
   async function analyze() {
-    if (!image) return
+    if (!image && !note.trim()) return
     setAnalyzing(true)
     setError(null)
     try {
-      const res = await analyzePhoto({ base64: image.base64, mediaType: image.mediaType, note })
+      const res = await analyzePhoto({
+        base64: image?.base64 || null,
+        mediaType: image?.mediaType,
+        note,
+      })
       setItems(
         (res.items || []).map((it) => ({
           name: it.name ?? '',
@@ -116,33 +120,22 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
 
   return (
     <div className="space-y-3">
-      {!preview ? (
-        <div className="grid grid-cols-2 gap-2">
-          {/* Take photo — capture hints the camera on mobile */}
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-7 text-slate-300 hover:border-green-500">
-            <span className="text-3xl">📷</span>
-            <span className="mt-1 text-sm">Take photo</span>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={pickFile}
-            />
-          </label>
-          {/* Upload — no capture, opens the gallery / file picker */}
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-7 text-slate-300 hover:border-green-500">
-            <span className="text-3xl">🖼️</span>
-            <span className="mt-1 text-sm">Upload</span>
-            <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
-          </label>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <img src={preview} alt="meal" className="max-h-56 w-full rounded-xl object-cover" />
-          <div className="flex gap-4">
-            <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
-              📷 retake
+      <Field label="Describe the meal">
+        <Input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="e.g. grilled chicken 150g + 1 scoop rice + fried egg"
+        />
+      </Field>
+
+      <div className="space-y-1">
+        <div className="text-xs text-slate-400">Add a photo (optional — improves accuracy)</div>
+        {!preview ? (
+          <div className="grid grid-cols-2 gap-2">
+            {/* Take photo — capture hints the camera on mobile */}
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-6 text-slate-300 hover:border-green-500">
+              <span className="text-3xl">📷</span>
+              <span className="mt-1 text-sm">Take photo</span>
               <input
                 type="file"
                 accept="image/*"
@@ -151,26 +144,44 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
                 onChange={pickFile}
               />
             </label>
-            <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
-              🖼️ upload
+            {/* Upload — no capture, opens the gallery / file picker */}
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-6 text-slate-300 hover:border-green-500">
+              <span className="text-3xl">🖼️</span>
+              <span className="mt-1 text-sm">Upload</span>
               <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
             </label>
           </div>
-        </div>
-      )}
-
-      <Field label="Note (optional — improves accuracy)">
-        <Input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="e.g. 2 scoops rice, extra oil, 200g chicken"
-        />
-      </Field>
+        ) : (
+          <div className="space-y-1">
+            <img src={preview} alt="meal" className="max-h-56 w-full rounded-xl object-cover" />
+            <div className="flex gap-4">
+              <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
+                📷 retake
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={pickFile}
+                />
+              </label>
+              <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
+                🖼️ upload
+                <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
 
       {!items && (
         <div className="flex gap-2">
-          <Button className="flex-1" onClick={analyze} disabled={!image || analyzing}>
-            {analyzing ? 'Analyzing…' : '✨ Analyze photo'}
+          <Button
+            className="flex-1"
+            onClick={analyze}
+            disabled={(!image && !note.trim()) || analyzing}
+          >
+            {analyzing ? 'Analyzing…' : '✨ Analyze'}
           </Button>
           <Button variant="ghost" onClick={onCancel}>
             Cancel
