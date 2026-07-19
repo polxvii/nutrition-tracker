@@ -32,6 +32,8 @@ export default function Today() {
   const [frequents, setFrequents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [repeatOpen, setRepeatOpen] = useState(false)
+  const [repeatFrom, setRepeatFrom] = useState('')
   const [busy, setBusy] = useState(false)
 
   const setDate = (d) =>
@@ -162,16 +164,31 @@ export default function Today() {
     await supabase.from('frequent_foods').delete().eq('id', id)
   }
 
-  async function repeatPrevDay() {
-    const prev = shiftDate(selectedDate, -1)
-    const { start, end } = dayRange(dateObj(prev))
+  function toggleRepeat() {
+    setRepeatOpen((o) => {
+      const next = !o
+      if (next) setRepeatFrom(shiftDate(selectedDate, -1))
+      return next
+    })
+    setShowForm(false)
+  }
+
+  async function copyFromDay() {
+    if (!repeatFrom) return
+    if (repeatFrom === selectedDate) {
+      alert('Pick a different day')
+      return
+    }
+    setBusy(true)
+    const { start, end } = dayRange(dateObj(repeatFrom))
     const { data } = await supabase
       .from('food_logs')
       .select('*')
       .gte('logged_at', start)
       .lt('logged_at', end)
     if (!data || data.length === 0) {
-      alert('No entries the day before')
+      setBusy(false)
+      alert('No entries on that day')
       return
     }
     const ts = timestampFor(selectedDate)
@@ -188,10 +205,12 @@ export default function Today() {
       fat_g: l.fat_g,
     }))
     const { error } = await supabase.from('food_logs').insert(rows)
+    setBusy(false)
     if (error) {
       alert(error.message)
       return
     }
+    setRepeatOpen(false)
     await load()
   }
 
@@ -291,13 +310,39 @@ export default function Today() {
 
       {/* Quick actions */}
       <div className="flex gap-2">
-        <Button className="flex-1" onClick={() => setShowForm((s) => !s)}>
+        <Button
+          className="flex-1"
+          onClick={() => {
+            setShowForm((s) => !s)
+            setRepeatOpen(false)
+          }}
+        >
           ＋ Add food
         </Button>
-        <Button variant="ghost" onClick={repeatPrevDay}>
-          🔁 Repeat prev day
+        <Button variant="ghost" onClick={toggleRepeat}>
+          🔁 Repeat day
         </Button>
       </div>
+
+      {repeatOpen && (
+        <Card className="space-y-2">
+          <p className="text-sm text-slate-300">
+            Copy all meals from a day into {isToday ? 'today' : selectedDate}:
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={repeatFrom}
+              max={todayISODate()}
+              onChange={(e) => setRepeatFrom(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none focus:border-green-500"
+            />
+            <Button onClick={copyFromDay} disabled={busy || !repeatFrom}>
+              {busy ? '…' : 'Copy'}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {showForm && (
         <Card>
