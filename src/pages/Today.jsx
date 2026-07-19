@@ -426,7 +426,7 @@ export default function Today() {
       <div className="space-y-2">
         <div className="grid grid-cols-3 gap-2">
           <Button onClick={togglePanel(showForm, setShowForm)}>＋ Add</Button>
-          <Button onClick={togglePanel(showPhoto, setShowPhoto)}>✨ AI</Button>
+          <Button onClick={togglePanel(showPhoto, setShowPhoto)}>🤖 AI (Text/Pic)</Button>
           <Button variant="ghost" onClick={togglePanel(showFrequent, setShowFrequent)}>
             ⭐ Saved
           </Button>
