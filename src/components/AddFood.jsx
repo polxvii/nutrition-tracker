@@ -69,6 +69,7 @@ export default function AddFood({
   const [grams, setGrams] = useState('')
   const [unit, setUnit] = useState('g')
   const [asFrequent, setAsFrequent] = useState(false)
+  const [aiNote, setAiNote] = useState('') // seeds the AI view (auto-analyzes)
 
   // Debounced Open Food Facts search.
   useEffect(() => {
@@ -169,7 +170,15 @@ export default function AddFood({
     return <BarcodeScanner onDetected={onScan} onCancel={() => setView('home')} />
   }
   if (view === 'ai') {
-    return <PhotoLogger onSubmit={onLogMany} onCancel={() => setView('home')} busy={busy} />
+    return (
+      <PhotoLogger
+        onSubmit={onLogMany}
+        onCancel={() => setView('home')}
+        busy={busy}
+        initialNote={aiNote}
+        autoAnalyze={!!aiNote}
+      />
+    )
   }
   if (view === 'manual') {
     return <AddFoodForm onSubmit={onLog} onCancel={() => setView('home')} busy={busy} />
@@ -315,7 +324,7 @@ export default function AddFood({
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <Button className="text-sm" onClick={() => setView('ai')}>
+        <Button className="text-sm" onClick={() => { setAiNote(''); setView('ai') }}>
           🤖 AI
         </Button>
         <Button variant="ghost" className="text-sm" onClick={() => setView('scan')}>
@@ -330,6 +339,19 @@ export default function AddFood({
 
       {ql ? (
         <div className="space-y-3">
+          {/* Always offer to analyze the typed text with AI — best for Thai
+              dishes and anything the database doesn't have. */}
+          <button
+            onClick={() => {
+              setAiNote(q.trim())
+              setView('ai')
+            }}
+            className="block w-full rounded-lg border border-green-600/40 bg-green-600/10 px-3 py-2 text-left hover:bg-green-600/20"
+          >
+            <span className="text-sm text-green-300">
+              🤖 Analyze “{q.trim()}” with AI
+            </span>
+          </button>
           {localUnique.length > 0 && (
             <div className="space-y-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">

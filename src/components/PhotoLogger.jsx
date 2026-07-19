@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fileToAnalyzableImage } from '../lib/image'
 import { analyzePhoto } from '../lib/analyzeApi'
 import { Button, Field, Input, Select } from './ui'
@@ -11,10 +11,10 @@ const num = (v) => {
 const CONF_COLOR = { low: 'text-red-400', medium: 'text-amber-400', high: 'text-green-400' }
 const MACRO_KEYS = ['grams', 'calories', 'protein_g', 'carbs_g', 'fat_g']
 
-export default function PhotoLogger({ onSubmit, onCancel, busy }) {
+export default function PhotoLogger({ onSubmit, onCancel, busy, initialNote = '', autoAnalyze = false }) {
   const [preview, setPreview] = useState(null)
   const [image, setImage] = useState(null) // { base64, mediaType }
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState(initialNote)
   const [meal, setMeal] = useState('lunch')
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState(null)
@@ -63,6 +63,12 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
       setAnalyzing(false)
     }
   }
+
+  // When launched from the search box (text pre-filled), analyze immediately.
+  useEffect(() => {
+    if (autoAnalyze && initialNote.trim()) analyze()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Editing grams scales the macros proportionally; other fields edit directly.
   function updateItem(i, key, value) {
