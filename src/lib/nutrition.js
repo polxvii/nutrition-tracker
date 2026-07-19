@@ -60,9 +60,7 @@ export function calcTDEE(bmr, activityLevel) {
 }
 
 // ---- Step 3: goal calories (never below BMR) ------------------------
-// adjustPct = optional manual fine-tune applied on top of the formula
-// (e.g. +5 or -5). Applied before the BMR floor.
-export function calcGoalCalories({ tdee, bmr, goalType, goalRate, adjustPct = 0 }) {
+export function calcGoalCalories({ tdee, bmr, goalType, goalRate }) {
   let cal
   switch (goalType) {
     case 'recomp':
@@ -78,7 +76,6 @@ export function calcGoalCalories({ tdee, bmr, goalType, goalRate, adjustPct = 0 
     default:
       cal = tdee
   }
-  cal = cal * (1 + (Number(adjustPct) || 0) / 100) // manual adjustment
   return Math.max(cal, bmr) // guard: never eat below BMR
 }
 
@@ -122,7 +119,6 @@ export function computeTargets(input) {
     bmr,
     goalType: input.goalType,
     goalRate: input.goalRate,
-    adjustPct: input.adjustPct,
   })
   const macros = calcMacros({
     calories: goalCalories,
@@ -150,7 +146,6 @@ export function profileToForm(p) {
     activity_level: p?.activity_level ?? 'moderate',
     goal_type: p?.goal_type ?? 'recomp',
     goal_rate: p?.goal_rate ?? 'medium',
-    calorie_adjust_pct: p?.calorie_adjust_pct ?? 0,
   }
 }
 
@@ -177,10 +172,6 @@ export function targetsFromForm(v) {
     activityLevel: v.activity_level,
     goalType: v.goal_type,
     goalRate: v.goal_rate,
-    adjustPct:
-      v.calorie_adjust_pct === '' || v.calorie_adjust_pct == null
-        ? 0
-        : Number(v.calorie_adjust_pct),
   })
 }
 
@@ -198,17 +189,45 @@ export function buildProfilePayload(userId, email, v, targets) {
     activity_level: v.activity_level,
     goal_type: v.goal_type,
     goal_rate: v.goal_rate,
-    calorie_adjust_pct:
-      v.calorie_adjust_pct === '' || v.calorie_adjust_pct == null
-        ? 0
-        : Number(v.calorie_adjust_pct),
-    bmr: targets.bmr,
-    tdee: targets.tdee,
-    goal_calories: targets.goal_calories,
-    goal_protein_g: targets.protein_g,
-    goal_carbs_g: targets.carbs_g,
-    goal_fat_g: targets.fat_g,
-    goal_fiber_g: targets.fiber_g,
+    bmr: Math.round(Number(targets.bmr) || 0),
+    tdee: Math.round(Number(targets.tdee) || 0),
+    goal_calories: Math.round(Number(targets.goal_calories) || 0),
+    goal_protein_g: Math.round(Number(targets.protein_g) || 0),
+    goal_carbs_g: Math.round(Number(targets.carbs_g) || 0),
+    goal_fat_g: Math.round(Number(targets.fat_g) || 0),
+    goal_fiber_g: Math.round(Number(targets.fiber_g) || 0),
     updated_at: new Date().toISOString(),
   }
+}
+
+// ---- Editable-targets helpers --------------------------------------
+
+// Just the editable target fields from a computed/profile object.
+export function pickEditableTargets(t) {
+  return {
+    goal_calories: t.goal_calories,
+    protein_g: t.protein_g,
+    carbs_g: t.carbs_g,
+    fat_g: t.fat_g,
+    fiber_g: t.fiber_g,
+  }
+}
+
+// Percentage of calories from each macro (protein/carbs = 4, fat = 9 kcal/g).
+// Fiber is NOT part of the energy split.
+export function macroPercents(t) {
+  const cal = Number(t.goal_calories) || 0
+  const pCal = (Number(t.protein_g) || 0) * 4
+  const cCal = (Number(t.carbs_g) || 0) * 4
+  const fCal = (Number(t.fat_g) || 0) * 9
+  const pct = (x) => (cal > 0 ? (x / cal) * 100 : 0)
+  const p = pct(pCal)
+  const c = pct(cCal)
+  const f = pct(fCal)
+  return { p, c, f, sum: p + c + f }
+}
+
+// P/C/F must add up to ~100% of the calorie goal (small rounding tolerance).
+export function macroSplitOk(t) {
+  return Math.abs(macroPercents(t).sum - 100) <= 1.5
 }

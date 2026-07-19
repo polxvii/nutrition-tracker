@@ -103,18 +103,6 @@ export default function ProfileFields({ values, onChange }) {
         </Field>
       )}
 
-      <Field
-        label="Manual calorie adjust (%)"
-        hint="Fine-tune the calorie target if needed, e.g. -5 or +5. Leave 0 for auto."
-      >
-        <Input
-          type="number"
-          inputMode="numeric"
-          value={values.calorie_adjust_pct}
-          onChange={set('calorie_adjust_pct')}
-          placeholder="0"
-        />
-      </Field>
     </div>
   )
 }
