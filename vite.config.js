@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { analyzeFood } from './server/analyzeFood.js'
 
 // Dev-only: serve POST /api/analyze locally (mirrors the Cloudflare Pages
-// Function in functions/api/analyze.js). Reads ANTHROPIC_API_KEY from .env
+// Function in functions/api/analyze.js). Reads GEMINI_API_KEY from .env
 // WITHOUT the VITE_ prefix, so the key stays server-side and is never bundled
 // into the client. Needs a dev-server restart after you add the key.
 function devAnalyzeApi(env) {
@@ -23,8 +23,8 @@ function devAnalyzeApi(env) {
           for await (const c of req) chunks.push(c)
           const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
           const result = await analyzeFood({
-            apiKey: env.ANTHROPIC_API_KEY,
-            model: env.ANTHROPIC_MODEL,
+            apiKey: env.GEMINI_API_KEY,
+            model: env.GEMINI_MODEL,
             imageBase64: body.image,
             mediaType: body.mediaType,
             note: body.note,
@@ -44,7 +44,7 @@ function devAnalyzeApi(env) {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // Load all env vars (no prefix filter) so the dev API can read the
-  // non-VITE_ ANTHROPIC_API_KEY. Client code still only sees VITE_* vars.
+  // non-VITE_ GEMINI_API_KEY. Client code still only sees VITE_* vars.
   const env = loadEnv(mode, process.cwd(), '')
 
   return {

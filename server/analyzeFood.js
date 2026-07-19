@@ -1,12 +1,13 @@
-// Core food-photo analysis. Runs server-side only (Cloudflare Pages Function
-// in prod, Vite dev middleware locally) so the Anthropic API key never reaches
-// the client. Uses raw fetch — works identically in the Workers and Node
-// runtimes with zero dependencies.
+// Core food-photo analysis via Google Gemini (free tier). Runs server-side
+// only (Cloudflare Pages Function in prod, Vite dev middleware locally) so the
+// API key never reaches the client. Raw fetch — works in Workers and Node,
+// zero dependencies. Uses a personal Google AI Studio key, entirely separate
+// from any corporate Claude/Anthropic plan.
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
-// Blueprint §2 chose Sonnet for Thai-food vision (accuracy per cost).
-// Override with the ANTHROPIC_MODEL env var if desired.
-const DEFAULT_MODEL = 'claude-sonnet-5'
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
+// Free-tier vision model. Override with the GEMINI_MODEL env var
+// (e.g. "gemini-2.0-flash" if 2.5 isn't available on your key).
+const DEFAULT_MODEL = 'gemini-2.5-flash'
 
 const SYSTEM_PROMPT = `You are a nutrition estimation assistant specialising in Thai food and made-to-order (ตามสั่ง) dishes. Analyse the food photo and estimate its nutrition.
 
@@ -17,37 +18,30 @@ Guidelines:
 - If the user provides a note, treat it as ground truth and prioritise it (stated amounts, ingredients, or cooking style override your visual guess).
 - Give per-component calories, protein, carbs, and fat in grams.
 - Set overall confidence: "high" (clear photo, familiar dish, or a helpful note), "medium", or "low" (blurry, ambiguous, or portion hard to judge).
-- Return your estimate ONLY by calling the log_food tool. Do not reply with text.`
+- Respond ONLY with a JSON object matching the required schema. No commentary, no markdown.`
 
-const LOG_FOOD_TOOL = {
-  name: 'log_food',
-  description: 'Record the estimated nutrition breakdown of the food in the image.',
-  strict: true,
-  input_schema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
+// Gemini responseSchema (OpenAPI subset — types are UPPERCASE).
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    items: {
+      type: 'ARRAY',
       items: {
-        type: 'array',
-        description: 'One entry per distinct food or drink component.',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            name: { type: 'string', description: 'Short name of the component' },
-            grams: { type: 'number', description: 'Estimated weight in grams' },
-            calories: { type: 'number', description: 'kcal' },
-            protein_g: { type: 'number' },
-            carbs_g: { type: 'number' },
-            fat_g: { type: 'number' },
-          },
-          required: ['name', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g'],
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          grams: { type: 'NUMBER' },
+          calories: { type: 'NUMBER' },
+          protein_g: { type: 'NUMBER' },
+          carbs_g: { type: 'NUMBER' },
+          fat_g: { type: 'NUMBER' },
         },
+        required: ['name', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g'],
       },
-      confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
     },
-    required: ['items', 'confidence'],
+    confidence: { type: 'STRING', enum: ['low', 'medium', 'high'] },
   },
+  required: ['items', 'confidence'],
 }
 
 function httpError(message, status) {
@@ -59,7 +53,7 @@ function httpError(message, status) {
 export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note }) {
   if (!apiKey) {
     throw httpError(
-      'The photo feature is not configured yet — ANTHROPIC_API_KEY is missing on the server.',
+      'The photo feature is not configured yet — GEMINI_API_KEY is missing on the server.',
       500
     )
   }
@@ -71,39 +65,29 @@ export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note 
       : 'Estimate the nutrition for this meal. No additional note was provided.'
 
   const body = {
-    model: model || DEFAULT_MODEL,
-    max_tokens: 1024,
-    thinking: { type: 'disabled' }, // fast, deterministic structured extraction
-    system: SYSTEM_PROMPT,
-    tools: [LOG_FOOD_TOOL],
-    tool_choice: { type: 'tool', name: 'log_food' },
-    messages: [
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [
       {
         role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType || 'image/jpeg',
-              data: imageBase64,
-            },
-          },
-          { type: 'text', text: userText },
+        parts: [
+          { inline_data: { mime_type: mediaType || 'image/jpeg', data: imageBase64 } },
+          { text: userText },
         ],
       },
     ],
+    generationConfig: {
+      temperature: 0.2,
+      responseMimeType: 'application/json',
+      responseSchema: RESPONSE_SCHEMA,
+    },
   }
 
+  const url = `${GEMINI_BASE}/${model || DEFAULT_MODEL}:generateContent`
   let resp
   try {
-    resp = await fetch(ANTHROPIC_URL, {
+    resp = await fetch(url, {
       method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),
     })
   } catch {
@@ -118,23 +102,38 @@ export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note 
     } catch {
       /* ignore */
     }
-    // Don't leak auth specifics to the client.
-    if (resp.status === 401 || resp.status === 403) {
+    if (resp.status === 400 && /api key/i.test(msg)) {
       msg = 'The photo feature is misconfigured on the server (invalid API key).'
     }
     throw httpError(msg, 502)
   }
 
   const data = await resp.json()
-  const toolUse = (data.content || []).find(
-    (b) => b.type === 'tool_use' && b.name === 'log_food'
-  )
-  if (!toolUse?.input) {
-    throw httpError('Could not read a food estimate from the image. Try another photo.', 502)
+  const cand = data.candidates?.[0]
+  const text = (cand?.content?.parts || [])
+    .map((p) => p.text)
+    .filter(Boolean)
+    .join('')
+
+  if (!text) {
+    const reason = data.promptFeedback?.blockReason || cand?.finishReason
+    throw httpError(
+      reason
+        ? `Could not analyse the image (${reason}). Try another photo.`
+        : 'Could not read a food estimate from the image. Try another photo.',
+      502
+    )
   }
 
-  const items = Array.isArray(toolUse.input.items) ? toolUse.input.items : []
-  const confidence = toolUse.input.confidence || 'low'
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw httpError('Got an unreadable response from the model. Try again.', 502)
+  }
+
+  const items = Array.isArray(parsed.items) ? parsed.items : []
+  const confidence = parsed.confidence || 'low'
   const totals = items.reduce(
     (a, it) => ({
       calories: a.calories + (Number(it.calories) || 0),

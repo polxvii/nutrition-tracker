@@ -1,6 +1,6 @@
 // Cloudflare Pages Function — POST /api/analyze
 // Cloudflare auto-detects the functions/ directory; no extra config needed.
-// The ANTHROPIC_API_KEY is read from the Pages project env (never sent to the
+// The GEMINI_API_KEY is read from the Pages project env (never sent to the
 // browser). Set it in: Cloudflare → Workers & Pages → project → Settings →
 // Environment variables (Production + Preview).
 
@@ -18,8 +18,8 @@ export async function onRequestPost(context) {
   try {
     const body = await request.json()
     const result = await analyzeFood({
-      apiKey: env.ANTHROPIC_API_KEY,
-      model: env.ANTHROPIC_MODEL,
+      apiKey: env.GEMINI_API_KEY,
+      model: env.GEMINI_MODEL,
       imageBase64: body.image,
       mediaType: body.mediaType,
       note: body.note,
