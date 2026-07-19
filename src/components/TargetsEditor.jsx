@@ -70,6 +70,17 @@ export default function TargetsEditor({ targets, onChange, onReset, calc }) {
         )}
       </div>
 
+      {calc && (
+        <div className="flex gap-4 rounded-lg bg-slate-800 px-3 py-2 text-xs text-slate-400">
+          <span>
+            BMR <b className="text-slate-200">{calc.bmr}</b>
+          </span>
+          <span>
+            TDEE <b className="text-slate-200">{calc.tdee}</b> kcal
+          </span>
+        </div>
+      )}
+
       <Field label="Calorie goal (kcal)">
         <Input
           type="number"
