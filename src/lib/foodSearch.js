@@ -22,7 +22,9 @@ function kcalOf(n) {
 // Turn a raw OFF product into our shape, or null if it has no usable data.
 function normalize(p) {
   if (!p) return null
-  const name = (p.product_name_en || p.product_name || '').trim()
+  // Prefer the native/localised name (Thai products carry a Thai name here);
+  // fall back to the English name only when there is no local one.
+  const name = (p.product_name || p.product_name_en || '').trim()
   if (!name) return null
   const n = p.nutriments || {}
   const per100 = {
@@ -45,10 +47,25 @@ function normalize(p) {
   }
 }
 
-// Scale a normalised product to a given amount (grams/ml), returning a
-// ready-to-log entry (calories + macros rounded).
-export function scaleFood(food, amount) {
-  const f = numOr(amount) / 100
+// Units we actually have data for: the base unit (g/ml, per-100 basis) and,
+// when the product declares a serving size, "serving".
+export function unitsFor(food) {
+  const u = [food.unit]
+  if (food.serving_g) u.push('serving')
+  return u
+}
+
+// Grams that one "amount" of a given unit represents for this product.
+// g/ml → the amount itself; serving → amount × grams-per-serving.
+function gramsFor(food, unit, amount) {
+  const a = numOr(amount)
+  return unit === 'serving' && food.serving_g ? a * food.serving_g : a
+}
+
+// Scale a product to amount+unit using only the searched per-100 data,
+// returning a ready-to-log entry (calories + macros rounded).
+export function scaleFood(food, unit, amount) {
+  const f = gramsFor(food, unit, amount) / 100
   return {
     calories: Math.round(food.per100.calories * f),
     protein_g: Math.round(food.per100.protein_g * f),
@@ -62,7 +79,7 @@ export async function searchFoods(query, { signal } = {}) {
   if (!q) return []
   const url =
     `${SEARCH_URL}?search_terms=${encodeURIComponent(q)}` +
-    `&search_simple=1&action=process&json=1&page_size=25&fields=${FIELDS}`
+    `&search_simple=1&action=process&json=1&page_size=25&lc=th&fields=${FIELDS}`
   const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`Search failed (${res.status})`)
   const data = await res.json()

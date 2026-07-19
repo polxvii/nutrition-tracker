@@ -26,7 +26,9 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
 
-  // Amount change scales calories + macros.
+  // Changing the amount *number* scales calories + macros proportionally
+  // (twice the amount = twice the food). Changing the unit is left as a plain
+  // relabel — we have no per-unit data to convert g <-> serving/piece.
   function setGrams(e) {
     const value = e.target.value
     const oldG = num(f.grams)
@@ -135,7 +137,10 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
       </Field>
 
       {!isEx && (
-        <p className="text-xs text-slate-500">Changing the amount scales calories &amp; macros.</p>
+        <p className="text-xs text-slate-500">
+          Changing the amount scales macros. Changing the unit only relabels —
+          edit the values if needed.
+        </p>
       )}
 
       <div className="flex flex-wrap gap-2">

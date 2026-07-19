@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { searchFoods, lookupBarcode, scaleFood } from '../lib/foodSearch'
+import { searchFoods, lookupBarcode, scaleFood, unitsFor } from '../lib/foodSearch'
 import { Button, Field, Input, Select } from './ui'
-import { MEALS, UNITS } from './AddFoodForm'
+import { MEALS } from './AddFoodForm'
 import BarcodeScanner from './BarcodeScanner'
 
 const r = (n) => Math.round(Number(n) || 0)
@@ -47,10 +47,23 @@ export default function FoodSearch({ onSubmit, onCancel, busy }) {
     }
   }, [q])
 
+  // Default to per-serving when the product declares one, else the base unit.
   function pick(food) {
     setPicked(food)
-    setUnit(food.unit || 'g')
-    setGrams(String(food.serving_g || 100))
+    if (food.serving_g) {
+      setUnit('serving')
+      setGrams('1')
+    } else {
+      setUnit(food.unit || 'g')
+      setGrams('100')
+    }
+  }
+
+  // Switching unit resets the amount to a sensible default for that unit,
+  // so the macros stay tied to the searched data.
+  function changeUnit(u) {
+    setUnit(u)
+    setGrams(u === 'serving' ? '1' : String(picked.serving_g ? Math.round(picked.serving_g) : 100))
   }
 
   async function onScan(code) {
@@ -68,7 +81,7 @@ export default function FoodSearch({ onSubmit, onCancel, busy }) {
     }
   }
 
-  const scaled = picked ? scaleFood(picked, grams) : null
+  const scaled = picked ? scaleFood(picked, unit, grams) : null
 
   function add() {
     if (!picked) return
@@ -100,6 +113,12 @@ export default function FoodSearch({ onSubmit, onCancel, busy }) {
             per 100{picked.unit}: {r(picked.per100.calories)} kcal · {r(picked.per100.protein_g)}P{' '}
             {r(picked.per100.carbs_g)}C {r(picked.per100.fat_g)}F
           </div>
+          {picked.serving_g && (
+            <div className="text-xs text-slate-500">
+              1 serving = {r(picked.serving_g)}
+              {picked.unit}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-[auto_1fr] gap-3">
@@ -120,8 +139,8 @@ export default function FoodSearch({ onSubmit, onCancel, busy }) {
                 value={grams}
                 onChange={(e) => setGrams(e.target.value)}
               />
-              <Select value={unit} onChange={(e) => setUnit(e.target.value)}>
-                {UNITS.map((u) => (
+              <Select value={unit} onChange={(e) => changeUnit(e.target.value)}>
+                {unitsFor(picked).map((u) => (
                   <option key={u} value={u}>
                     {u}
                   </option>
