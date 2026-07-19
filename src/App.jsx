@@ -3,6 +3,7 @@ import { useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import Onboarding from './pages/Onboarding'
 import Today from './pages/Today'
+import Calendar from './pages/Calendar'
 import Weight from './pages/Weight'
 import Settings from './pages/Settings'
 import BottomNav from './components/BottomNav'
@@ -51,6 +52,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-24">
         <Routes>
           <Route path="/" element={<Today />} />
+          <Route path="/calendar" element={<Calendar />} />
           <Route path="/weight" element={<Weight />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/login" element={<Navigate to="/" replace />} />

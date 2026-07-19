@@ -16,12 +16,11 @@ const empty = {
   protein_g: '',
   carbs_g: '',
   fat_g: '',
-  fiber_g: '',
 }
 
 export default function AddFoodForm({ onSubmit, onCancel, busy }) {
   const [f, setF] = useState(empty)
-  const [asFrequent, setAsFrequent] = useState(true)
+  const [asFrequent, setAsFrequent] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
 
   function submit(e) {
@@ -36,7 +35,6 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
         protein_g: Number(f.protein_g) || 0,
         carbs_g: Number(f.carbs_g) || 0,
         fat_g: Number(f.fat_g) || 0,
-        fiber_g: Number(f.fiber_g) || 0,
       },
       { asFrequent }
     )

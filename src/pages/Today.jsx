@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { dayRange, prettyDate } from '../lib/dateHelpers'
+import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import ProgressRing from '../components/ProgressRing'
-import MacroBar from '../components/MacroBar'
 import AddFoodForm, { MEALS } from '../components/AddFoodForm'
 import { Button, Card } from '../components/ui'
 
@@ -11,20 +11,35 @@ const num = (v) => {
   const n = Number(v)
   return Number.isNaN(n) ? 0 : n
 }
-
 const mealLabel = (v) => MEALS.find((m) => m.value === v)?.label ?? '-'
+
+const dateObj = (dateStr) => new Date(dateStr + 'T00:00:00')
+// timestamp inside the selected local day (noon dodges timezone edges)
+const timestampFor = (dateStr) => new Date(dateStr + 'T12:00:00').toISOString()
+const shiftDate = (dateStr, days) => {
+  const d = dateObj(dateStr)
+  d.setDate(d.getDate() + days)
+  return todayISODate(d)
+}
 
 export default function Today() {
   const { user, profile } = useAuth()
+  const [params, setParams] = useSearchParams()
+  const selectedDate = params.get('date') || todayISODate()
+  const isToday = selectedDate === todayISODate()
+
   const [logs, setLogs] = useState([])
   const [frequents, setFrequents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const setDate = (d) =>
+    setParams(d === todayISODate() ? {} : { date: d }, { replace: true })
+
   const load = useCallback(async () => {
     setLoading(true)
-    const { start, end } = dayRange()
+    const { start, end } = dayRange(dateObj(selectedDate))
     const [logsRes, freqRes] = await Promise.all([
       supabase
         .from('food_logs')
@@ -36,12 +51,12 @@ export default function Today() {
         .from('frequent_foods')
         .select('*')
         .order('times_used', { ascending: false })
-        .limit(12),
+        .limit(20),
     ])
     setLogs(logsRes.data ?? [])
     setFrequents(freqRes.data ?? [])
     setLoading(false)
-  }, [])
+  }, [selectedDate])
 
   useEffect(() => {
     load()
@@ -55,9 +70,8 @@ export default function Today() {
           protein: a.protein + num(l.protein_g),
           carbs: a.carbs + num(l.carbs_g),
           fat: a.fat + num(l.fat_g),
-          fiber: a.fiber + num(l.fiber_g),
         }),
-        { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
       ),
     [logs]
   )
@@ -102,7 +116,7 @@ export default function Today() {
     setBusy(true)
     const { error } = await supabase.from('food_logs').insert({
       user_id: user.id,
-      logged_at: new Date().toISOString(),
+      logged_at: timestampFor(selectedDate),
       source: 'manual',
       ...entry,
     })
@@ -120,7 +134,7 @@ export default function Today() {
   async function quickAddFrequent(f) {
     const ins = supabase.from('food_logs').insert({
       user_id: user.id,
-      logged_at: new Date().toISOString(),
+      logged_at: timestampFor(selectedDate),
       source: 'frequent',
       meal_type: null,
       food_name: f.food_name,
@@ -129,7 +143,6 @@ export default function Today() {
       protein_g: f.protein_g,
       carbs_g: f.carbs_g,
       fat_g: f.fat_g,
-      fiber_g: 0,
     })
     const upd = supabase
       .from('frequent_foods')
@@ -143,23 +156,28 @@ export default function Today() {
     await load()
   }
 
-  async function repeatYesterday() {
-    const y = new Date()
-    y.setDate(y.getDate() - 1)
-    const { start, end } = dayRange(y)
+  async function deleteFrequent(id) {
+    if (!window.confirm('Remove this frequent food?')) return
+    setFrequents((prev) => prev.filter((f) => f.id !== id))
+    await supabase.from('frequent_foods').delete().eq('id', id)
+  }
+
+  async function repeatPrevDay() {
+    const prev = shiftDate(selectedDate, -1)
+    const { start, end } = dayRange(dateObj(prev))
     const { data } = await supabase
       .from('food_logs')
       .select('*')
       .gte('logged_at', start)
       .lt('logged_at', end)
     if (!data || data.length === 0) {
-      alert('No entries logged yesterday')
+      alert('No entries the day before')
       return
     }
-    const now = new Date().toISOString()
+    const ts = timestampFor(selectedDate)
     const rows = data.map((l) => ({
       user_id: user.id,
-      logged_at: now,
+      logged_at: ts,
       meal_type: l.meal_type,
       food_name: l.food_name,
       source: l.source,
@@ -168,7 +186,6 @@ export default function Today() {
       protein_g: l.protein_g,
       carbs_g: l.carbs_g,
       fat_g: l.fat_g,
-      fiber_g: l.fiber_g,
     }))
     const { error } = await supabase.from('food_logs').insert(rows)
     if (error) {
@@ -179,58 +196,97 @@ export default function Today() {
   }
 
   async function deleteLog(id) {
-    setLogs((prev) => prev.filter((l) => l.id !== id)) // optimistic
+    setLogs((prev) => prev.filter((l) => l.id !== id))
     await supabase.from('food_logs').delete().eq('id', id)
   }
 
   return (
     <div className="mx-auto max-w-md space-y-4 p-4">
-      <header className="pt-4">
-        <h1 className="text-xl font-bold text-white">Today</h1>
-        <p className="text-xs text-slate-500">{prettyDate()}</p>
+      {/* Date navigation */}
+      <header className="flex items-center justify-between pt-4">
+        <button
+          onClick={() => setDate(shiftDate(selectedDate, -1))}
+          className="px-2 text-xl text-slate-400 hover:text-white"
+          aria-label="Previous day"
+        >
+          ‹
+        </button>
+        <div className="flex flex-col items-center">
+          <span className="text-base font-bold text-white">
+            {isToday ? 'Today' : prettyDate(dateObj(selectedDate))}
+          </span>
+          <input
+            type="date"
+            value={selectedDate}
+            max={todayISODate()}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+            className="mt-0.5 bg-transparent text-xs text-slate-500 outline-none"
+          />
+        </div>
+        <button
+          onClick={() => setDate(shiftDate(selectedDate, 1))}
+          disabled={isToday}
+          className="px-2 text-xl text-slate-400 hover:text-white disabled:opacity-30"
+          aria-label="Next day"
+        >
+          ›
+        </button>
       </header>
 
       {/* Daily summary */}
       <Card className="space-y-4">
-        <div className="flex items-center justify-around">
+        <div className="flex justify-center">
           <ProgressRing
             value={totals.calories}
             max={goalCal}
+            size={140}
+            stroke={12}
             color="#22c55e"
             label="Calories"
             unit="kcal"
           />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
           <ProgressRing
             value={totals.protein}
             max={profile?.goal_protein_g ?? 0}
-            color="#38bdf8"
+            size={92}
+            stroke={8}
+            color="#22c55e"
             label="Protein"
+            unit="g"
+          />
+          <ProgressRing
+            value={totals.carbs}
+            max={profile?.goal_carbs_g ?? 0}
+            size={92}
+            stroke={8}
+            color="#3b82f6"
+            label="Carbs"
+            unit="g"
+          />
+          <ProgressRing
+            value={totals.fat}
+            max={profile?.goal_fat_g ?? 0}
+            size={92}
+            stroke={8}
+            color="#f59e0b"
+            label="Fat"
             unit="g"
           />
         </div>
         <p className="text-center text-sm text-slate-400">
           {remaining >= 0 ? (
             <>
-              <span className="font-semibold text-green-400">{remaining}</span> kcal
-              left
+              <span className="font-semibold text-green-400">{remaining}</span> kcal left
             </>
           ) : (
             <>
-              <span className="font-semibold text-red-400">{Math.abs(remaining)}</span>{' '}
-              kcal over
+              <span className="font-semibold text-red-400">{Math.abs(remaining)}</span> kcal
+              over
             </>
           )}
         </p>
-        <MacroBar
-          protein={totals.protein}
-          carbs={totals.carbs}
-          fat={totals.fat}
-          fiber={totals.fiber}
-          goalProtein={profile?.goal_protein_g ?? 0}
-          goalCarbs={profile?.goal_carbs_g ?? 0}
-          goalFat={profile?.goal_fat_g ?? 0}
-          goalFiber={profile?.goal_fiber_g ?? 0}
-        />
       </Card>
 
       {/* Quick actions */}
@@ -238,8 +294,8 @@ export default function Today() {
         <Button className="flex-1" onClick={() => setShowForm((s) => !s)}>
           ＋ Add food
         </Button>
-        <Button variant="ghost" onClick={repeatYesterday}>
-          🔁 Repeat yesterday
+        <Button variant="ghost" onClick={repeatPrevDay}>
+          🔁 Repeat prev day
         </Button>
       </div>
 
@@ -259,30 +315,40 @@ export default function Today() {
           <h2 className="text-sm font-medium text-slate-300">Frequent foods</h2>
           <div className="flex flex-wrap gap-2">
             {frequents.map((f) => (
-              <button
+              <span
                 key={f.id}
-                onClick={() => quickAddFrequent(f)}
-                className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:border-green-500"
+                className="flex items-center rounded-full border border-slate-700 bg-slate-800 py-1 pl-3 pr-1 text-sm text-slate-200"
               >
-                {f.food_name}
-                <span className="ml-1 text-xs text-slate-500">
-                  {Math.round(f.calories)} kcal
-                </span>
-              </button>
+                <button onClick={() => quickAddFrequent(f)} className="hover:text-green-400">
+                  {f.food_name}
+                  <span className="ml-1 text-xs text-slate-500">
+                    {Math.round(f.calories)} kcal
+                  </span>
+                </button>
+                <button
+                  onClick={() => deleteFrequent(f.id)}
+                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-slate-500 hover:bg-slate-700 hover:text-red-400"
+                  aria-label="Remove frequent food"
+                >
+                  ✕
+                </button>
+              </span>
             ))}
           </div>
         </div>
       )}
 
-      {/* Today's log list */}
+      {/* Log list */}
       <div className="space-y-2">
-        <h2 className="text-sm font-medium text-slate-300">Today's log</h2>
+        <h2 className="text-sm font-medium text-slate-300">
+          {isToday ? "Today's log" : 'Log'}
+        </h2>
         {loading ? (
           <p className="text-sm text-slate-500">Loading…</p>
         ) : logs.length === 0 ? (
           <Card>
             <p className="text-center text-sm text-slate-500">
-              No entries yet — tap “＋ Add food” to start
+              No entries — tap “＋ Add food”.
             </p>
           </Card>
         ) : (

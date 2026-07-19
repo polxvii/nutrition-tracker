@@ -23,7 +23,6 @@ export default function Settings() {
     protein_g: profile?.goal_protein_g ?? '',
     carbs_g: profile?.goal_carbs_g ?? '',
     fat_g: profile?.goal_fat_g ?? '',
-    fiber_g: profile?.goal_fiber_g ?? '',
   })
   const [dirty, setDirty] = useState(true)
   const [busy, setBusy] = useState(false)

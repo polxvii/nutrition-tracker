@@ -99,14 +99,10 @@ export function calcMacros({ calories, weightKg, goalType }) {
   const carbsCal = Math.max(calories - proteinCal - fatCal, 0)
   const carbsG = carbsCal / 4
 
-  // Fiber: 14 g per 1000 kcal
-  const fiberG = (calories / 1000) * 14
-
   return {
     protein_g: Math.round(proteinG),
     fat_g: Math.round(fatG),
     carbs_g: Math.round(carbsG),
-    fiber_g: Math.round(fiberG),
   }
 }
 
@@ -195,7 +191,6 @@ export function buildProfilePayload(userId, email, v, targets) {
     goal_protein_g: Math.round(Number(targets.protein_g) || 0),
     goal_carbs_g: Math.round(Number(targets.carbs_g) || 0),
     goal_fat_g: Math.round(Number(targets.fat_g) || 0),
-    goal_fiber_g: Math.round(Number(targets.fiber_g) || 0),
     updated_at: new Date().toISOString(),
   }
 }
@@ -209,12 +204,10 @@ export function pickEditableTargets(t) {
     protein_g: t.protein_g,
     carbs_g: t.carbs_g,
     fat_g: t.fat_g,
-    fiber_g: t.fiber_g,
   }
 }
 
 // Percentage of calories from each macro (protein/carbs = 4, fat = 9 kcal/g).
-// Fiber is NOT part of the energy split.
 export function macroPercents(t) {
   const cal = Number(t.goal_calories) || 0
   const pCal = (Number(t.protein_g) || 0) * 4

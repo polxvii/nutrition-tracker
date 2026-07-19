@@ -29,7 +29,6 @@ create table if not exists public.profiles (
   goal_protein_g integer,
   goal_carbs_g   integer,
   goal_fat_g     integer,
-  goal_fiber_g   integer,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
@@ -49,7 +48,6 @@ create table if not exists public.food_logs (
   protein_g     numeric(6,1) not null default 0,
   carbs_g       numeric(6,1) not null default 0,
   fat_g         numeric(6,1) not null default 0,
-  fiber_g       numeric(6,1) not null default 0,
   photo_url     text,
   user_note     text,
   ai_confidence text,                     -- low / medium / high (ใช้ตอน Stage 2)

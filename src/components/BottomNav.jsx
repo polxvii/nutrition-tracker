@@ -2,16 +2,15 @@ import { NavLink } from 'react-router-dom'
 
 const tabs = [
   { to: '/', label: 'Today', icon: '🍽️', end: true },
+  { to: '/calendar', label: 'Calendar', icon: '📅' },
   { to: '/weight', label: 'Weight', icon: '⚖️' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
 export default function BottomNav() {
   return (
-    <nav
-      className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-slate-800 bg-slate-900/95 backdrop-blur safe-bottom"
-    >
-      <div className="grid grid-cols-3">
+    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-slate-800 bg-slate-900/95 backdrop-blur safe-bottom">
+      <div className="grid grid-cols-4">
         {tabs.map((t) => (
           <NavLink
             key={t.to}
