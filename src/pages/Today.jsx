@@ -100,7 +100,7 @@ export default function Today() {
         .from('food_logs')
         .select('*')
         .neq('source', 'exercise')
-        .order('logged_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(80),
     ])
     setLogs(logsRes.data ?? [])

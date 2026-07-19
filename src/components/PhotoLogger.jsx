@@ -11,7 +11,14 @@ const num = (v) => {
 const CONF_COLOR = { low: 'text-red-400', medium: 'text-amber-400', high: 'text-green-400' }
 const MACRO_KEYS = ['grams', 'calories', 'protein_g', 'carbs_g', 'fat_g']
 
-export default function PhotoLogger({ onSubmit, onCancel, busy, initialNote = '', autoAnalyze = false }) {
+export default function PhotoLogger({
+  onSubmit,
+  onCancel,
+  busy,
+  initialNote = '',
+  autoAnalyze = false,
+  hint = '',
+}) {
   const [preview, setPreview] = useState(null)
   const [image, setImage] = useState(null) // { base64, mediaType }
   const [note, setNote] = useState(initialNote)
@@ -126,6 +133,9 @@ export default function PhotoLogger({ onSubmit, onCancel, busy, initialNote = ''
 
   return (
     <div className="space-y-3">
+      {hint && (
+        <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">{hint}</p>
+      )}
       <Field label="Describe the meal">
         <Input
           value={note}

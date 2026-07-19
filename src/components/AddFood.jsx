@@ -70,6 +70,13 @@ export default function AddFood({
   const [unit, setUnit] = useState('g')
   const [asFrequent, setAsFrequent] = useState(false)
   const [aiNote, setAiNote] = useState('') // seeds the AI view (auto-analyzes)
+  const [aiHint, setAiHint] = useState('') // amber note shown atop the AI view
+
+  const openAI = (note = '', hint = '') => {
+    setAiNote(note)
+    setAiHint(hint)
+    setView('ai')
+  }
 
   // Debounced Open Food Facts search.
   useEffect(() => {
@@ -122,8 +129,9 @@ export default function AddFood({
     setError(null)
     try {
       const food = await lookupBarcode(code)
-      if (!food) setError(`Barcode ${code} isn't in the database — try 🤖 AI or ✎ Manual.`)
-      else pick(food)
+      if (food) pick(food)
+      // Not in the database → hand off to AI (snap the label / describe it).
+      else openAI('', `Barcode ${code} isn't in the database — snap the nutrition label or describe the product for AI.`)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -177,6 +185,7 @@ export default function AddFood({
         busy={busy}
         initialNote={aiNote}
         autoAnalyze={!!aiNote}
+        hint={aiHint}
       />
     )
   }
@@ -324,7 +333,7 @@ export default function AddFood({
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <Button className="text-sm" onClick={() => { setAiNote(''); setView('ai') }}>
+        <Button className="text-sm" onClick={() => openAI()}>
           🤖 AI
         </Button>
         <Button variant="ghost" className="text-sm" onClick={() => setView('scan')}>
@@ -342,10 +351,7 @@ export default function AddFood({
           {/* Always offer to analyze the typed text with AI — best for Thai
               dishes and anything the database doesn't have. */}
           <button
-            onClick={() => {
-              setAiNote(q.trim())
-              setView('ai')
-            }}
+            onClick={() => openAI(q.trim())}
             className="block w-full rounded-lg border border-green-600/40 bg-green-600/10 px-3 py-2 text-left hover:bg-green-600/20"
           >
             <span className="text-sm text-green-300">
