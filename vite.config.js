@@ -25,6 +25,7 @@ function devAnalyzeApi(env) {
           const result = await analyzeFood({
             apiKey: env.GEMINI_API_KEY,
             model: env.GEMINI_MODEL,
+            models: env.GEMINI_MODELS,
             imageBase64: body.image,
             mediaType: body.mediaType,
             note: body.note,

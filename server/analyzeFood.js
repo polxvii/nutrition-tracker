@@ -5,11 +5,23 @@
 // from any corporate Claude/Anthropic plan.
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
-// Free-tier vision model. "gemini-flash-latest" is a Google-maintained alias
-// that always points to the current flash model, so it won't break when a
-// pinned version is retired for new keys. Override with the GEMINI_MODEL env
-// var (e.g. "gemini-3.5-flash" for the newest explicit version).
-const DEFAULT_MODEL = 'gemini-flash-latest'
+// Free-tier vision models, tried in order. Each model has its own daily
+// request quota (RPD), so when the first is exhausted (HTTP 429) we cascade to
+// the next — buying several times the free daily budget. Every request starts
+// from the top again, so once a model's quota resets we're back on the primary
+// automatically (no persisted state). "gemini-flash-latest" is a Google alias
+// that always points at the current flash model. Override the whole list with
+// the GEMINI_MODELS env var (comma-separated), or a single GEMINI_MODEL.
+const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3-flash']
+
+function resolveModels({ models, model }) {
+  if (Array.isArray(models) && models.length) return models
+  if (typeof models === 'string' && models.trim()) {
+    return models.split(',').map((s) => s.trim()).filter(Boolean)
+  }
+  if (model && model.trim()) return [model.trim()]
+  return DEFAULT_MODELS
+}
 
 const SYSTEM_PROMPT = `You are a nutrition estimation assistant specialising in Thai food and made-to-order (ตามสั่ง) dishes. Estimate the nutrition of a meal from a photo, a text description, or both.
 
@@ -53,7 +65,48 @@ function httpError(message, status) {
   return e
 }
 
-export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note }) {
+// One generateContent call. On failure throws an error carrying .status and
+// .retryable (true when it's worth trying the next model in the chain).
+async function callModel({ apiKey, model, body }) {
+  const url = `${GEMINI_BASE}/${model}:generateContent`
+  let resp
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    const e = httpError('Could not reach the analysis service. Try again.', 502)
+    e.retryable = true
+    throw e
+  }
+  if (!resp.ok) {
+    let msg = `Analysis service error (${resp.status}).`
+    try {
+      const j = await resp.json()
+      if (j?.error?.message) msg = j.error.message
+    } catch {
+      /* ignore */
+    }
+    // Worth cascading to the next model: rate/quota limit, a model this key
+    // can't use, or a transient overload.
+    const retryable =
+      resp.status === 429 ||
+      resp.status === 404 ||
+      resp.status === 503 ||
+      /not found|not supported|does not exist|quota|rate limit/i.test(msg)
+    if (resp.status === 400 && /api key/i.test(msg)) {
+      msg = 'The photo feature is misconfigured on the server (invalid API key).'
+    }
+    const e = httpError(msg, resp.status === 429 ? 429 : 502)
+    e.retryable = retryable
+    throw e
+  }
+  return resp.json()
+}
+
+export async function analyzeFood({ apiKey, model, models, imageBase64, mediaType, note }) {
   if (!apiKey) {
     throw httpError(
       'The photo feature is not configured yet — GEMINI_API_KEY is missing on the server.',
@@ -90,33 +143,33 @@ export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note 
     },
   }
 
-  const url = `${GEMINI_BASE}/${model || DEFAULT_MODEL}:generateContent`
-  let resp
-  try {
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify(body),
-    })
-  } catch {
-    throw httpError('Could not reach the analysis service. Try again.', 502)
-  }
-
-  if (!resp.ok) {
-    let msg = `Analysis service error (${resp.status}).`
+  // Try each model in turn; cascade to the next only on retryable errors
+  // (rate limit / unavailable model / overload). Any other error stops early.
+  const chain = resolveModels({ models, model })
+  let data
+  let usedModel
+  let lastErr
+  for (const m of chain) {
     try {
-      const j = await resp.json()
-      if (j?.error?.message) msg = j.error.message
-    } catch {
-      /* ignore */
+      data = await callModel({ apiKey, model: m, body })
+      usedModel = m
+      break
+    } catch (e) {
+      lastErr = e
+      if (e.retryable) continue
+      throw e
     }
-    if (resp.status === 400 && /api key/i.test(msg)) {
-      msg = 'The photo feature is misconfigured on the server (invalid API key).'
+  }
+  if (!data) {
+    if (lastErr?.status === 429) {
+      throw httpError(
+        'All AI models have hit their free daily limit. Try again after the daily reset, or add the food manually / by search.',
+        429
+      )
     }
-    throw httpError(msg, 502)
+    throw lastErr || httpError('Analysis failed. Try again.', 502)
   }
 
-  const data = await resp.json()
   const cand = data.candidates?.[0]
   const text = (cand?.content?.parts || [])
     .map((p) => p.text)
@@ -152,5 +205,5 @@ export async function analyzeFood({ apiKey, model, imageBase64, mediaType, note 
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
   )
 
-  return { items, confidence, totals }
+  return { items, confidence, totals, model: usedModel }
 }
