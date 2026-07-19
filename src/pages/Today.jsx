@@ -4,10 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import ProgressRing from '../components/ProgressRing'
-import AddFoodForm, { MEALS } from '../components/AddFoodForm'
-import PhotoLogger from '../components/PhotoLogger'
-import FrequentPicker from '../components/FrequentPicker'
-import FoodSearch from '../components/FoodSearch'
+import { MEALS } from '../components/AddFoodForm'
+import AddFood from '../components/AddFood'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
 import { Button, Card } from '../components/ui'
@@ -57,11 +55,9 @@ export default function Today() {
 
   const [logs, setLogs] = useState([])
   const [frequents, setFrequents] = useState([])
+  const [recent, setRecent] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [showPhoto, setShowPhoto] = useState(false)
-  const [showFrequent, setShowFrequent] = useState(false)
-  const [showSearch, setShowSearch] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
   const [showExercise, setShowExercise] = useState(false)
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
@@ -69,10 +65,7 @@ export default function Today() {
   const [busy, setBusy] = useState(false)
 
   const closePanels = () => {
-    setShowForm(false)
-    setShowPhoto(false)
-    setShowFrequent(false)
-    setShowSearch(false)
+    setShowAdd(false)
     setShowExercise(false)
     setRepeatOpen(false)
   }
@@ -88,7 +81,7 @@ export default function Today() {
   const load = useCallback(async () => {
     setLoading(true)
     const { start, end } = dayRange(dateObj(selectedDate))
-    const [logsRes, freqRes] = await Promise.all([
+    const [logsRes, freqRes, recentRes] = await Promise.all([
       supabase
         .from('food_logs')
         .select('*')
@@ -100,9 +93,26 @@ export default function Today() {
         .select('*')
         .order('times_used', { ascending: false })
         .limit(100),
+      supabase
+        .from('food_logs')
+        .select('*')
+        .neq('source', 'exercise')
+        .order('logged_at', { ascending: false })
+        .limit(80),
     ])
     setLogs(logsRes.data ?? [])
     setFrequents(freqRes.data ?? [])
+    // Most-recent-first, de-duped by food name → quick "Recent" list.
+    const seen = new Set()
+    const recentFoods = []
+    for (const l of recentRes.data ?? []) {
+      const k = (l.food_name || '').toLowerCase()
+      if (!k || seen.has(k)) continue
+      seen.add(k)
+      recentFoods.push(l)
+      if (recentFoods.length >= 25) break
+    }
+    setRecent(recentFoods)
     setLoading(false)
   }, [selectedDate])
 
@@ -179,12 +189,13 @@ export default function Today() {
     }
   }
 
-  async function handleAdd(entry, { asFrequent }) {
+  // Single food added from any path (recent/saved/search/barcode/manual).
+  async function handleLog(entry, { asFrequent }) {
     setBusy(true)
     const { error } = await supabase.from('food_logs').insert({
       user_id: user.id,
       logged_at: timestampFor(selectedDate),
-      source: 'manual',
+      source: entry.source || 'manual',
       ...entry,
     })
     if (error) {
@@ -193,26 +204,7 @@ export default function Today() {
       return
     }
     if (asFrequent) await upsertFrequent(entry)
-    setShowForm(false)
-    setBusy(false)
-    await load()
-  }
-
-  async function handleSearchLog(entry, { asFrequent }) {
-    setBusy(true)
-    const { error } = await supabase.from('food_logs').insert({
-      user_id: user.id,
-      logged_at: timestampFor(selectedDate),
-      source: entry.source || 'search',
-      ...entry,
-    })
-    if (error) {
-      alert(error.message)
-      setBusy(false)
-      return
-    }
-    if (asFrequent) await upsertFrequent(entry)
-    setShowSearch(false)
+    setShowAdd(false)
     setBusy(false)
     await load()
   }
@@ -244,7 +236,7 @@ export default function Today() {
     if (asFrequent) {
       for (const e of entries) await upsertFrequent(e)
     }
-    setShowPhoto(false)
+    setShowAdd(false)
     setBusy(false)
     await load()
   }
@@ -269,32 +261,6 @@ export default function Today() {
     }
     setShowExercise(false)
     setBusy(false)
-    await load()
-  }
-
-  async function quickAddFrequent(f) {
-    const ins = supabase.from('food_logs').insert({
-      user_id: user.id,
-      logged_at: timestampFor(selectedDate),
-      source: 'frequent',
-      meal_type: mealForNow(),
-      food_name: f.food_name,
-      grams: f.default_grams,
-      unit: f.unit ?? 'g',
-      calories: f.calories,
-      protein_g: f.protein_g,
-      carbs_g: f.carbs_g,
-      fat_g: f.fat_g,
-    })
-    const upd = supabase
-      .from('frequent_foods')
-      .update({ times_used: f.times_used + 1 })
-      .eq('id', f.id)
-    const [{ error }] = await Promise.all([ins, upd])
-    if (error) {
-      alert(error.message)
-      return
-    }
     await load()
   }
 
@@ -476,25 +442,11 @@ export default function Today() {
         </div>
       </Card>
 
-      {/* Quick actions — AI is the hero, other methods below */}
+      {/* Quick actions */}
       <div className="space-y-2">
-        <Button
-          className="w-full py-3.5 text-base"
-          onClick={togglePanel(showPhoto, setShowPhoto)}
-        >
-          🤖 AI — snap a photo or describe it
+        <Button className="w-full py-3.5 text-base" onClick={togglePanel(showAdd, setShowAdd)}>
+          ＋ Add food
         </Button>
-        <div className="grid grid-cols-3 gap-2">
-          <Button variant="ghost" className="text-sm" onClick={togglePanel(showSearch, setShowSearch)}>
-            🔍 Search
-          </Button>
-          <Button variant="ghost" className="text-sm" onClick={togglePanel(showForm, setShowForm)}>
-            ＋ Manual
-          </Button>
-          <Button variant="ghost" className="text-sm" onClick={togglePanel(showFrequent, setShowFrequent)}>
-            ⭐ Saved
-          </Button>
-        </div>
         <div className="grid grid-cols-2 gap-2">
           <Button variant="ghost" className="text-sm" onClick={togglePanel(showExercise, setShowExercise)}>
             🏃 Exercise
@@ -505,22 +457,16 @@ export default function Today() {
         </div>
       </div>
 
-      {showFrequent && (
+      {showAdd && (
         <Card>
-          <FrequentPicker
-            items={frequents}
-            onAdd={quickAddFrequent}
-            onDelete={(f) => deleteFrequent(f.id)}
-            onClose={() => setShowFrequent(false)}
-          />
-        </Card>
-      )}
-
-      {showSearch && (
-        <Card>
-          <FoodSearch
-            onSubmit={handleSearchLog}
-            onCancel={() => setShowSearch(false)}
+          <AddFood
+            defaultMeal={mealForNow()}
+            recent={recent}
+            saved={frequents}
+            onLog={handleLog}
+            onLogMany={handlePhotoLog}
+            onDeleteSaved={(f) => deleteFrequent(f.id)}
+            onCancel={() => setShowAdd(false)}
             busy={busy}
           />
         </Card>
@@ -531,16 +477,6 @@ export default function Today() {
           <ExerciseForm
             onSubmit={handleAddExercise}
             onCancel={() => setShowExercise(false)}
-            busy={busy}
-          />
-        </Card>
-      )}
-
-      {showPhoto && (
-        <Card>
-          <PhotoLogger
-            onSubmit={handlePhotoLog}
-            onCancel={() => setShowPhoto(false)}
             busy={busy}
           />
         </Card>
@@ -566,15 +502,6 @@ export default function Today() {
         </Card>
       )}
 
-      {showForm && (
-        <Card>
-          <AddFoodForm
-            onSubmit={handleAdd}
-            onCancel={() => setShowForm(false)}
-            busy={busy}
-          />
-        </Card>
-      )}
 
       {/* Log list */}
       <div className="space-y-2">
