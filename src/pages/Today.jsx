@@ -402,16 +402,27 @@ export default function Today() {
 
       {/* Daily summary */}
       <Card className="space-y-4">
-        <div className="flex justify-center">
+        <div className="flex items-center justify-center gap-5">
           <ProgressRing
             value={totals.calories}
             max={goalCal}
-            size={140}
-            stroke={12}
+            size={120}
+            stroke={11}
             color="#22c55e"
             label="Calories"
             unit="kcal"
           />
+          <div className="text-center">
+            {remaining >= 0 ? (
+              <div className="text-4xl font-bold text-green-400">{remaining}</div>
+            ) : (
+              <div className="text-4xl font-bold text-red-400">{Math.abs(remaining)}</div>
+            )}
+            <div className="text-sm text-slate-400">kcal {remaining >= 0 ? 'left' : 'over'}</div>
+            {totals.burned > 0 && (
+              <div className="mt-1 text-xs text-slate-500">🔥 {Math.round(totals.burned)} burned</div>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <ProgressRing
@@ -442,21 +453,6 @@ export default function Today() {
             unit="g"
           />
         </div>
-        <p className="text-center text-sm text-slate-400">
-          {remaining >= 0 ? (
-            <>
-              <span className="font-semibold text-green-400">{remaining}</span> kcal left
-            </>
-          ) : (
-            <>
-              <span className="font-semibold text-red-400">{Math.abs(remaining)}</span> kcal
-              over
-            </>
-          )}
-          {totals.burned > 0 && (
-            <span className="text-slate-500"> · 🔥 {Math.round(totals.burned)} burned</span>
-          )}
-        </p>
       </Card>
 
       {/* Quick actions */}
