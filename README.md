@@ -109,7 +109,7 @@ supabase/
 2. **Local:** ใส่ใน `.env` (บรรทัด `GEMINI_API_KEY=...` — **ห้ามมี** prefix `VITE_` เด็ดขาด ไม่งั้น key หลุดไป client) แล้ว **restart** `npm run dev`
 3. **Production (Cloudflare):** Workers & Pages → โปรเจค → Settings → **Environment variables** → เพิ่ม `GEMINI_API_KEY` (เป็น secret) ทั้ง Production + Preview → redeploy
 
-> โมเดล default = `gemini-2.5-flash` (เปลี่ยนได้ด้วย env `GEMINI_MODEL` เช่น `gemini-2.0-flash`)
+> โมเดล default = `gemini-flash-latest` (alias ที่ Google ชี้ไปโมเดล flash ล่าสุดเสมอ) — เปลี่ยนได้ด้วย env `GEMINI_MODEL` เช่น `gemini-3.5-flash`
 > เป็นบัญชี Google ส่วนตัว แยกจาก Claude Enterprise ขององค์กรโดยสิ้นเชิง
 > **ยังไม่ทำ:** เก็บรูปลง Supabase Storage (`photo_url` ยังเป็น null) — วิเคราะห์อย่างเดียว ไม่เซฟรูป
 

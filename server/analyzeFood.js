@@ -5,9 +5,11 @@
 // from any corporate Claude/Anthropic plan.
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
-// Free-tier vision model. Override with the GEMINI_MODEL env var
-// (e.g. "gemini-2.0-flash" if 2.5 isn't available on your key).
-const DEFAULT_MODEL = 'gemini-2.5-flash'
+// Free-tier vision model. "gemini-flash-latest" is a Google-maintained alias
+// that always points to the current flash model, so it won't break when a
+// pinned version is retired for new keys. Override with the GEMINI_MODEL env
+// var (e.g. "gemini-3.5-flash" for the newest explicit version).
+const DEFAULT_MODEL = 'gemini-flash-latest'
 
 const SYSTEM_PROMPT = `You are a nutrition estimation assistant specialising in Thai food and made-to-order (ตามสั่ง) dishes. Analyse the food photo and estimate its nutrition.
 
