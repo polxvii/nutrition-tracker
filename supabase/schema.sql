@@ -42,8 +42,9 @@ create table if not exists public.food_logs (
   logged_at     timestamptz not null default now(),
   meal_type     text check (meal_type in ('breakfast','lunch','dinner','snack')),
   food_name     text not null,
-  source        text default 'manual',   -- manual / frequent / photo / barcode / usda
-  grams         numeric(7,1),
+  source        text default 'manual',   -- manual / frequent / ai / barcode / usda
+  grams         numeric(7,1),             -- amount value (unit below)
+  unit          text default 'g',         -- g / ml / piece / serving / cup / ...
   calories      numeric(7,1) not null default 0,
   protein_g     numeric(6,1) not null default 0,
   carbs_g       numeric(6,1) not null default 0,
@@ -65,6 +66,7 @@ create table if not exists public.frequent_foods (
   user_id       uuid not null references auth.users (id) on delete cascade,
   food_name     text not null,
   default_grams numeric(7,1),
+  unit          text default 'g',
   calories      numeric(7,1) not null default 0,
   protein_g     numeric(6,1) not null default 0,
   carbs_g       numeric(6,1) not null default 0,

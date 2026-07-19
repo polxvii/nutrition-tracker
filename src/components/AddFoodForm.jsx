@@ -8,10 +8,13 @@ export const MEALS = [
   { value: 'snack', label: 'Snack' },
 ]
 
+export const UNITS = ['g', 'ml', 'piece', 'serving', 'cup', 'glass', 'tbsp', 'tsp']
+
 const empty = {
   food_name: '',
   meal_type: 'lunch',
   grams: '',
+  unit: 'g',
   calories: '',
   protein_g: '',
   carbs_g: '',
@@ -31,6 +34,7 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
         food_name: f.food_name.trim(),
         meal_type: f.meal_type,
         grams: f.grams === '' ? null : Number(f.grams),
+        unit: f.unit,
         calories: Number(f.calories) || 0,
         protein_g: Number(f.protein_g) || 0,
         carbs_g: Number(f.carbs_g) || 0,
@@ -63,14 +67,24 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
             ))}
           </Select>
         </Field>
-        <Field label="Amount (g)">
-          <Input
-            type="number"
-            inputMode="decimal"
-            value={f.grams}
-            onChange={set('grams')}
-            placeholder="optional"
-          />
+        <Field label="Amount">
+          <div className="flex gap-1">
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={f.grams}
+              onChange={set('grams')}
+              placeholder="opt."
+              className="flex-1"
+            />
+            <Select value={f.unit} onChange={set('unit')} className="w-20">
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </Select>
+          </div>
         </Field>
       </div>
 

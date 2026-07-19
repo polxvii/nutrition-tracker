@@ -8,6 +8,7 @@ import AddFoodForm, { MEALS } from '../components/AddFoodForm'
 import PhotoLogger from '../components/PhotoLogger'
 import FrequentPicker from '../components/FrequentPicker'
 import ExerciseForm from '../components/ExerciseForm'
+import EntryEditor from '../components/EntryEditor'
 import { Button, Card } from '../components/ui'
 
 const num = (v) => {
@@ -61,6 +62,7 @@ export default function Today() {
   const [showExercise, setShowExercise] = useState(false)
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
+  const [editingEntry, setEditingEntry] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const closePanels = () => {
@@ -151,6 +153,7 @@ export default function Today() {
         .update({
           times_used: existing.times_used + 1,
           default_grams: entry.grams,
+          unit: entry.unit ?? 'g',
           calories: entry.calories,
           protein_g: entry.protein_g,
           carbs_g: entry.carbs_g,
@@ -162,6 +165,7 @@ export default function Today() {
         user_id: user.id,
         food_name: entry.food_name,
         default_grams: entry.grams,
+        unit: entry.unit ?? 'g',
         calories: entry.calories,
         protein_g: entry.protein_g,
         carbs_g: entry.carbs_g,
@@ -200,6 +204,7 @@ export default function Today() {
       meal_type: e.meal_type,
       food_name: e.food_name,
       grams: e.grams,
+      unit: 'g',
       calories: e.calories,
       protein_g: e.protein_g,
       carbs_g: e.carbs_g,
@@ -252,6 +257,7 @@ export default function Today() {
       meal_type: mealForNow(),
       food_name: f.food_name,
       grams: f.default_grams,
+      unit: f.unit ?? 'g',
       calories: f.calories,
       protein_g: f.protein_g,
       carbs_g: f.carbs_g,
@@ -328,6 +334,37 @@ export default function Today() {
   async function deleteLog(id) {
     setLogs((prev) => prev.filter((l) => l.id !== id))
     await supabase.from('food_logs').delete().eq('id', id)
+  }
+
+  async function saveEntry(patch) {
+    const { date, ...fields } = patch
+    fields.logged_at = timestampFor(date)
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').update(fields).eq('id', editingEntry.id)
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    setEditingEntry(null)
+    await load()
+  }
+
+  async function duplicateEntry(patch) {
+    const { date, ...fields } = patch
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').insert({
+      user_id: user.id,
+      logged_at: timestampFor(date),
+      ...fields,
+    })
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    setEditingEntry(null)
+    await load()
   }
 
   return (
@@ -539,7 +576,10 @@ export default function Today() {
                         key={l.id}
                         className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2.5"
                       >
-                        <div className="min-w-0">
+                        <button
+                          onClick={() => setEditingEntry(l)}
+                          className="min-w-0 flex-1 text-left"
+                        >
                           <div className="truncate text-sm text-white">
                             {isEx ? '🏃 ' : ''}
                             {l.food_name}
@@ -548,10 +588,10 @@ export default function Today() {
                             <div className="text-xs text-slate-500">
                               {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C ·{' '}
                               {Math.round(num(l.fat_g))}F
-                              {l.grams ? ` · ${Math.round(num(l.grams))}g` : ''}
+                              {l.grams ? ` · ${Math.round(num(l.grams))}${l.unit || 'g'}` : ''}
                             </div>
                           )}
-                        </div>
+                        </button>
                         <div className="ml-3 flex items-center gap-3">
                           <span
                             className={`whitespace-nowrap text-sm font-medium ${
@@ -578,6 +618,31 @@ export default function Today() {
           </div>
         )}
       </div>
+
+      {editingEntry && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 p-3"
+          onClick={() => setEditingEntry(null)}
+        >
+          <div
+            className="mb-2 w-full max-w-md overflow-y-auto rounded-2xl bg-slate-900 p-4"
+            style={{ maxHeight: '85vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <EntryEditor
+              entry={editingEntry}
+              onSave={saveEntry}
+              onDuplicate={duplicateEntry}
+              onDelete={(id) => {
+                deleteLog(id)
+                setEditingEntry(null)
+              }}
+              onClose={() => setEditingEntry(null)}
+              busy={busy}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

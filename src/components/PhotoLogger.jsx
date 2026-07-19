@@ -200,6 +200,14 @@ export default function PhotoLogger({ onSubmit, onCancel, busy }) {
               <span className={CONF_COLOR[confidence] || 'text-slate-400'}>{confidence}</span>
             </span>
           </div>
+          <Button
+            variant="ghost"
+            className="w-full text-sm"
+            onClick={analyze}
+            disabled={analyzing}
+          >
+            {analyzing ? 'Analyzing…' : '🔄 Re-analyze (after editing the note / photo above)'}
+          </Button>
           {confidence === 'low' && (
             <p className="text-xs text-amber-400">
               Low confidence — double-check the amounts below.
