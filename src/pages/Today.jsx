@@ -7,6 +7,7 @@ import ProgressRing from '../components/ProgressRing'
 import AddFoodForm, { MEALS } from '../components/AddFoodForm'
 import PhotoLogger from '../components/PhotoLogger'
 import FrequentPicker from '../components/FrequentPicker'
+import FoodSearch from '../components/FoodSearch'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
 import { Button, Card } from '../components/ui'
@@ -59,6 +60,7 @@ export default function Today() {
   const [showForm, setShowForm] = useState(false)
   const [showPhoto, setShowPhoto] = useState(false)
   const [showFrequent, setShowFrequent] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   const [showExercise, setShowExercise] = useState(false)
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
@@ -69,6 +71,7 @@ export default function Today() {
     setShowForm(false)
     setShowPhoto(false)
     setShowFrequent(false)
+    setShowSearch(false)
     setShowExercise(false)
     setRepeatOpen(false)
   }
@@ -190,6 +193,25 @@ export default function Today() {
     }
     if (asFrequent) await upsertFrequent(entry)
     setShowForm(false)
+    setBusy(false)
+    await load()
+  }
+
+  async function handleSearchLog(entry, { asFrequent }) {
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').insert({
+      user_id: user.id,
+      logged_at: timestampFor(selectedDate),
+      source: entry.source || 'search',
+      ...entry,
+    })
+    if (error) {
+      alert(error.message)
+      setBusy(false)
+      return
+    }
+    if (asFrequent) await upsertFrequent(entry)
+    setShowSearch(false)
     setBusy(false)
     await load()
   }
@@ -453,20 +475,30 @@ export default function Today() {
         </div>
       </Card>
 
-      {/* Quick actions */}
+      {/* Quick actions — AI is the hero, other methods below */}
       <div className="space-y-2">
+        <Button
+          className="w-full py-3.5 text-base"
+          onClick={togglePanel(showPhoto, setShowPhoto)}
+        >
+          🤖 AI — snap a photo or describe it
+        </Button>
         <div className="grid grid-cols-3 gap-2">
-          <Button onClick={togglePanel(showForm, setShowForm)}>＋ Add</Button>
-          <Button onClick={togglePanel(showPhoto, setShowPhoto)}>🤖 AI (Text/Pic)</Button>
-          <Button variant="ghost" onClick={togglePanel(showFrequent, setShowFrequent)}>
+          <Button variant="ghost" className="text-sm" onClick={togglePanel(showSearch, setShowSearch)}>
+            🔍 Search
+          </Button>
+          <Button variant="ghost" className="text-sm" onClick={togglePanel(showForm, setShowForm)}>
+            ＋ Manual
+          </Button>
+          <Button variant="ghost" className="text-sm" onClick={togglePanel(showFrequent, setShowFrequent)}>
             ⭐ Saved
           </Button>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="ghost" onClick={togglePanel(showExercise, setShowExercise)}>
+          <Button variant="ghost" className="text-sm" onClick={togglePanel(showExercise, setShowExercise)}>
             🏃 Exercise
           </Button>
-          <Button variant="ghost" onClick={toggleRepeat}>
+          <Button variant="ghost" className="text-sm" onClick={toggleRepeat}>
             🔁 Repeat day
           </Button>
         </div>
@@ -479,6 +511,16 @@ export default function Today() {
             onAdd={quickAddFrequent}
             onDelete={(f) => deleteFrequent(f.id)}
             onClose={() => setShowFrequent(false)}
+          />
+        </Card>
+      )}
+
+      {showSearch && (
+        <Card>
+          <FoodSearch
+            onSubmit={handleSearchLog}
+            onCancel={() => setShowSearch(false)}
+            busy={busy}
           />
         </Card>
       )}
