@@ -122,7 +122,7 @@ export default function AddFood({
     setError(null)
     try {
       const food = await lookupBarcode(code)
-      if (!food) setError(`No product found for barcode ${code}.`)
+      if (!food) setError(`Barcode ${code} isn't in the database — try 🤖 AI or ✎ Manual.`)
       else pick(food)
     } catch (e) {
       setError(e.message)

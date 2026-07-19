@@ -90,6 +90,8 @@ export async function lookupBarcode(code, { signal } = {}) {
   const c = String(code).trim()
   if (!c) return null
   const res = await fetch(`${PRODUCT_URL}/${encodeURIComponent(c)}.json?fields=${FIELDS}`, { signal })
+  // 404 just means the barcode isn't in the database — not an error.
+  if (res.status === 404) return null
   if (!res.ok) throw new Error(`Lookup failed (${res.status})`)
   const data = await res.json()
   if (data.status !== 1 && !data.product) return null
