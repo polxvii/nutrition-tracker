@@ -60,7 +60,9 @@ export function calcTDEE(bmr, activityLevel) {
 }
 
 // ---- Step 3: goal calories (never below BMR) ------------------------
-export function calcGoalCalories({ tdee, bmr, goalType, goalRate }) {
+// adjustPct = optional manual fine-tune applied on top of the formula
+// (e.g. +5 or -5). Applied before the BMR floor.
+export function calcGoalCalories({ tdee, bmr, goalType, goalRate, adjustPct = 0 }) {
   let cal
   switch (goalType) {
     case 'recomp':
@@ -76,6 +78,7 @@ export function calcGoalCalories({ tdee, bmr, goalType, goalRate }) {
     default:
       cal = tdee
   }
+  cal = cal * (1 + (Number(adjustPct) || 0) / 100) // manual adjustment
   return Math.max(cal, bmr) // guard: never eat below BMR
 }
 
@@ -119,6 +122,7 @@ export function computeTargets(input) {
     bmr,
     goalType: input.goalType,
     goalRate: input.goalRate,
+    adjustPct: input.adjustPct,
   })
   const macros = calcMacros({
     calories: goalCalories,
@@ -146,6 +150,7 @@ export function profileToForm(p) {
     activity_level: p?.activity_level ?? 'moderate',
     goal_type: p?.goal_type ?? 'recomp',
     goal_rate: p?.goal_rate ?? 'medium',
+    calorie_adjust_pct: p?.calorie_adjust_pct ?? 0,
   }
 }
 
@@ -172,6 +177,10 @@ export function targetsFromForm(v) {
     activityLevel: v.activity_level,
     goalType: v.goal_type,
     goalRate: v.goal_rate,
+    adjustPct:
+      v.calorie_adjust_pct === '' || v.calorie_adjust_pct == null
+        ? 0
+        : Number(v.calorie_adjust_pct),
   })
 }
 
@@ -189,6 +198,10 @@ export function buildProfilePayload(userId, email, v, targets) {
     activity_level: v.activity_level,
     goal_type: v.goal_type,
     goal_rate: v.goal_rate,
+    calorie_adjust_pct:
+      v.calorie_adjust_pct === '' || v.calorie_adjust_pct == null
+        ? 0
+        : Number(v.calorie_adjust_pct),
     bmr: targets.bmr,
     tdee: targets.tdee,
     goal_calories: targets.goal_calories,

@@ -22,6 +22,7 @@ create table if not exists public.profiles (
   -- เป้าหมาย
   goal_type      text    check (goal_type in ('recomp','cut','bulk','maintain')),
   goal_rate      text    check (goal_rate in ('slow','medium','fast')),
+  calorie_adjust_pct numeric(5,2) not null default 0,  -- manual fine-tune %
   -- ค่าที่คำนวณได้ (เก็บไว้โชว์)
   bmr            integer,
   tdee           integer,
