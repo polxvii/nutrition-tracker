@@ -82,7 +82,7 @@ export default function Weight() {
         .order('logged_date', { ascending: true }),
       supabase
         .from('food_logs')
-        .select('logged_at,calories,protein_g,source')
+        .select('logged_at,calories,protein_g,carbs_g,fat_g,source')
         .gte('logged_at', start + 'T00:00:00')
         .neq('source', 'exercise')
         .order('logged_at', { ascending: true }),
@@ -91,9 +91,11 @@ export default function Weight() {
     const map = {}
     for (const l of fRes.data ?? []) {
       const day = String(l.logged_at).slice(0, 10)
-      if (!map[day]) map[day] = { date: day, kcal: 0, protein: 0 }
+      if (!map[day]) map[day] = { date: day, kcal: 0, protein: 0, carbs: 0, fat: 0 }
       map[day].kcal += Number(l.calories) || 0
       map[day].protein += Number(l.protein_g) || 0
+      map[day].carbs += Number(l.carbs_g) || 0
+      map[day].fat += Number(l.fat_g) || 0
     }
     setFoodByDay(Object.values(map).sort((a, b) => (a.date < b.date ? -1 : 1)))
   }, [])
@@ -150,9 +152,18 @@ export default function Weight() {
   const goalCal = profile?.goal_calories ?? 0
   const goalProtein = profile?.goal_protein_g ?? 0
   const daysLogged = foodData.length
-  const avgKcal = daysLogged ? Math.round(foodData.reduce((s, d) => s + d.kcal, 0) / daysLogged) : 0
-  const avgProtein = daysLogged ? Math.round(foodData.reduce((s, d) => s + d.protein, 0) / daysLogged) : 0
+  const avg = (key) =>
+    daysLogged ? Math.round(foodData.reduce((s, d) => s + d[key], 0) / daysLogged) : 0
+  const avgKcal = avg('kcal')
+  const avgProtein = avg('protein')
+  const avgCarbs = avg('carbs')
+  const avgFat = avg('fat')
   const proteinPct = goalProtein ? Math.round((avgProtein / goalProtein) * 100) : null
+  const macroStats = [
+    { key: 'p', label: 'Protein', avg: avgProtein, goal: goalProtein },
+    { key: 'c', label: 'Carbs', avg: avgCarbs, goal: profile?.goal_carbs_g ?? 0 },
+    { key: 'f', label: 'Fat', avg: avgFat, goal: profile?.goal_fat_g ?? 0 },
+  ]
 
   const axis = { stroke: '#64748b', fontSize: 11 }
   const tooltipStyle = {
@@ -198,6 +209,57 @@ export default function Weight() {
               {proteinPct >= 90 ? '✅ ' : '⚠️ '}
               Protein averaging {avgProtein}g ({proteinPct}% of goal)
               {proteinPct >= 90 ? ' — great for keeping muscle.' : ' — aim higher to protect muscle.'}
+            </p>
+          )}
+        </Card>
+      )}
+
+      {/* Adherence — how well intake matched the targets */}
+      {daysLogged > 0 && (
+        <Card>
+          <h2 className="mb-2 text-sm font-medium text-slate-300">Adherence</h2>
+          <div className="mb-2 grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-slate-800 py-2">
+              <div className="text-lg font-bold text-white">{avgKcal}</div>
+              <div className="text-xs text-slate-500">avg kcal / day{goalCal ? ` · goal ${goalCal}` : ''}</div>
+            </div>
+            <div className="rounded-lg bg-slate-800 py-2">
+              <div className="text-lg font-bold text-white">
+                {daysLogged}
+                <span className="text-sm text-slate-500">/{rangeDays}</span>
+              </div>
+              <div className="text-xs text-slate-500">days logged</div>
+            </div>
+          </div>
+          <div className="mb-2 grid grid-cols-3 gap-2 text-center">
+            {macroStats.map((m) => (
+              <div key={m.key} className="rounded-lg bg-slate-800 py-2">
+                <div className="text-sm font-bold text-white">
+                  {m.avg}
+                  <span className="text-xs font-normal text-slate-500">g</span>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {m.label}
+                  {m.goal ? ` · ${m.goal}g` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={foodData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={20} />
+                <YAxis {...axis} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#1e293b55' }} />
+                {goalCal > 0 && <ReferenceLine y={goalCal} stroke="#ef4444" strokeDasharray="4 4" />}
+                <Bar dataKey="kcal" name="kcal" fill="#22c55e" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {goalCal > 0 && (
+            <p className="mt-1 text-center text-[11px] text-slate-500">
+              Daily calories · red line = your goal
             </p>
           )}
         </Card>
@@ -276,43 +338,6 @@ export default function Weight() {
       ) : (
         <Card>
           <p className="text-center text-sm text-slate-500">Log at least 2 weigh-ins to see your trend.</p>
-        </Card>
-      )}
-
-      {/* Adherence */}
-      {daysLogged > 0 && (
-        <Card>
-          <h2 className="mb-2 text-sm font-medium text-slate-300">Calorie adherence</h2>
-          <div className="mb-2 grid grid-cols-2 gap-2 text-center">
-            <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">{avgKcal}</div>
-              <div className="text-xs text-slate-500">avg kcal / day{goalCal ? ` · goal ${goalCal}` : ''}</div>
-            </div>
-            <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">
-                {daysLogged}
-                <span className="text-sm text-slate-500">/{rangeDays}</span>
-              </div>
-              <div className="text-xs text-slate-500">days logged</div>
-            </div>
-          </div>
-          <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={foodData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={20} />
-                <YAxis {...axis} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#1e293b55' }} />
-                {goalCal > 0 && (
-                  <ReferenceLine y={goalCal} stroke="#ef4444" strokeDasharray="4 4" />
-                )}
-                <Bar dataKey="kcal" name="kcal" fill="#22c55e" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {goalCal > 0 && (
-            <p className="mt-1 text-center text-[11px] text-slate-500">Red line = your calorie goal</p>
-          )}
         </Card>
       )}
 
