@@ -59,6 +59,7 @@ export default function Today() {
   const [logs, setLogs] = useState([])
   const [frequents, setFrequents] = useState([])
   const [recent, setRecent] = useState([])
+  const [savedMeals, setSavedMeals] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [showExercise, setShowExercise] = useState(false)
@@ -84,7 +85,7 @@ export default function Today() {
   const load = useCallback(async () => {
     setLoading(true)
     const { start, end } = dayRange(dateObj(selectedDate))
-    const [logsRes, freqRes, recentRes] = await Promise.all([
+    const [logsRes, freqRes, recentRes, mealsRes] = await Promise.all([
       supabase
         .from('food_logs')
         .select('*')
@@ -102,9 +103,14 @@ export default function Today() {
         .neq('source', 'exercise')
         .order('created_at', { ascending: false })
         .limit(80),
+      supabase
+        .from('saved_meals')
+        .select('*')
+        .order('created_at', { ascending: false }),
     ])
     setLogs(logsRes.data ?? [])
     setFrequents(freqRes.data ?? [])
+    setSavedMeals(mealsRes.data ?? [])
     // Most-recent-first, de-duped by food name → quick "Recent" list.
     const seen = new Set()
     const recentFoods = []
@@ -242,6 +248,63 @@ export default function Today() {
     setShowAdd(false)
     setBusy(false)
     await load()
+  }
+
+  // Log every item of a saved meal at once.
+  async function handleLogMeal(entries) {
+    setBusy(true)
+    const ts = timestampFor(selectedDate)
+    const rows = entries.map((e) => ({
+      user_id: user.id,
+      logged_at: ts,
+      source: e.source || 'meal',
+      meal_type: e.meal_type,
+      food_name: e.food_name,
+      grams: e.grams,
+      unit: e.unit ?? 'g',
+      calories: e.calories,
+      protein_g: e.protein_g,
+      carbs_g: e.carbs_g,
+      fat_g: e.fat_g,
+    }))
+    const { error } = await supabase.from('food_logs').insert(rows)
+    if (error) {
+      alert(error.message)
+      setBusy(false)
+      return
+    }
+    setShowAdd(false)
+    setBusy(false)
+    await load()
+  }
+
+  // Save the food items of one diary section as a reusable meal (combo).
+  async function saveGroupAsMeal(key, items) {
+    const name = window.prompt('Name this meal', `My ${GROUP_LABELS[key]}`)
+    if (!name || !name.trim()) return
+    const mealItems = items.map((l) => ({
+      food_name: l.food_name,
+      grams: l.grams,
+      unit: l.unit ?? 'g',
+      calories: num(l.calories),
+      protein_g: num(l.protein_g),
+      carbs_g: num(l.carbs_g),
+      fat_g: num(l.fat_g),
+    }))
+    const { error } = await supabase
+      .from('saved_meals')
+      .insert({ user_id: user.id, name: name.trim(), items: mealItems })
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await load()
+  }
+
+  async function deleteMeal(id) {
+    if (!window.confirm('Delete this saved meal?')) return
+    setSavedMeals((prev) => prev.filter((m) => m.id !== id))
+    await supabase.from('saved_meals').delete().eq('id', id)
   }
 
   async function handleAddExercise({ name, calories }) {
@@ -466,9 +529,12 @@ export default function Today() {
             defaultMeal={mealForNow()}
             recent={recent}
             saved={frequents}
+            meals={savedMeals}
             onLog={handleLog}
             onLogMany={handlePhotoLog}
+            onLogMeal={handleLogMeal}
             onDeleteSaved={(f) => deleteFrequent(f.id)}
+            onDeleteMeal={(m) => deleteMeal(m.id)}
             onCancel={() => setShowAdd(false)}
             busy={busy}
           />
@@ -529,9 +595,19 @@ export default function Today() {
               return (
                 <div key={key}>
                   <div className="mb-1 flex items-center justify-between px-1">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      {GROUP_LABELS[key]}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        {GROUP_LABELS[key]}
+                      </span>
+                      {!isEx && g.length > 0 && (
+                        <button
+                          onClick={() => saveGroupAsMeal(key, g)}
+                          className="text-xs text-slate-500 hover:text-green-400"
+                        >
+                          ＋ meal
+                        </button>
+                      )}
+                    </div>
                     <span className="text-xs text-slate-500">
                       {isEx ? '−' : ''}
                       {Math.round(sub)} kcal

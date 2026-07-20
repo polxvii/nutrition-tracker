@@ -52,9 +52,12 @@ export default function AddFood({
   defaultMeal,
   recent = [],
   saved = [],
+  meals = [],
   onLog,
   onLogMany,
+  onLogMeal,
   onDeleteSaved,
+  onDeleteMeal,
   onCancel,
   busy,
 }) {
@@ -153,6 +156,22 @@ export default function AddFood({
       },
       { asFrequent }
     )
+  }
+
+  // Log every item of a saved meal at once, into the chosen meal slot.
+  function logMeal(m) {
+    const entries = (m.items || []).map((it) => ({
+      food_name: it.food_name,
+      meal_type: meal,
+      source: 'meal',
+      grams: it.grams ?? null,
+      unit: it.unit ?? 'g',
+      calories: it.calories,
+      protein_g: it.protein_g,
+      carbs_g: it.carbs_g,
+      fat_g: it.fat_g,
+    }))
+    if (entries.length) onLogMeal(entries)
   }
 
   // Quick-add a stored template (recent log / saved food) with the chosen meal.
@@ -297,6 +316,59 @@ export default function AddFood({
     )
   }
 
+  // Saved meals (combos) — one tap logs every item into the chosen meal slot.
+  if (view === 'meals') {
+    const mealLabel = MEALS.find((m) => m.value === meal)?.label || meal
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-200">🍱 Saved meals</span>
+          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setView('home')}>
+            ‹ Back
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          Adds every item to <b className="text-slate-300">{mealLabel}</b>.
+        </p>
+        {meals.length === 0 ? (
+          <p className="py-2 text-sm text-slate-500">
+            No saved meals yet. On the Log page, tap “＋ meal” on a meal section to save its items as a combo.
+          </p>
+        ) : (
+          <div className="max-h-80 space-y-1 overflow-y-auto">
+            {meals.map((m) => {
+              const kcal = (m.items || []).reduce((s, it) => s + (Number(it.calories) || 0), 0)
+              return (
+                <div key={m.id} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
+                  <button onClick={() => logMeal(m)} className="min-w-0 flex-1 text-left">
+                    <div className="truncate text-sm text-white">{m.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {(m.items || []).length} items · {r(kcal)} kcal
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => logMeal(m)}
+                    className="rounded-lg bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-500"
+                    aria-label="Add meal"
+                  >
+                    ＋
+                  </button>
+                  <button
+                    onClick={() => onDeleteMeal(m)}
+                    className="px-1 text-slate-500 hover:text-red-400"
+                    aria-label="Delete meal"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ---- home ------------------------------------------------------------
   const localHits = ql ? [...matchLocal(saved), ...matchLocal(recent)] : []
   // De-dupe local hits by name (saved wins).
@@ -320,15 +392,18 @@ export default function AddFood({
         </Select>
       </Field>
 
-      <div className="flex gap-2">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search foods…"
-          className="flex-1"
-        />
-        <Button variant="ghost" onClick={() => setView('saved')}>
-          ⭐ Saved
+      <Input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search foods…"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="ghost" className="text-sm" onClick={() => setView('saved')}>
+          ⭐ Saved foods
+        </Button>
+        <Button variant="ghost" className="text-sm" onClick={() => setView('meals')}>
+          🍱 Meals
         </Button>
       </div>
 

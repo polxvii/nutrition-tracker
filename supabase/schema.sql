@@ -79,6 +79,20 @@ create index if not exists frequent_foods_user_idx
   on public.frequent_foods (user_id, times_used desc);
 
 -- ---------------------------------------------------------------------
+--  saved_meals : combo อาหารหลายรายการ = 1 มื้อ (log ทีเดียวได้ครบ)
+--  items = jsonb array ของ {food_name,grams,unit,calories,protein_g,carbs_g,fat_g}
+-- ---------------------------------------------------------------------
+create table if not exists public.saved_meals (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  name       text not null,
+  items      jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists saved_meals_user_idx
+  on public.saved_meals (user_id, created_at desc);
+
+-- ---------------------------------------------------------------------
 --  weight_logs : บันทึกน้ำหนักรายวัน
 --  unique(user_id, logged_date) → 1 ค่าต่อวัน (upsert ทับได้)
 -- ---------------------------------------------------------------------
@@ -115,6 +129,7 @@ create trigger profiles_set_updated_at
 alter table public.profiles       enable row level security;
 alter table public.food_logs      enable row level security;
 alter table public.frequent_foods enable row level security;
+alter table public.saved_meals    enable row level security;
 alter table public.weight_logs    enable row level security;
 
 -- profiles : ยึด id = auth.uid()
@@ -142,6 +157,11 @@ drop policy if exists frequent_foods_all_own on public.frequent_foods;
 create policy frequent_foods_all_own on public.frequent_foods
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- saved_meals
+drop policy if exists saved_meals_all_own on public.saved_meals;
+create policy saved_meals_all_own on public.saved_meals
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- weight_logs
 drop policy if exists weight_logs_all_own on public.weight_logs;
 create policy weight_logs_all_own on public.weight_logs
@@ -155,7 +175,8 @@ create policy weight_logs_all_own on public.weight_logs
 -- =====================================================================
 grant usage on schema public to authenticated;
 grant select, insert, update, delete
-  on public.profiles, public.food_logs, public.frequent_foods, public.weight_logs
+  on public.profiles, public.food_logs, public.frequent_foods,
+     public.saved_meals, public.weight_logs
   to authenticated;
 
 -- =====================================================================
