@@ -133,18 +133,19 @@ async function callModel({ apiKey, model, body }) {
     } catch {
       /* ignore */
     }
-    // Worth cascading to the next model: rate/quota limit, a model this key
-    // can't use, or a transient overload.
+    // Worth cascading to the next model/key: rate/quota limit, a model this
+    // key can't use, a transient overload, or a bad/denied key (403 / invalid
+    // key) — a dead key must be skipped, not abort the whole cascade.
+    const badKey = resp.status === 403 || (resp.status === 400 && /api key/i.test(msg))
     const retryable =
       resp.status === 429 ||
       resp.status === 404 ||
       resp.status === 503 ||
-      /not found|not supported|does not exist|quota|rate limit/i.test(msg)
-    if (resp.status === 400 && /api key/i.test(msg)) {
-      msg = 'The photo feature is misconfigured on the server (invalid API key).'
-    }
+      badKey ||
+      /not found|not supported|does not exist|quota|rate limit|denied|permission/i.test(msg)
     const e = httpError(msg, resp.status === 429 ? 429 : 502)
     e.retryable = retryable
+    e.badKey = badKey
     throw e
   }
 
@@ -249,7 +250,9 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
   }
 
   let lastErr
+  const deadKeys = new Set() // keys that are denied/invalid this request — skip them
   for (const { m, ki } of live) {
+    if (deadKeys.has(ki)) continue
     try {
       const result = await callModel({ apiKey: keys[ki], model: m, body })
       cooldownUntil.delete(ckey(m, ki)) // it worked → clear any cooldown
@@ -257,6 +260,12 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
     } catch (e) {
       lastErr = e
       if (e.status === 429) cooldownUntil.set(ckey(m, ki), Date.now() + COOLDOWN_MS)
+      if (e.badKey) {
+        // Dead key (403/invalid): skip it for every remaining model this
+        // request, and rest it a while so future requests skip it too.
+        deadKeys.add(ki)
+        cooldownUntil.set(ckey(m, ki), Date.now() + COOLDOWN_MS)
+      }
       if (e.retryable) continue
       throw e
     }
