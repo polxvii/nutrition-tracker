@@ -14,6 +14,15 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 // the GEMINI_MODELS env var (comma-separated), or a single GEMINI_MODEL.
 const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3-flash']
 
+// Abort a single model call that runs too long, so a slow/hung model doesn't
+// stall the whole request — we cascade to the next instead.
+const REQUEST_TIMEOUT_MS = 20000
+// After a model returns 429 (quota), skip it for a while so we stop paying a
+// failed round-trip on every request. Kept in module scope → persists across
+// requests within a warm isolate (best-effort; fine if the isolate recycles).
+const COOLDOWN_MS = 5 * 60 * 1000
+const cooldownUntil = new Map()
+
 function resolveModels({ models, model }) {
   if (Array.isArray(models) && models.length) return models
   if (typeof models === 'string' && models.trim()) {
@@ -69,17 +78,27 @@ function httpError(message, status) {
 // .retryable (true when it's worth trying the next model in the chain).
 async function callModel({ apiKey, model, body }) {
   const url = `${GEMINI_BASE}/${model}:generateContent`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   let resp
   try {
     resp = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),
+      signal: controller.signal,
     })
-  } catch {
-    const e = httpError('Could not reach the analysis service. Try again.', 502)
+  } catch (err) {
+    // Timed out (aborted) or network failure → worth trying the next model.
+    const msg =
+      err?.name === 'AbortError'
+        ? 'The model took too long to respond.'
+        : 'Could not reach the analysis service. Try again.'
+    const e = httpError(msg, 504)
     e.retryable = true
     throw e
+  } finally {
+    clearTimeout(timer)
   }
   if (!resp.ok) {
     let msg = `Analysis service error (${resp.status}).`
@@ -138,24 +157,33 @@ export async function analyzeFood({ apiKey, model, models, imageBase64, mediaTyp
     contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: 0.2,
+      maxOutputTokens: 1024,
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
     },
   }
 
   // Try each model in turn; cascade to the next only on retryable errors
-  // (rate limit / unavailable model / overload). Any other error stops early.
+  // (rate limit / unavailable model / overload / timeout). Any other error
+  // stops early. Models cooling down from a recent 429 are tried last, so a
+  // known-exhausted model doesn't cost a failed round-trip on every request.
   const chain = resolveModels({ models, model })
+  const now = Date.now()
+  const ordered = [...chain].sort(
+    (a, b) => (cooldownUntil.get(a) > now ? 1 : 0) - (cooldownUntil.get(b) > now ? 1 : 0)
+  )
   let data
   let usedModel
   let lastErr
-  for (const m of chain) {
+  for (const m of ordered) {
     try {
       data = await callModel({ apiKey, model: m, body })
       usedModel = m
+      cooldownUntil.delete(m) // it worked → clear any cooldown
       break
     } catch (e) {
       lastErr = e
+      if (e.status === 429) cooldownUntil.set(m, Date.now() + COOLDOWN_MS)
       if (e.retryable) continue
       throw e
     }
