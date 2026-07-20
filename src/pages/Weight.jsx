@@ -75,14 +75,19 @@ export default function Weight() {
   const { user, profile, refreshProfile } = useAuth()
   const [weightLogs, setWeightLogs] = useState([])
   const [foodByDay, setFoodByDay] = useState([])
-  const [rangeDays, setRangeDays] = useState(30)
+  const [preset, setPreset] = useState('30')
+  const [fromDate, setFromDate] = useState(isoDaysAgo(30))
+  const [toDate, setToDate] = useState(todayISODate())
   const [date, setDate] = useState(todayISODate())
   const [weight, setWeight] = useState('')
   const [busy, setBusy] = useState(false)
   const [applying, setApplying] = useState(false)
 
   const load = useCallback(async () => {
-    const start = isoDaysAgo(90) // fetch the max window; filter per range client-side
+    // Fetch far enough back to cover the chosen period AND the 14-day window the
+    // weekly check-in always needs. Filter to the period client-side.
+    const win14 = isoDaysAgo(14)
+    const start = fromDate < win14 ? fromDate : win14
     const [wRes, fRes] = await Promise.all([
       supabase
         .from('weight_logs')
@@ -107,7 +112,7 @@ export default function Weight() {
       map[day].fat += Number(l.fat_g) || 0
     }
     setFoodByDay(Object.values(map).sort((a, b) => (a.date < b.date ? -1 : 1)))
-  }, [])
+  }, [fromDate])
 
   useEffect(() => {
     load()
@@ -135,18 +140,20 @@ export default function Weight() {
     await supabase.from('weight_logs').delete().eq('id', id)
   }
 
-  const cutoff = isoDaysAgo(rangeDays)
+  const inPeriod = (d) => d >= fromDate && d <= toDate
+  const periodDays = Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1)
 
   // Weight points in range + a 7-point trailing moving average (smooths noise).
   const weightData = useMemo(() => {
     const pts = weightLogs
-      .filter((l) => l.logged_date >= cutoff)
+      .filter((l) => inPeriod(l.logged_date))
       .map((l) => ({ fullDate: l.logged_date, date: l.logged_date.slice(5), weight: Number(l.weight_kg) }))
     return pts.map((p, i, arr) => {
       const win = arr.slice(Math.max(0, i - 6), i + 1)
       return { ...p, ma: r1(win.reduce((s, x) => s + x.weight, 0) / win.length) }
     })
-  }, [weightLogs, cutoff])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weightLogs, fromDate, toDate])
 
   const rate = useMemo(() => weeklyRate(weightData), [weightData])
   const verdict = trendVerdict(rate, profile?.goal_type)
@@ -155,8 +162,9 @@ export default function Weight() {
 
   // Adherence over the range.
   const foodData = useMemo(
-    () => foodByDay.filter((d) => d.date >= cutoff).map((d) => ({ ...d, label: d.date.slice(5) })),
-    [foodByDay, cutoff]
+    () => foodByDay.filter((d) => inPeriod(d.date)).map((d) => ({ ...d, label: d.date.slice(5) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [foodByDay, fromDate, toDate]
   )
   const goalCal = profile?.goal_calories ?? 0
   const goalProtein = profile?.goal_protein_g ?? 0
@@ -224,24 +232,58 @@ export default function Weight() {
 
   return (
     <div className="mx-auto max-w-md space-y-4 p-4">
-      <header className="pt-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">Progress 📈</h1>
-          <p className="text-xs text-slate-500">Weight trend & how well you hit your targets</p>
-        </div>
-        <div className="flex gap-1">
-          {RANGES.map((rg) => (
+      <header className="pt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white">Progress 📈</h1>
+            <p className="text-xs text-slate-500">Weight trend & how well you hit your targets</p>
+          </div>
+          <div className="flex gap-1">
+            {RANGES.map((rg) => (
+              <button
+                key={rg.days}
+                onClick={() => {
+                  setPreset(rg.label)
+                  setFromDate(isoDaysAgo(rg.days))
+                  setToDate(todayISODate())
+                }}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
+                  preset === rg.label ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {rg.label}
+              </button>
+            ))}
             <button
-              key={rg.days}
-              onClick={() => setRangeDays(rg.days)}
+              onClick={() => setPreset('custom')}
               className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
-                rangeDays === rg.days ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
+                preset === 'custom' ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
               }`}
             >
-              {rg.label}
+              Custom
             </button>
-          ))}
+          </div>
         </div>
+        {preset === 'custom' && (
+          <div className="mt-2 flex items-center gap-2">
+            <Input
+              type="date"
+              value={fromDate}
+              max={toDate}
+              onChange={(e) => e.target.value && setFromDate(e.target.value)}
+              className="flex-1"
+            />
+            <span className="text-slate-500">–</span>
+            <Input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              max={todayISODate()}
+              onChange={(e) => e.target.value && setToDate(e.target.value)}
+              className="flex-1"
+            />
+          </div>
+        )}
       </header>
 
       {/* Insight */}
@@ -325,7 +367,7 @@ export default function Weight() {
             <div className="rounded-lg bg-slate-800 py-2">
               <div className="text-lg font-bold text-white">
                 {daysLogged}
-                <span className="text-sm text-slate-500">/{rangeDays}</span>
+                <span className="text-sm text-slate-500">/{periodDays}</span>
               </div>
               <div className="text-xs text-slate-500">days logged</div>
             </div>
