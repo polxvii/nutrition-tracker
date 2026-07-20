@@ -185,12 +185,18 @@ export default function Weight() {
   // Adaptive check-in: estimate real maintenance (TDEE) from the last ~14 days
   // of intake + weight change, then suggest a goal for the user's plan.
   // actual TDEE = avg intake − (kg/day change × 7700).
+  // Days logging under half the goal are likely incomplete (forgotten entries)
+  // and would skew the maintenance estimate — exclude them.
+  const intakeFloor = goalCal > 0 ? goalCal * 0.5 : 500
+
   const checkIn = useMemo(() => {
     const winCut = isoDaysAgo(14)
     const wpts = weightLogs
       .filter((l) => l.logged_date >= winCut)
       .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
-    const fdays = foodByDay.filter((d) => d.date >= winCut)
+    const allDays = foodByDay.filter((d) => d.date >= winCut)
+    const fdays = allDays.filter((d) => d.kcal >= intakeFloor)
+    const excluded = allDays.length - fdays.length
     if (wpts.length < 2 || fdays.length < 5) return { ready: false }
     const spanDays = (new Date(wpts[wpts.length - 1].fullDate) - new Date(wpts[0].fullDate)) / 86400000
     const rateWk = weeklyRate(wpts)
@@ -202,8 +208,23 @@ export default function Weight() {
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
     const floor = profile?.bmr || 1200
     const suggested = Math.max(floor, Math.round((tdee + offset) / 10) * 10)
-    return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays: Math.round(spanDays) }
-  }, [weightLogs, foodByDay, profile])
+    return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays: Math.round(spanDays), excluded }
+  }, [weightLogs, foodByDay, profile, intakeFloor])
+
+  // This week's running energy balance vs goal, and the predicted weight
+  // impact vs real maintenance (measured TDEE if available, else the estimate).
+  const weeklyRecap = useMemo(() => {
+    const cut7 = isoDaysAgo(7)
+    const days = foodByDay.filter((d) => d.date >= cut7 && d.kcal >= intakeFloor)
+    if (days.length === 0) return { ready: false }
+    const n = days.length
+    const totalEaten = days.reduce((s, d) => s + d.kcal, 0)
+    const maint = (checkIn.ready ? checkIn.tdee : profile?.tdee || 0) || 0
+    const vsGoal = goalCal > 0 ? Math.round(totalEaten - goalCal * n) : null
+    const vsMaint = maint > 0 ? Math.round(totalEaten - maint * n) : null
+    const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
+    return { ready: true, n, vsGoal, predictedKg, maint }
+  }, [foodByDay, goalCal, intakeFloor, checkIn, profile])
 
   async function applyGoal(newCal) {
     const protein = profile?.goal_protein_g || 0
@@ -311,6 +332,8 @@ export default function Weight() {
           <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
           <p className="text-xs text-slate-500">
             From your last {checkIn.spanDays} days of weight + food.
+            {checkIn.excluded > 0 &&
+              ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} excluded)`}
           </p>
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-slate-800 py-2">
@@ -352,6 +375,36 @@ export default function Weight() {
             Unlocks after ~2 weeks of data — needs ≥2 weigh-ins over ≥7 days and ≥5 days of food
             logged. It estimates your real maintenance calories and suggests a goal.
           </p>
+        </Card>
+      )}
+
+      {/* This week — running energy balance + predicted weight impact */}
+      {weeklyRecap.ready && (
+        <Card className="space-y-1">
+          <h2 className="text-sm font-medium text-slate-300">This week</h2>
+          <p className="text-xs text-slate-500">
+            Totals over {weeklyRecap.n} logged day{weeklyRecap.n > 1 ? 's' : ''} (last 7).
+          </p>
+          {weeklyRecap.vsGoal != null && (
+            <p className="text-sm text-slate-300">
+              vs your goal:{' '}
+              <b className={weeklyRecap.vsGoal <= 0 ? 'text-green-400' : 'text-amber-400'}>
+                {weeklyRecap.vsGoal > 0 ? '+' : ''}
+                {weeklyRecap.vsGoal} kcal
+              </b>{' '}
+              {weeklyRecap.vsGoal <= 0 ? 'under' : 'over'}
+            </p>
+          )}
+          {weeklyRecap.predictedKg != null && (
+            <p className="text-sm text-slate-300">
+              Predicted impact:{' '}
+              <b className={weeklyRecap.predictedKg < 0 ? 'text-green-400' : 'text-slate-100'}>
+                {weeklyRecap.predictedKg > 0 ? '+' : ''}
+                {weeklyRecap.predictedKg} kg
+              </b>
+              <span className="text-slate-500"> · vs ~{weeklyRecap.maint} kcal maintenance</span>
+            </p>
+          )}
         </Card>
       )}
 
