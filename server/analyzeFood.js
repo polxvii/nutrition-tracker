@@ -17,16 +17,25 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 //   gemini-flash-lite-latest. NB: gemini-2.5-flash / *-lite are "not available
 //   to new users" (404), and gemini-3-flash / gemini-2.0-flash are unavailable
 //   or quota-0 — do not add them back without re-checking ListModels.
-const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-flash-lite-latest']
+// Best → worst. The best available model is tried across ALL keys before we
+// drop to the next model (quality first). gemini-3.1-flash-lite is an extra —
+// if this key can't use it, it simply cascades (harmless).
+const DEFAULT_MODELS = [
+  'gemini-flash-latest',
+  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest',
+]
 
 // Abort a single model call that runs too long, so a slow/hung model doesn't
 // stall the whole request — we cascade to the next instead.
 const REQUEST_TIMEOUT_MS = 20000
-// After a model returns 429 (quota), skip it for a while so we stop paying a
-// failed round-trip on every request. Kept in module scope → persists across
+// After a (key,model) returns 429 (quota), skip it for a while so we stop
+// paying a failed round-trip on every request. Module scope → persists across
 // requests within a warm isolate (best-effort; fine if the isolate recycles).
 const COOLDOWN_MS = 5 * 60 * 1000
 const cooldownUntil = new Map()
+const ckey = (model, keyIdx) => `${keyIdx}::${model}`
 
 function resolveModels({ models, model }) {
   if (Array.isArray(models) && models.length) return models
@@ -35,6 +44,17 @@ function resolveModels({ models, model }) {
   }
   if (model && model.trim()) return [model.trim()]
   return DEFAULT_MODELS
+}
+
+// One or more API keys (each its own free daily quota). GEMINI_API_KEY plus an
+// optional GEMINI_API_KEYS (comma-separated) — e.g. a second account's key to
+// double the budget. Deduped, order preserved (primary key first).
+function resolveKeys({ apiKey, apiKeys }) {
+  const raw = []
+  if (apiKey) raw.push(apiKey)
+  if (typeof apiKeys === 'string') raw.push(...apiKeys.split(','))
+  else if (Array.isArray(apiKeys)) raw.push(...apiKeys)
+  return [...new Set(raw.map((s) => (s || '').trim()).filter(Boolean))]
 }
 
 const SYSTEM_PROMPT = `You are a nutrition estimation assistant specialising in Thai food and made-to-order (ตามสั่ง) dishes. Estimate the nutrition of a meal from a photo, a text description, or both.
@@ -166,8 +186,9 @@ async function callModel({ apiKey, model, body }) {
   return { items, confidence: parsed.confidence || 'low', totals }
 }
 
-export async function analyzeFood({ apiKey, model, models, imageBase64, mediaType, note }) {
-  if (!apiKey) {
+export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64, mediaType, note }) {
+  const keys = resolveKeys({ apiKey, apiKeys })
+  if (keys.length === 0) {
     throw httpError(
       'The photo feature is not configured yet — GEMINI_API_KEY is missing on the server.',
       500
@@ -208,24 +229,34 @@ export async function analyzeFood({ apiKey, model, models, imageBase64, mediaTyp
     },
   }
 
-  // Try each model in turn; cascade to the next only on retryable errors
-  // (rate limit / unavailable model / overload / timeout). Any other error
-  // stops early. Models cooling down from a recent 429 are tried last, so a
-  // known-exhausted model doesn't cost a failed round-trip on every request.
+  // Quality first: the best model is tried across ALL keys before dropping to
+  // the next model. Build (model, key) attempts in that order, then skip any
+  // pair cooling down from a recent 429 (retryable errors cascade; a hard
+  // error stops early).
   const chain = resolveModels({ models, model })
   const now = Date.now()
-  const ordered = [...chain].sort(
-    (a, b) => (cooldownUntil.get(a) > now ? 1 : 0) - (cooldownUntil.get(b) > now ? 1 : 0)
-  )
+  const attempts = []
+  for (const m of chain) {
+    for (let ki = 0; ki < keys.length; ki++) attempts.push({ m, ki })
+  }
+  const live = attempts.filter(({ m, ki }) => !(cooldownUntil.get(ckey(m, ki)) > now))
+  // Everything is cooling down → all quotas hit recently; fail fast.
+  if (live.length === 0) {
+    throw httpError(
+      'All AI models have hit their free daily limit. Try again after the daily reset, or add the food manually / by search.',
+      429
+    )
+  }
+
   let lastErr
-  for (const m of ordered) {
+  for (const { m, ki } of live) {
     try {
-      const result = await callModel({ apiKey, model: m, body })
-      cooldownUntil.delete(m) // it worked → clear any cooldown
+      const result = await callModel({ apiKey: keys[ki], model: m, body })
+      cooldownUntil.delete(ckey(m, ki)) // it worked → clear any cooldown
       return { ...result, model: m }
     } catch (e) {
       lastErr = e
-      if (e.status === 429) cooldownUntil.set(m, Date.now() + COOLDOWN_MS)
+      if (e.status === 429) cooldownUntil.set(ckey(m, ki), Date.now() + COOLDOWN_MS)
       if (e.retryable) continue
       throw e
     }

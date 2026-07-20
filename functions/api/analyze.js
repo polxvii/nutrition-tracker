@@ -19,6 +19,7 @@ export async function onRequestPost(context) {
     const body = await request.json()
     const result = await analyzeFood({
       apiKey: env.GEMINI_API_KEY,
+      apiKeys: env.GEMINI_API_KEYS,
       model: env.GEMINI_MODEL,
       models: env.GEMINI_MODELS,
       imageBase64: body.image,
