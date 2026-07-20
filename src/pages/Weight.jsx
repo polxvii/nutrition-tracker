@@ -21,6 +21,14 @@ const RANGES = [
   { days: 30, label: '30d' },
   { days: 90, label: '90d' },
 ]
+const KCAL_PER_KG = 7700
+// Daily kcal offset from measured maintenance, per goal + rate.
+const RATE_KCAL = {
+  cut: { slow: -275, medium: -550, fast: -825 },
+  bulk: { slow: 110, medium: 220, fast: 385 },
+  recomp: { slow: -150, medium: -200, fast: -300 },
+  maintain: { slow: 0, medium: 0, fast: 0 },
+}
 const r1 = (n) => Math.round(n * 10) / 10
 const isoDaysAgo = (n) => {
   const d = new Date()
@@ -64,13 +72,14 @@ function trendVerdict(rate, goalType) {
 }
 
 export default function Weight() {
-  const { user, profile } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const [weightLogs, setWeightLogs] = useState([])
   const [foodByDay, setFoodByDay] = useState([])
   const [rangeDays, setRangeDays] = useState(30)
   const [date, setDate] = useState(todayISODate())
   const [weight, setWeight] = useState('')
   const [busy, setBusy] = useState(false)
+  const [applying, setApplying] = useState(false)
 
   const load = useCallback(async () => {
     const start = isoDaysAgo(90) // fetch the max window; filter per range client-side
@@ -165,6 +174,46 @@ export default function Weight() {
     { key: 'f', label: 'Fat', avg: avgFat, goal: profile?.goal_fat_g ?? 0 },
   ]
 
+  // Adaptive check-in: estimate real maintenance (TDEE) from the last ~14 days
+  // of intake + weight change, then suggest a goal for the user's plan.
+  // actual TDEE = avg intake − (kg/day change × 7700).
+  const checkIn = useMemo(() => {
+    const winCut = isoDaysAgo(14)
+    const wpts = weightLogs
+      .filter((l) => l.logged_date >= winCut)
+      .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
+    const fdays = foodByDay.filter((d) => d.date >= winCut)
+    if (wpts.length < 2 || fdays.length < 5) return { ready: false }
+    const spanDays = (new Date(wpts[wpts.length - 1].fullDate) - new Date(wpts[0].fullDate)) / 86400000
+    const rateWk = weeklyRate(wpts)
+    if (spanDays < 7 || rateWk == null) return { ready: false }
+    const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length)
+    const tdee = Math.round(avgIntake - (rateWk / 7) * KCAL_PER_KG)
+    const gt = profile?.goal_type || 'recomp'
+    const gr = profile?.goal_rate || 'medium'
+    const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
+    const floor = profile?.bmr || 1200
+    const suggested = Math.max(floor, Math.round((tdee + offset) / 10) * 10)
+    return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays: Math.round(spanDays) }
+  }, [weightLogs, foodByDay, profile])
+
+  async function applyGoal(newCal) {
+    const protein = profile?.goal_protein_g || 0
+    const fat = profile?.goal_fat_g || 0
+    const carbs = Math.max(0, Math.round((newCal - protein * 4 - fat * 9) / 4))
+    setApplying(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ goal_calories: newCal, goal_carbs_g: carbs })
+      .eq('id', user.id)
+    setApplying(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await refreshProfile()
+  }
+
   const axis = { stroke: '#64748b', fontSize: 11 }
   const tooltipStyle = {
     background: '#0f172a',
@@ -211,6 +260,56 @@ export default function Weight() {
               {proteinPct >= 90 ? ' — great for keeping muscle.' : ' — aim higher to protect muscle.'}
             </p>
           )}
+        </Card>
+      )}
+
+      {/* Weekly check-in — measured TDEE + adaptive goal suggestion */}
+      {checkIn.ready ? (
+        <Card className="space-y-2">
+          <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
+          <p className="text-xs text-slate-500">
+            From your last {checkIn.spanDays} days of weight + food.
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-slate-800 py-2">
+              <div className="text-lg font-bold text-white">{checkIn.tdee}</div>
+              <div className="text-xs text-slate-500">est. maintenance</div>
+            </div>
+            <div className="rounded-lg bg-slate-800 py-2">
+              <div className="text-lg font-bold text-white">{goalCal || '—'}</div>
+              <div className="text-xs text-slate-500">current goal</div>
+            </div>
+          </div>
+          {goalCal > 0 && Math.abs(checkIn.suggested - goalCal) <= 30 ? (
+            <p className="text-sm text-green-400">
+              ✅ Your goal matches the data — no change needed.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-300">
+                Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
+                {goalCal > 0 && (
+                  <span className="text-slate-500">
+                    {' '}
+                    ({checkIn.suggested > goalCal ? '+' : ''}
+                    {checkIn.suggested - goalCal})
+                  </span>
+                )}
+              </p>
+              <Button className="w-full" disabled={applying} onClick={() => applyGoal(checkIn.suggested)}>
+                {applying ? 'Applying…' : `Apply ${checkIn.suggested} kcal`}
+              </Button>
+              <p className="text-[11px] text-slate-500">Protein &amp; fat kept; carbs adjusted to fit.</p>
+            </>
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
+          <p className="text-xs text-slate-500">
+            Unlocks after ~2 weeks of data — needs ≥2 weigh-ins over ≥7 days and ≥5 days of food
+            logged. It estimates your real maintenance calories and suggests a goal.
+          </p>
         </Card>
       )}
 
