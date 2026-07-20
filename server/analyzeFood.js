@@ -12,7 +12,12 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 // automatically (no persisted state). "gemini-flash-latest" is a Google alias
 // that always points at the current flash model. Override the whole list with
 // the GEMINI_MODELS env var (comma-separated), or a single GEMINI_MODEL.
-const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3-flash']
+// Verified working for this key (ListModels), distinct daily quota buckets:
+//   gemini-flash-latest (alias → current flash), gemini-3-flash-preview,
+//   gemini-flash-lite-latest. NB: gemini-2.5-flash / *-lite are "not available
+//   to new users" (404), and gemini-3-flash / gemini-2.0-flash are unavailable
+//   or quota-0 — do not add them back without re-checking ListModels.
+const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-flash-lite-latest']
 
 // Abort a single model call that runs too long, so a slow/hung model doesn't
 // stall the whole request — we cascade to the next instead.
@@ -122,7 +127,43 @@ async function callModel({ apiKey, model, body }) {
     e.retryable = retryable
     throw e
   }
-  return resp.json()
+
+  // Parse here so a 200-with-garbage / empty / truncated response also
+  // cascades to the next model instead of dead-ending.
+  const data = await resp.json().catch(() => null)
+  const cand = data?.candidates?.[0]
+  const text = (cand?.content?.parts || [])
+    .map((p) => p.text)
+    .filter(Boolean)
+    .join('')
+  if (!text) {
+    const reason = data?.promptFeedback?.blockReason || cand?.finishReason
+    const e = httpError(
+      reason ? `Could not analyse (${reason}). Try again.` : 'Empty response from the model.',
+      502
+    )
+    e.retryable = true
+    throw e
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    const e = httpError('Got an unreadable response from the model. Try again.', 502)
+    e.retryable = true
+    throw e
+  }
+  const items = Array.isArray(parsed.items) ? parsed.items : []
+  const totals = items.reduce(
+    (a, it) => ({
+      calories: a.calories + (Number(it.calories) || 0),
+      protein_g: a.protein_g + (Number(it.protein_g) || 0),
+      carbs_g: a.carbs_g + (Number(it.carbs_g) || 0),
+      fat_g: a.fat_g + (Number(it.fat_g) || 0),
+    }),
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  )
+  return { items, confidence: parsed.confidence || 'low', totals }
 }
 
 export async function analyzeFood({ apiKey, model, models, imageBase64, mediaType, note }) {
@@ -157,7 +198,11 @@ export async function analyzeFood({ apiKey, model, models, imageBase64, mediaTyp
     contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: 1024,
+      // Disable model "thinking": faster, and stops thinking tokens from
+      // eating the output budget and truncating the JSON. Accepted by the
+      // flash / flash-lite / gemini-3 models in the chain.
+      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: 2048,
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
     },
@@ -172,15 +217,12 @@ export async function analyzeFood({ apiKey, model, models, imageBase64, mediaTyp
   const ordered = [...chain].sort(
     (a, b) => (cooldownUntil.get(a) > now ? 1 : 0) - (cooldownUntil.get(b) > now ? 1 : 0)
   )
-  let data
-  let usedModel
   let lastErr
   for (const m of ordered) {
     try {
-      data = await callModel({ apiKey, model: m, body })
-      usedModel = m
+      const result = await callModel({ apiKey, model: m, body })
       cooldownUntil.delete(m) // it worked → clear any cooldown
-      break
+      return { ...result, model: m }
     } catch (e) {
       lastErr = e
       if (e.status === 429) cooldownUntil.set(m, Date.now() + COOLDOWN_MS)
@@ -188,50 +230,11 @@ export async function analyzeFood({ apiKey, model, models, imageBase64, mediaTyp
       throw e
     }
   }
-  if (!data) {
-    if (lastErr?.status === 429) {
-      throw httpError(
-        'All AI models have hit their free daily limit. Try again after the daily reset, or add the food manually / by search.',
-        429
-      )
-    }
-    throw lastErr || httpError('Analysis failed. Try again.', 502)
-  }
-
-  const cand = data.candidates?.[0]
-  const text = (cand?.content?.parts || [])
-    .map((p) => p.text)
-    .filter(Boolean)
-    .join('')
-
-  if (!text) {
-    const reason = data.promptFeedback?.blockReason || cand?.finishReason
+  if (lastErr?.status === 429) {
     throw httpError(
-      reason
-        ? `Could not analyse the image (${reason}). Try another photo.`
-        : 'Could not read a food estimate from the image. Try another photo.',
-      502
+      'All AI models have hit their free daily limit. Try again after the daily reset, or add the food manually / by search.',
+      429
     )
   }
-
-  let parsed
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    throw httpError('Got an unreadable response from the model. Try again.', 502)
-  }
-
-  const items = Array.isArray(parsed.items) ? parsed.items : []
-  const confidence = parsed.confidence || 'low'
-  const totals = items.reduce(
-    (a, it) => ({
-      calories: a.calories + (Number(it.calories) || 0),
-      protein_g: a.protein_g + (Number(it.protein_g) || 0),
-      carbs_g: a.carbs_g + (Number(it.carbs_g) || 0),
-      fat_g: a.fat_g + (Number(it.fat_g) || 0),
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  )
-
-  return { items, confidence, totals, model: usedModel }
+  throw lastErr || httpError('Analysis failed. Try again.', 502)
 }
