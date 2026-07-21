@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { searchFoods, lookupBarcode, scaleFood, unitsFor } from '../lib/foodSearch'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
 import AddFoodForm from './AddFoodForm'
 import PhotoLogger from './PhotoLogger'
-import BarcodeScanner from './BarcodeScanner'
+
+// Barcode scanner pulls in @zxing (~450 KB) — load it only when the scanner
+// actually opens, so it isn't in the initial bundle / PWA precache.
+const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 
 const r = (n) => Math.round(Number(n) || 0)
 
@@ -194,7 +197,13 @@ export default function AddFood({
 
   // ---- sub-views -------------------------------------------------------
   if (view === 'scan') {
-    return <BarcodeScanner onDetected={onScan} onCancel={() => setView('home')} />
+    return (
+      <Suspense
+        fallback={<p className="py-6 text-center text-sm text-slate-500">Loading scanner…</p>}
+      >
+        <BarcodeScanner onDetected={onScan} onCancel={() => setView('home')} />
+      </Suspense>
+    )
   }
   if (view === 'ai') {
     return (

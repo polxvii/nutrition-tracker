@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
-import { Card } from '../components/ui'
+import { Card, Skeleton } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -270,7 +270,7 @@ export default function Calendar() {
           </div>
         </Card>
       )}
-      {loading && <p className="text-center text-sm text-slate-500">Loading…</p>}
+      {loading && <Skeleton className="h-28 w-full" />}
     </div>
   )
 }

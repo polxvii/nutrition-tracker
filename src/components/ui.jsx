@@ -47,3 +47,8 @@ export function Select({ className = '', children, ...props }) {
     </select>
   )
 }
+
+// Pulsing placeholder shown while data loads (nicer than a "Loading…" flash).
+export function Skeleton({ className = '' }) {
+  return <div className={`animate-pulse rounded-lg bg-slate-800 ${className}`} />
+}

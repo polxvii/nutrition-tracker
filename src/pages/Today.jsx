@@ -8,7 +8,7 @@ import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
-import { Button, Card } from '../components/ui'
+import { Button, Card, Skeleton } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -578,11 +578,16 @@ export default function Today() {
           {isToday ? "Today's log" : 'Log'}
         </h2>
         {loading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-14 w-full" />
+            ))}
+          </div>
         ) : logs.length === 0 ? (
           <Card>
-            <p className="text-center text-sm text-slate-500">
-              No entries — tap “＋ Add food”.
+            <p className="py-4 text-center text-sm text-slate-500">
+              <span className="mb-1 block text-3xl">🍽️</span>
+              Nothing logged yet — tap <b className="text-slate-300">＋ Add food</b> to start.
             </p>
           </Card>
         ) : (

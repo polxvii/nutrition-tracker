@@ -75,6 +75,9 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+          // Don't precache the lazy barcode-scanner chunk (~455 KB) — it's
+          // fetched on demand the first time the scanner opens instead.
+          globIgnores: ['**/BarcodeScanner-*.js'],
           navigateFallbackDenylist: [/^\/api\//],
         },
         devOptions: { enabled: false },
