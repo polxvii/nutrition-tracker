@@ -57,12 +57,16 @@ export default function BodyMeasurements({ fromDate, toDate }) {
 
   async function save(e) {
     e.preventDefault()
-    const measurements = {}
+    const entered = {}
     for (const s of SITES) {
       const v = num(form[s.key])
-      if (v > 0) measurements[s.key] = v
+      if (v > 0) entered[s.key] = v
     }
-    if (Object.keys(measurements).length === 0) return
+    if (Object.keys(entered).length === 0) return
+    // Merge over the day's existing values so sites not in the form aren't lost
+    // (upsert replaces the whole jsonb).
+    const existing = logs.find((l) => l.logged_date === date)?.measurements || {}
+    const measurements = { ...existing, ...entered }
     setBusy(true)
     const { error } = await supabase
       .from('body_measurements')

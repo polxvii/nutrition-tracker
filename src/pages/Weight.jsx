@@ -37,11 +37,14 @@ const isoDaysAgo = (n) => {
   return todayISODate(d)
 }
 
-// Least-squares slope (kg/day) over dated weight points → kg/week.
-function weeklyRate(points) {
+// Least-squares slope (kg/day) over dated weight points → kg/week. Requires the
+// points to span at least minSpanDays, so a weekly rate isn't extrapolated from
+// a couple of weigh-ins a day apart (which produces wild numbers).
+function weeklyRate(points, minSpanDays = 0) {
   if (points.length < 2) return null
   const t0 = new Date(points[0].fullDate).getTime()
   const xs = points.map((p) => (new Date(p.fullDate).getTime() - t0) / 86400000)
+  if (xs[xs.length - 1] - xs[0] < minSpanDays) return null
   const ys = points.map((p) => p.weight)
   const n = xs.length
   const sx = xs.reduce((a, b) => a + b, 0)
@@ -106,7 +109,7 @@ export default function Weight() {
     setWeightLogs(wRes.data ?? [])
     const map = {}
     for (const l of fRes.data ?? []) {
-      const day = String(l.logged_at).slice(0, 10)
+      const day = todayISODate(new Date(l.logged_at)) // local day (matches Calendar)
       if (!map[day]) map[day] = { date: day, kcal: 0, protein: 0, carbs: 0, fat: 0 }
       map[day].kcal += Number(l.calories) || 0
       map[day].protein += Number(l.protein_g) || 0
@@ -157,7 +160,8 @@ export default function Weight() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weightLogs, fromDate, toDate])
 
-  const rate = useMemo(() => weeklyRate(weightData), [weightData])
+  // Need ≥5 days of span before stating a weekly rate (avoids noisy extrapolation).
+  const rate = useMemo(() => weeklyRate(weightData, 5), [weightData])
   const verdict = trendVerdict(rate, profile?.goal_type)
   const curWeight = weightData.length ? weightData[weightData.length - 1].weight : null
   const delta = weightData.length >= 2 ? r1(curWeight - weightData[0].weight) : null
@@ -216,7 +220,7 @@ export default function Weight() {
   // This week's running energy balance vs goal, and the predicted weight
   // impact vs real maintenance (measured TDEE if available, else the estimate).
   const weeklyRecap = useMemo(() => {
-    const cut7 = isoDaysAgo(7)
+    const cut7 = isoDaysAgo(6) // last 7 days *including today*
     const days = foodByDay.filter((d) => d.date >= cut7 && d.kcal >= intakeFloor)
     if (days.length === 0) return { ready: false }
     const n = days.length
@@ -620,16 +624,19 @@ export default function Weight() {
       {/* Body measurements */}
       <BodyMeasurements fromDate={fromDate} toDate={toDate} />
 
-      {/* Weigh-in history */}
+      {/* Weigh-in history (within the selected period) */}
       <div className="space-y-2">
         <h2 className="text-sm font-medium text-slate-300">Weigh-in history</h2>
-        {weightLogs.length === 0 ? (
+        {weightLogs.filter((l) => inPeriod(l.logged_date)).length === 0 ? (
           <Card>
-            <p className="text-center text-sm text-slate-500">No weight data yet</p>
+            <p className="text-center text-sm text-slate-500">No weigh-ins in this period</p>
           </Card>
         ) : (
           <div className="space-y-2">
-            {[...weightLogs].reverse().map((l) => (
+            {weightLogs
+              .filter((l) => inPeriod(l.logged_date))
+              .reverse()
+              .map((l) => (
               <div
                 key={l.id}
                 className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2.5"

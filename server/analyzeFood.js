@@ -29,7 +29,10 @@ const DEFAULT_MODELS = [
 
 // Abort a single model call that runs too long, so a slow/hung model doesn't
 // stall the whole request — we cascade to the next instead.
-const REQUEST_TIMEOUT_MS = 20000
+const REQUEST_TIMEOUT_MS = 15000
+// Overall wall-clock budget across all attempts, so many hung models/keys can't
+// stack past the serverless function's limit.
+const OVERALL_BUDGET_MS = 25000
 // After a (key,model) returns 429 (quota), skip it for a while so we stop
 // paying a failed round-trip on every request. Module scope → persists across
 // requests within a warm isolate (best-effort; fine if the isolate recycles).
@@ -244,11 +247,11 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
     for (let ki = 0; ki < keys.length; ki++) attempts.push({ m, ki })
   }
   const live = attempts.filter(({ m, ki }) => !(cooldownUntil.get(ckey(m, ki)) > now))
-  // Everything is cooling down → all quotas hit recently; fail fast.
+  // Everything is cooling down — recently rate-limited and/or keys unavailable.
   if (live.length === 0) {
     throw httpError(
-      'All AI models have hit their free daily limit. Try again after the daily reset, or add the food manually / by search.',
-      429
+      'AI is unavailable right now (all models rate-limited or their keys unavailable). Add the food manually or by search.',
+      503
     )
   }
 
@@ -256,6 +259,7 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
   const deadKeys = new Set() // keys that are denied/invalid this request — skip them
   for (const { m, ki } of live) {
     if (deadKeys.has(ki)) continue
+    if (Date.now() - now > OVERALL_BUDGET_MS) break // out of time budget
     try {
       const result = await callModel({ apiKey: keys[ki], model: m, body })
       cooldownUntil.delete(ckey(m, ki)) // it worked → clear any cooldown
@@ -272,6 +276,13 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
       if (e.retryable) continue
       throw e
     }
+  }
+  // Report the actual reason: dead keys vs quota vs other.
+  if (lastErr?.badKey && lastErr?.status !== 429) {
+    throw httpError(
+      'The AI API keys are unavailable or denied — check the GEMINI keys on the server.',
+      502
+    )
   }
   if (lastErr?.status === 429) {
     throw httpError(

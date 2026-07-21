@@ -92,7 +92,8 @@ export default function Calendar() {
       }
       setStreak(s)
     })()
-  }, [byDate])
+    // Streak is global (not tied to the viewed month); compute once per mount.
+  }, [])
 
   const goalCal = profile?.goal_calories ?? 0
   const monthName = new Date(cursor.y, cursor.m, 1).toLocaleDateString('en-US', {
