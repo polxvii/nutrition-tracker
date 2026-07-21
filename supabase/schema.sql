@@ -29,6 +29,7 @@ create table if not exists public.profiles (
   goal_protein_g integer,
   goal_carbs_g   integer,
   goal_fat_g     integer,
+  goal_weight_kg numeric(5,2),          -- target weight (for projection)
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
@@ -93,6 +94,22 @@ create index if not exists saved_meals_user_idx
   on public.saved_meals (user_id, created_at desc);
 
 -- ---------------------------------------------------------------------
+--  body_measurements : รอบวงต่างๆ (เอว/อก/แขน/ขา/สะโพก) หน่วย cm
+--  measurements = jsonb { waist, chest, arms, thighs, hips } (ทุกช่อง optional)
+--  unique(user_id, logged_date) → 1 แถวต่อวัน (upsert ทับได้)
+-- ---------------------------------------------------------------------
+create table if not exists public.body_measurements (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users (id) on delete cascade,
+  logged_date  date not null default current_date,
+  measurements jsonb not null default '{}'::jsonb,
+  created_at   timestamptz not null default now(),
+  unique (user_id, logged_date)
+);
+create index if not exists body_measurements_user_date_idx
+  on public.body_measurements (user_id, logged_date desc);
+
+-- ---------------------------------------------------------------------
 --  weight_logs : บันทึกน้ำหนักรายวัน
 --  unique(user_id, logged_date) → 1 ค่าต่อวัน (upsert ทับได้)
 -- ---------------------------------------------------------------------
@@ -130,6 +147,7 @@ alter table public.profiles       enable row level security;
 alter table public.food_logs      enable row level security;
 alter table public.frequent_foods enable row level security;
 alter table public.saved_meals    enable row level security;
+alter table public.body_measurements enable row level security;
 alter table public.weight_logs    enable row level security;
 
 -- profiles : ยึด id = auth.uid()
@@ -162,6 +180,11 @@ drop policy if exists saved_meals_all_own on public.saved_meals;
 create policy saved_meals_all_own on public.saved_meals
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- body_measurements
+drop policy if exists body_measurements_all_own on public.body_measurements;
+create policy body_measurements_all_own on public.body_measurements
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- weight_logs
 drop policy if exists weight_logs_all_own on public.weight_logs;
 create policy weight_logs_all_own on public.weight_logs
@@ -176,7 +199,7 @@ create policy weight_logs_all_own on public.weight_logs
 grant usage on schema public to authenticated;
 grant select, insert, update, delete
   on public.profiles, public.food_logs, public.frequent_foods,
-     public.saved_meals, public.weight_logs
+     public.saved_meals, public.body_measurements, public.weight_logs
   to authenticated;
 
 -- =====================================================================

@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
 import { Button, Card, Field, Input } from '../components/ui'
+import BodyMeasurements from '../components/BodyMeasurements'
 
 const RANGES = [
   { days: 7, label: '7d' },
@@ -225,6 +226,44 @@ export default function Weight() {
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
     return { ready: true, n, vsGoal, predictedKg, maint }
   }, [foodByDay, goalCal, intakeFloor, checkIn, profile])
+
+  // ---- Goal weight + projection ----
+  const [goalW, setGoalW] = useState('')
+  const [savingGoalW, setSavingGoalW] = useState(false)
+  useEffect(() => {
+    setGoalW(profile?.goal_weight_kg != null ? String(profile.goal_weight_kg) : '')
+  }, [profile?.goal_weight_kg])
+
+  async function saveGoalWeight(e) {
+    e.preventDefault()
+    const w = Number(goalW)
+    setSavingGoalW(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ goal_weight_kg: w > 0 ? w : null })
+      .eq('id', user.id)
+    setSavingGoalW(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await refreshProfile()
+  }
+
+  // Project the target-weight date from the steadiest rate we have.
+  const projection = useMemo(() => {
+    const targetW = profile?.goal_weight_kg != null ? Number(profile.goal_weight_kg) : null
+    const rateWk = checkIn.ready ? checkIn.rateWk : rate
+    if (targetW == null || curWeight == null || rateWk == null) return null
+    const remaining = targetW - curWeight // <0 need to lose, >0 need to gain
+    if (Math.abs(remaining) < 0.15) return { targetW, reached: true }
+    const toward = remaining < 0 ? rateWk < -0.02 : rateWk > 0.02
+    if (!toward) return { targetW, remaining: r1(remaining), stalled: true }
+    const weeks = remaining / rateWk
+    const dt = new Date()
+    dt.setDate(dt.getDate() + Math.round(weeks * 7))
+    return { targetW, remaining: r1(remaining), rateWk: r1(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
+  }, [profile?.goal_weight_kg, curWeight, checkIn, rate])
 
   async function applyGoal(newCal) {
     const protein = profile?.goal_protein_g || 0
@@ -534,6 +573,51 @@ export default function Weight() {
           <p className="text-center text-sm text-slate-500">Log at least 2 weigh-ins to see your trend.</p>
         </Card>
       )}
+
+      {/* Goal weight + projection */}
+      <Card className="space-y-2">
+        <h2 className="text-sm font-medium text-slate-300">Goal weight</h2>
+        <form onSubmit={saveGoalWeight} className="flex items-end gap-2">
+          <Field label="Target (kg)">
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={goalW}
+              onChange={(e) => setGoalW(e.target.value)}
+              placeholder="70"
+            />
+          </Field>
+          <Button type="submit" variant="ghost" disabled={savingGoalW}>
+            {savingGoalW ? '…' : 'Save'}
+          </Button>
+        </form>
+        {projection?.reached && <p className="text-sm text-green-400">🎉 You're at your goal weight!</p>}
+        {projection?.stalled && (
+          <p className="text-sm text-amber-400">
+            Not trending toward {projection.targetW}kg right now ({projection.remaining > 0 ? '+' : ''}
+            {projection.remaining}kg to go) — adjust intake to move.
+          </p>
+        )}
+        {projection && !projection.reached && !projection.stalled && (
+          <p className="text-sm text-slate-300">
+            At <b className="text-white">{projection.rateWk > 0 ? '+' : ''}{projection.rateWk}</b> kg/wk →{' '}
+            <b className="text-white">{projection.targetW}kg</b> around{' '}
+            <b className="text-white">
+              {projection.date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </b>{' '}
+            <span className="text-slate-500">(~{Math.abs(projection.weeks)} wk)</span>
+          </p>
+        )}
+        {!projection && (
+          <p className="text-xs text-slate-500">
+            Set a target and log a couple of weigh-ins to see your projected date.
+          </p>
+        )}
+      </Card>
+
+      {/* Body measurements */}
+      <BodyMeasurements fromDate={fromDate} toDate={toDate} />
 
       {/* Weigh-in history */}
       <div className="space-y-2">
