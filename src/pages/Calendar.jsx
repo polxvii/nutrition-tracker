@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
+import { Card } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -25,6 +26,7 @@ export default function Calendar() {
     const { data } = await supabase
       .from('food_logs')
       .select('logged_at,calories,protein_g,carbs_g,fat_g')
+      .neq('source', 'exercise') // exclude burned calories from "eaten"
       .gte('logged_at', start.toISOString())
       .lt('logged_at', end.toISOString())
     const map = {}
@@ -56,6 +58,27 @@ export default function Calendar() {
   const cells = []
   for (let i = 0; i < firstWeekday; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  // Month summary over the days that actually have logs.
+  const logged = Object.values(byDate)
+  const nLogged = logged.length
+  const avg = nLogged
+    ? {
+        cal: Math.round(logged.reduce((s, b) => s + b.cal, 0) / nLogged),
+        p: Math.round(logged.reduce((s, b) => s + b.p, 0) / nLogged),
+        c: Math.round(logged.reduce((s, b) => s + b.c, 0) / nLogged),
+        f: Math.round(logged.reduce((s, b) => s + b.f, 0) / nLogged),
+      }
+    : null
+  const onTarget = goalCal > 0 ? logged.filter((b) => b.cal <= goalCal).length : null
+
+  // Predicted weight impact for the logged days: (eaten − maintenance) / 7700.
+  const tdee = profile?.tdee ?? 0
+  const totalEaten = logged.reduce((s, b) => s + b.cal, 0)
+  const predictedKg =
+    tdee > 0 && nLogged > 0
+      ? Math.round(((totalEaten - tdee * nLogged) / 7700) * 100) / 100
+      : null
 
   const prev = () =>
     setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))
@@ -117,6 +140,45 @@ export default function Calendar() {
       <p className="text-center text-[11px] text-slate-500">
         kcal · P·C·F (g) — tap a day to view / log
       </p>
+
+      {avg && (
+        <Card className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-300">Month average / day</span>
+            <span className="text-xs text-slate-500">
+              {nLogged}/{daysInMonth} days logged
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: 'kcal', value: avg.cal },
+              { label: 'P', value: `${avg.p}g` },
+              { label: 'C', value: `${avg.c}g` },
+              { label: 'F', value: `${avg.f}g` },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg bg-slate-800 py-2">
+                <div className="text-base font-bold text-white">{s.value}</div>
+                <div className="text-[10px] text-slate-500">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {onTarget != null && (
+            <p className="text-center text-xs text-slate-500">
+              {onTarget}/{nLogged} days at or under goal ({goalCal} kcal)
+            </p>
+          )}
+          {predictedKg != null && (
+            <p className="text-center text-xs text-slate-400">
+              Est. impact on these {nLogged} days:{' '}
+              <b className={predictedKg < 0 ? 'text-green-400' : predictedKg > 0 ? 'text-amber-400' : 'text-slate-200'}>
+                {predictedKg > 0 ? '+' : ''}
+                {predictedKg} kg
+              </b>
+              <span className="text-slate-500"> · vs ~{tdee} maintenance</span>
+            </p>
+          )}
+        </Card>
+      )}
       {loading && <p className="text-center text-sm text-slate-500">Loading…</p>}
     </div>
   )
