@@ -77,7 +77,8 @@ export default function Weight() {
   const [weightLogs, setWeightLogs] = useState([])
   const [foodByDay, setFoodByDay] = useState([])
   const [preset, setPreset] = useState('30')
-  const [fromDate, setFromDate] = useState(isoDaysAgo(30))
+  // Preset "Nd" = last N days *including today*, so it reads /N not /N+1.
+  const [fromDate, setFromDate] = useState(isoDaysAgo(29))
   const [toDate, setToDate] = useState(todayISODate())
   const [date, setDate] = useState(todayISODate())
   const [weight, setWeight] = useState('')
@@ -304,7 +305,7 @@ export default function Weight() {
                 key={rg.days}
                 onClick={() => {
                   setPreset(rg.label)
-                  setFromDate(isoDaysAgo(rg.days))
+                  setFromDate(isoDaysAgo(rg.days - 1))
                   setToDate(todayISODate())
                 }}
                 className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
