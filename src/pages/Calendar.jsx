@@ -17,17 +17,39 @@ export default function Calendar() {
   const now = new Date()
   const [cursor, setCursor] = useState({ y: now.getFullYear(), m: now.getMonth() })
   const [byDate, setByDate] = useState({})
+  const [monthWeight, setMonthWeight] = useState(null)
+  const [streak, setStreak] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     const start = new Date(cursor.y, cursor.m, 1)
     const end = new Date(cursor.y, cursor.m + 1, 1)
-    const { data } = await supabase
-      .from('food_logs')
-      .select('logged_at,source,calories,protein_g,carbs_g,fat_g')
-      .gte('logged_at', start.toISOString())
-      .lt('logged_at', end.toISOString())
+    const startYMD = `${cursor.y}-${pad(cursor.m + 1)}-01`
+    const endMonth = cursor.m === 11 ? { y: cursor.y + 1, m: 0 } : { y: cursor.y, m: cursor.m + 1 }
+    const endYMD = `${endMonth.y}-${pad(endMonth.m + 1)}-01`
+    const [foodRes, wRes] = await Promise.all([
+      supabase
+        .from('food_logs')
+        .select('logged_at,source,calories,protein_g,carbs_g,fat_g')
+        .gte('logged_at', start.toISOString())
+        .lt('logged_at', end.toISOString()),
+      supabase
+        .from('weight_logs')
+        .select('logged_date,weight_kg')
+        .gte('logged_date', startYMD)
+        .lt('logged_date', endYMD)
+        .order('logged_date', { ascending: true }),
+    ])
+    const data = foodRes.data
+    const w = wRes.data ?? []
+    if (w.length) {
+      const first = Number(w[0].weight_kg)
+      const last = Number(w[w.length - 1].weight_kg)
+      setMonthWeight({ first, last, delta: w.length >= 2 ? Math.round((last - first) * 10) / 10 : null })
+    } else {
+      setMonthWeight(null)
+    }
     const map = {}
     for (const l of data ?? []) {
       const key = todayISODate(new Date(l.logged_at)) // local day
@@ -48,6 +70,29 @@ export default function Calendar() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Current logging streak — consecutive days with food, ending today (or
+  // yesterday if today isn't logged yet). Independent of the viewed month.
+  useEffect(() => {
+    ;(async () => {
+      const since = new Date()
+      since.setDate(since.getDate() - 90)
+      const { data } = await supabase
+        .from('food_logs')
+        .select('logged_at')
+        .neq('source', 'exercise')
+        .gte('logged_at', since.toISOString())
+      const days = new Set((data ?? []).map((l) => todayISODate(new Date(l.logged_at))))
+      const d = new Date()
+      if (!days.has(todayISODate(d))) d.setDate(d.getDate() - 1)
+      let s = 0
+      while (days.has(todayISODate(d))) {
+        s++
+        d.setDate(d.getDate() - 1)
+      }
+      setStreak(s)
+    })()
+  }, [byDate])
 
   const goalCal = profile?.goal_calories ?? 0
   const monthName = new Date(cursor.y, cursor.m, 1).toLocaleDateString('en-US', {
@@ -148,42 +193,80 @@ export default function Calendar() {
         net kcal (food − 🔥exercise) · P·C·F (g) — tap a day to view / log
       </p>
 
-      {avg && (
+      {(avg || streak > 0 || monthWeight) && (
         <Card className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-300">Month average / day (net)</span>
+            <span className="text-sm font-medium text-slate-300">Month summary</span>
             <span className="text-xs text-slate-500">
               {nLogged}/{daysInMonth} days logged
             </span>
           </div>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            {[
-              { label: 'kcal', value: avg.cal },
-              { label: 'P', value: `${avg.p}g` },
-              { label: 'C', value: `${avg.c}g` },
-              { label: 'F', value: `${avg.f}g` },
-            ].map((s) => (
-              <div key={s.label} className="rounded-lg bg-slate-800 py-2">
-                <div className="text-base font-bold text-white">{s.value}</div>
-                <div className="text-[10px] text-slate-500">{s.label}</div>
+
+          {avg && (
+            <>
+              <div className="text-center text-[10px] uppercase tracking-wide text-slate-500">
+                avg / logged day (net)
               </div>
-            ))}
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[
+                  { label: 'kcal', value: avg.cal },
+                  { label: 'P', value: `${avg.p}g` },
+                  { label: 'C', value: `${avg.c}g` },
+                  { label: 'F', value: `${avg.f}g` },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-lg bg-slate-800 py-2">
+                    <div className="text-base font-bold text-white">{s.value}</div>
+                    <div className="text-[10px] text-slate-500">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              {onTarget != null && (
+                <p className="text-center text-xs text-slate-500">
+                  {onTarget}/{nLogged} days at or under goal ({goalCal} kcal)
+                </p>
+              )}
+              {predictedKg != null && (
+                <p className="text-center text-xs text-slate-400">
+                  Est. impact on these {nLogged} days:{' '}
+                  <b className={predictedKg < 0 ? 'text-green-400' : predictedKg > 0 ? 'text-amber-400' : 'text-slate-200'}>
+                    {predictedKg > 0 ? '+' : ''}
+                    {predictedKg} kg
+                  </b>
+                  <span className="text-slate-500"> · vs ~{tdee} maintenance</span>
+                </p>
+              )}
+            </>
+          )}
+
+          <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-xs">
+            <span className="text-slate-400">
+              🔥 Streak <b className="text-white">{streak}</b> day{streak === 1 ? '' : 's'}
+            </span>
+            {monthWeight && (
+              <span className="text-slate-400">
+                ⚖️ {monthWeight.first}
+                {monthWeight.delta != null ? (
+                  <>
+                    →{monthWeight.last}{' '}
+                    <span
+                      className={
+                        monthWeight.delta < 0
+                          ? 'text-green-400'
+                          : monthWeight.delta > 0
+                            ? 'text-amber-400'
+                            : ''
+                      }
+                    >
+                      ({monthWeight.delta > 0 ? '+' : ''}
+                      {monthWeight.delta}kg)
+                    </span>
+                  </>
+                ) : (
+                  ' kg'
+                )}
+              </span>
+            )}
           </div>
-          {onTarget != null && (
-            <p className="text-center text-xs text-slate-500">
-              {onTarget}/{nLogged} days at or under goal ({goalCal} kcal)
-            </p>
-          )}
-          {predictedKg != null && (
-            <p className="text-center text-xs text-slate-400">
-              Est. impact on these {nLogged} days:{' '}
-              <b className={predictedKg < 0 ? 'text-green-400' : predictedKg > 0 ? 'text-amber-400' : 'text-slate-200'}>
-                {predictedKg > 0 ? '+' : ''}
-                {predictedKg} kg
-              </b>
-              <span className="text-slate-500"> · vs ~{tdee} maintenance</span>
-            </p>
-          )}
         </Card>
       )}
       {loading && <p className="text-center text-sm text-slate-500">Loading…</p>}
