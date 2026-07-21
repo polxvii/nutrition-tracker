@@ -25,18 +25,21 @@ export default function Calendar() {
     const end = new Date(cursor.y, cursor.m + 1, 1)
     const { data } = await supabase
       .from('food_logs')
-      .select('logged_at,calories,protein_g,carbs_g,fat_g')
-      .neq('source', 'exercise') // exclude burned calories from "eaten"
+      .select('logged_at,source,calories,protein_g,carbs_g,fat_g')
       .gte('logged_at', start.toISOString())
       .lt('logged_at', end.toISOString())
     const map = {}
     for (const l of data ?? []) {
       const key = todayISODate(new Date(l.logged_at)) // local day
-      const b = map[key] || (map[key] = { cal: 0, p: 0, c: 0, f: 0 })
-      b.cal += num(l.calories)
-      b.p += num(l.protein_g)
-      b.c += num(l.carbs_g)
-      b.f += num(l.fat_g)
+      const b = map[key] || (map[key] = { cal: 0, p: 0, c: 0, f: 0, burned: 0 })
+      if (l.source === 'exercise') {
+        b.burned += num(l.calories) // exercise = calories back (net = eaten − burned)
+      } else {
+        b.cal += num(l.calories)
+        b.p += num(l.protein_g)
+        b.c += num(l.carbs_g)
+        b.f += num(l.fat_g)
+      }
     }
     setByDate(map)
     setLoading(false)
@@ -59,25 +62,27 @@ export default function Calendar() {
   for (let i = 0; i < firstWeekday; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
-  // Month summary over the days that actually have logs.
-  const logged = Object.values(byDate)
+  // net calories for a day = eaten − exercise burned.
+  const netOf = (b) => b.cal - b.burned
+  // Month summary over days with food logged.
+  const logged = Object.values(byDate).filter((b) => b.cal > 0)
   const nLogged = logged.length
   const avg = nLogged
     ? {
-        cal: Math.round(logged.reduce((s, b) => s + b.cal, 0) / nLogged),
+        cal: Math.round(logged.reduce((s, b) => s + netOf(b), 0) / nLogged),
         p: Math.round(logged.reduce((s, b) => s + b.p, 0) / nLogged),
         c: Math.round(logged.reduce((s, b) => s + b.c, 0) / nLogged),
         f: Math.round(logged.reduce((s, b) => s + b.f, 0) / nLogged),
       }
     : null
-  const onTarget = goalCal > 0 ? logged.filter((b) => b.cal <= goalCal).length : null
+  const onTarget = goalCal > 0 ? logged.filter((b) => netOf(b) <= goalCal).length : null
 
-  // Predicted weight impact for the logged days: (eaten − maintenance) / 7700.
+  // Predicted weight impact: (net eaten − maintenance TDEE) / 7700 kcal-per-kg.
   const tdee = profile?.tdee ?? 0
-  const totalEaten = logged.reduce((s, b) => s + b.cal, 0)
+  const totalNet = logged.reduce((s, b) => s + netOf(b), 0)
   const predictedKg =
     tdee > 0 && nLogged > 0
-      ? Math.round(((totalEaten - tdee * nLogged) / 7700) * 100) / 100
+      ? Math.round(((totalNet - tdee * nLogged) / 7700) * 100) / 100
       : null
 
   const prev = () =>
@@ -110,7 +115,8 @@ export default function Calendar() {
           const k = keyFor(d)
           const b = byDate[k]
           const isToday = k === today
-          const over = goalCal > 0 && b && b.cal > goalCal
+          const net = b ? Math.round(b.cal - b.burned) : null // eaten − exercise
+          const over = goalCal > 0 && net != null && net > goalCal
           return (
             <button
               key={i}
@@ -124,12 +130,13 @@ export default function Calendar() {
                 <span
                   className={`text-[11px] font-semibold ${over ? 'text-red-400' : 'text-green-400'}`}
                 >
-                  {Math.round(b.cal)}
+                  {net}
                 </span>
               )}
-              {b && (
+              {b && b.cal > 0 && (
                 <span className="text-[8px] leading-tight text-slate-500">
                   {Math.round(b.p)}·{Math.round(b.c)}·{Math.round(b.f)}
+                  {b.burned > 0 && <span className="text-amber-500"> 🔥</span>}
                 </span>
               )}
             </button>
@@ -138,13 +145,13 @@ export default function Calendar() {
       </div>
 
       <p className="text-center text-[11px] text-slate-500">
-        kcal · P·C·F (g) — tap a day to view / log
+        net kcal (food − 🔥exercise) · P·C·F (g) — tap a day to view / log
       </p>
 
       {avg && (
         <Card className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-300">Month average / day</span>
+            <span className="text-sm font-medium text-slate-300">Month average / day (net)</span>
             <span className="text-xs text-slate-500">
               {nLogged}/{daysInMonth} days logged
             </span>
