@@ -26,6 +26,14 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
 
+  // Editing a macro recomputes kcal from 4/4/9 (protein 4, carbs 4, fat 9),
+  // so calories reflect the adjusted P/C/F. Editing kcal directly still works.
+  const setMacro = (k) => (e) => {
+    const next = { ...f, [k]: e.target.value }
+    next.calories = Math.round(4 * num(next.protein_g) + 4 * num(next.carbs_g) + 9 * num(next.fat_g))
+    setF(next)
+  }
+
   // Changing the amount *number* scales calories + macros proportionally
   // (twice the amount = twice the food). Always scale from the ORIGINAL entry
   // (fixed base) rather than the current value — so deleting to empty and
@@ -123,13 +131,13 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
             <Input type="number" value={f.calories} onChange={set('calories')} className="px-1 text-center" />
           </Field>
           <Field label="P">
-            <Input type="number" value={f.protein_g} onChange={set('protein_g')} className="px-1 text-center" />
+            <Input type="number" value={f.protein_g} onChange={setMacro('protein_g')} className="px-1 text-center" />
           </Field>
           <Field label="C">
-            <Input type="number" value={f.carbs_g} onChange={set('carbs_g')} className="px-1 text-center" />
+            <Input type="number" value={f.carbs_g} onChange={setMacro('carbs_g')} className="px-1 text-center" />
           </Field>
           <Field label="F">
-            <Input type="number" value={f.fat_g} onChange={set('fat_g')} className="px-1 text-center" />
+            <Input type="number" value={f.fat_g} onChange={setMacro('fat_g')} className="px-1 text-center" />
           </Field>
         </div>
       )}

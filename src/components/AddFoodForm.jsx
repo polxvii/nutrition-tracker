@@ -27,6 +27,14 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
   const [asFrequent, setAsFrequent] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
 
+  const n = (v) => (Number.isNaN(Number(v)) ? 0 : Number(v))
+  // Editing a macro fills kcal from 4/4/9; editing kcal directly still works.
+  const setMacro = (k) => (e) => {
+    const next = { ...f, [k]: e.target.value }
+    next.calories = String(Math.round(4 * n(next.protein_g) + 4 * n(next.carbs_g) + 9 * n(next.fat_g)))
+    setF(next)
+  }
+
   function submit(e) {
     e.preventDefault()
     if (!f.food_name.trim()) return
@@ -91,13 +99,13 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
           <Input type="number" inputMode="decimal" value={f.calories} onChange={set('calories')} />
         </Field>
         <Field label="P (g)">
-          <Input type="number" inputMode="decimal" value={f.protein_g} onChange={set('protein_g')} />
+          <Input type="number" inputMode="decimal" value={f.protein_g} onChange={setMacro('protein_g')} />
         </Field>
         <Field label="C (g)">
-          <Input type="number" inputMode="decimal" value={f.carbs_g} onChange={set('carbs_g')} />
+          <Input type="number" inputMode="decimal" value={f.carbs_g} onChange={setMacro('carbs_g')} />
         </Field>
         <Field label="F (g)">
-          <Input type="number" inputMode="decimal" value={f.fat_g} onChange={set('fat_g')} />
+          <Input type="number" inputMode="decimal" value={f.fat_g} onChange={setMacro('fat_g')} />
         </Field>
       </div>
 

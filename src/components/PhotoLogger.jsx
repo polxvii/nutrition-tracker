@@ -104,6 +104,14 @@ export default function PhotoLogger({
           }
           return { ...it, grams: value }
         }
+        // Editing a macro recomputes kcal from 4/4/9 so calories track P/C/F.
+        if (key === 'protein_g' || key === 'carbs_g' || key === 'fat_g') {
+          const it2 = { ...it, [key]: value }
+          it2.calories = Math.round(
+            4 * num(it2.protein_g) + 4 * num(it2.carbs_g) + 9 * num(it2.fat_g)
+          )
+          return it2
+        }
         return { ...it, [key]: value }
       })
     )
