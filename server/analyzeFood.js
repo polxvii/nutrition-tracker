@@ -133,16 +133,19 @@ async function callModel({ apiKey, model, body }) {
     } catch {
       /* ignore */
     }
-    // Worth cascading to the next model/key: rate/quota limit, a model this
-    // key can't use, a transient overload, or a bad/denied key (403 / invalid
-    // key) — a dead key must be skipped, not abort the whole cascade.
-    const badKey = resp.status === 403 || (resp.status === 400 && /api key/i.test(msg))
+    // A broken/denied key must be skipped, not abort the whole cascade. Detect
+    // it by status (401/403) or message — covers "project denied access",
+    // "API key not valid", and "bound service account is deleted or disabled"
+    // (key tied to a disabled Google Cloud project's service account).
+    const badKeyMsg =
+      /api key|service account|permission|denied|disabled|deleted|suspended|not valid/i.test(msg)
+    const badKey = resp.status === 401 || resp.status === 403 || badKeyMsg
     const retryable =
       resp.status === 429 ||
       resp.status === 404 ||
       resp.status === 503 ||
       badKey ||
-      /not found|not supported|does not exist|quota|rate limit|denied|permission/i.test(msg)
+      /not found|not supported|does not exist|quota|rate limit/i.test(msg)
     const e = httpError(msg, resp.status === 429 ? 429 : 502)
     e.retryable = retryable
     e.badKey = badKey
