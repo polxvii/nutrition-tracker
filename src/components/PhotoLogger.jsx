@@ -54,14 +54,17 @@ export default function PhotoLogger({
         note,
       })
       setItems(
-        (res.items || []).map((it) => ({
-          name: it.name ?? '',
-          grams: Math.round(num(it.grams)),
-          calories: Math.round(num(it.calories)),
-          protein_g: Math.round(num(it.protein_g)),
-          carbs_g: Math.round(num(it.carbs_g)),
-          fat_g: Math.round(num(it.fat_g)),
-        }))
+        (res.items || []).map((it) => {
+          const v = {
+            grams: Math.round(num(it.grams)),
+            calories: Math.round(num(it.calories)),
+            protein_g: Math.round(num(it.protein_g)),
+            carbs_g: Math.round(num(it.carbs_g)),
+            fat_g: Math.round(num(it.fat_g)),
+          }
+          // Keep the estimate as a fixed base so amount edits scale from it.
+          return { name: it.name ?? '', ...v, _base: v }
+        })
       )
       setConfidence(res.confidence)
     } catch (err) {
@@ -83,17 +86,20 @@ export default function PhotoLogger({
       prev.map((it, idx) => {
         if (idx !== i) return it
         if (key === 'grams') {
-          const oldG = num(it.grams)
+          // Scale from the fixed base estimate, not the current value, so
+          // deleting/retyping the amount stays correct.
+          const base = it._base || it
+          const baseG = num(base.grams)
           const newG = num(value)
-          if (oldG > 0 && newG > 0) {
-            const f = newG / oldG
+          if (baseG > 0 && newG > 0) {
+            const f = newG / baseG
             return {
               ...it,
               grams: value,
-              calories: Math.round(num(it.calories) * f),
-              protein_g: Math.round(num(it.protein_g) * f),
-              carbs_g: Math.round(num(it.carbs_g) * f),
-              fat_g: Math.round(num(it.fat_g) * f),
+              calories: Math.round(num(base.calories) * f),
+              protein_g: Math.round(num(base.protein_g) * f),
+              carbs_g: Math.round(num(base.carbs_g) * f),
+              fat_g: Math.round(num(base.fat_g) * f),
             }
           }
           return { ...it, grams: value }

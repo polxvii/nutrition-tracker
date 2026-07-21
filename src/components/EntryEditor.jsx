@@ -27,21 +27,23 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
 
   // Changing the amount *number* scales calories + macros proportionally
-  // (twice the amount = twice the food). Changing the unit is left as a plain
-  // relabel — we have no per-unit data to convert g <-> serving/piece.
+  // (twice the amount = twice the food). Always scale from the ORIGINAL entry
+  // (fixed base) rather than the current value — so deleting to empty and
+  // retyping, or editing digit-by-digit, still lands on the right numbers.
+  // Changing the unit is left as a plain relabel (no per-unit data to convert).
   function setGrams(e) {
     const value = e.target.value
-    const oldG = num(f.grams)
+    const baseG = num(entry.grams)
     const newG = num(value)
-    if (oldG > 0 && newG > 0) {
-      const r = newG / oldG
+    if (baseG > 0 && newG > 0) {
+      const r = newG / baseG
       setF({
         ...f,
         grams: value,
-        calories: Math.round(num(f.calories) * r),
-        protein_g: Math.round(num(f.protein_g) * r),
-        carbs_g: Math.round(num(f.carbs_g) * r),
-        fat_g: Math.round(num(f.fat_g) * r),
+        calories: Math.round(num(entry.calories) * r),
+        protein_g: Math.round(num(entry.protein_g) * r),
+        carbs_g: Math.round(num(entry.carbs_g) * r),
+        fat_g: Math.round(num(entry.fat_g) * r),
       })
     } else {
       setF({ ...f, grams: value })
