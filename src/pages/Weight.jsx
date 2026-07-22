@@ -228,11 +228,13 @@ export default function Weight() {
     return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays: Math.round(spanDays), excluded }
   }, [weightLogs, foodByDay, profile, intakeFloor])
 
-  // This week's running energy balance vs goal, and the predicted weight
-  // impact vs real maintenance (measured TDEE if available, else the estimate).
-  const weeklyRecap = useMemo(() => {
-    const cut7 = isoDaysAgo(6) // last 7 days *including today*
-    const days = foodByDay.filter((d) => d.date >= cut7 && d.eaten >= intakeFloor)
+  // Energy balance over the *selected period* (same window as Adherence, so the
+  // whole page describes one range): net intake vs goal, and the predicted
+  // weight impact vs maintenance (measured TDEE if available, else the estimate).
+  // Incomplete days (very low gross intake — likely forgotten entries) are
+  // excluded from the estimate.
+  const periodRecap = useMemo(() => {
+    const days = foodData.filter((d) => d.eaten >= intakeFloor)
     if (days.length === 0) return { ready: false }
     const n = days.length
     const totalNet = days.reduce((s, d) => s + d.kcal, 0) // net of exercise
@@ -241,7 +243,11 @@ export default function Weight() {
     const vsMaint = maint > 0 ? Math.round(totalNet - maint * n) : null
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
     return { ready: true, n, vsGoal, predictedKg, maint }
-  }, [foodByDay, goalCal, intakeFloor, checkIn, profile])
+  }, [foodData, goalCal, intakeFloor, checkIn, profile])
+
+  // Human label for the selected range, shown on the energy-balance card.
+  const rangeText =
+    preset === 'custom' ? `${fromDate} → ${toDate}` : `last ${preset.replace('d', ' days')}`
 
   // ---- Goal weight + projection ----
   const [goalW, setGoalW] = useState('')
@@ -433,31 +439,31 @@ export default function Weight() {
         </Card>
       )}
 
-      {/* This week — running energy balance + predicted weight impact */}
-      {weeklyRecap.ready && (
+      {/* Energy balance over the selected period + predicted weight impact */}
+      {periodRecap.ready && (
         <Card className="space-y-1">
-          <h2 className="text-sm font-medium text-slate-300">This week</h2>
+          <h2 className="text-sm font-medium text-slate-300">Energy balance</h2>
           <p className="text-xs text-slate-500">
-            Totals over {weeklyRecap.n} logged day{weeklyRecap.n > 1 ? 's' : ''} (last 7).
+            Net of exercise over {periodRecap.n} logged day{periodRecap.n > 1 ? 's' : ''} · {rangeText}.
           </p>
-          {weeklyRecap.vsGoal != null && (
+          {periodRecap.vsGoal != null && (
             <p className="text-sm text-slate-300">
               vs your goal:{' '}
-              <b className={weeklyRecap.vsGoal <= 0 ? 'text-green-400' : 'text-amber-400'}>
-                {weeklyRecap.vsGoal > 0 ? '+' : ''}
-                {weeklyRecap.vsGoal} kcal
+              <b className={periodRecap.vsGoal <= 0 ? 'text-green-400' : 'text-amber-400'}>
+                {periodRecap.vsGoal > 0 ? '+' : ''}
+                {periodRecap.vsGoal} kcal
               </b>{' '}
-              {weeklyRecap.vsGoal <= 0 ? 'under' : 'over'}
+              {periodRecap.vsGoal <= 0 ? 'under' : 'over'}
             </p>
           )}
-          {weeklyRecap.predictedKg != null && (
+          {periodRecap.predictedKg != null && (
             <p className="text-sm text-slate-300">
               Predicted impact:{' '}
-              <b className={weeklyRecap.predictedKg < 0 ? 'text-green-400' : 'text-slate-100'}>
-                {weeklyRecap.predictedKg > 0 ? '+' : ''}
-                {weeklyRecap.predictedKg} kg
+              <b className={periodRecap.predictedKg < 0 ? 'text-green-400' : 'text-slate-100'}>
+                {periodRecap.predictedKg > 0 ? '+' : ''}
+                {periodRecap.predictedKg} kg
               </b>
-              <span className="text-slate-500"> · vs ~{weeklyRecap.maint} kcal maintenance</span>
+              <span className="text-slate-500"> · vs ~{periodRecap.maint} kcal maintenance</span>
             </p>
           )}
         </Card>
