@@ -308,6 +308,15 @@ export default function AddFood({
             ‹ Back
           </button>
         </div>
+        <Field label="Add to meal">
+          <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
+            {MEALS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
         {saved.length > 0 && (
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter saved…" />
         )}
@@ -328,7 +337,6 @@ export default function AddFood({
 
   // Saved meals (combos) — one tap logs every item into the chosen meal slot.
   if (view === 'meals') {
-    const mealLabel = MEALS.find((m) => m.value === meal)?.label || meal
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -337,9 +345,15 @@ export default function AddFood({
             ‹ Back
           </button>
         </div>
-        <p className="text-xs text-slate-500">
-          Adds every item to <b className="text-slate-300">{mealLabel}</b>.
-        </p>
+        <Field label="Add to meal">
+          <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
+            {MEALS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
         {meals.length === 0 ? (
           <p className="py-2 text-sm text-slate-500">
             No saved meals yet. On the Log page, tap “＋ meal” on a meal section to save its items as a combo.
