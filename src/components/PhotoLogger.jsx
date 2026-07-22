@@ -29,6 +29,8 @@ export default function PhotoLogger({
   const [items, setItems] = useState(null)
   const [confidence, setConfidence] = useState(null)
   const [asFrequent, setAsFrequent] = useState(false)
+  const [dish, setDish] = useState('') // combined dish name (editable)
+  const [combine, setCombine] = useState(true) // log as one dish vs N items
 
   async function pickFile(e) {
     const file = e.target.files?.[0]
@@ -68,6 +70,9 @@ export default function PhotoLogger({
         })
       )
       setConfidence(res.confidence)
+      // Seed the combined-dish name: AI's dish name → the note → joined items.
+      const joined = (res.items || []).slice(0, 2).map((it) => it.name).filter(Boolean).join(' + ')
+      setDish((res.dish || '').trim() || note.trim() || joined)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -132,6 +137,28 @@ export default function PhotoLogger({
 
   function submit() {
     if (!items || items.length === 0) return
+    const meta = { note: note.trim() || null, confidence, asFrequent }
+    // Combine into one diary entry (keeps the log/Recent clean), or log each
+    // component separately for granular tracking — the breakdown above always
+    // drives the numbers either way.
+    if (combine) {
+      const totalG = items.reduce((s, it) => s + num(it.grams), 0)
+      onSubmit(
+        [
+          {
+            food_name: (dish || '').trim() || note.trim() || 'Meal',
+            meal_type: meal,
+            grams: Math.round(totalG) || null,
+            calories: Math.round(totals.calories),
+            protein_g: Math.round(totals.protein),
+            carbs_g: Math.round(totals.carbs),
+            fat_g: Math.round(totals.fat),
+          },
+        ],
+        meta
+      )
+      return
+    }
     onSubmit(
       items.map((it) => ({
         food_name: (it.name || '').trim() || 'Food',
@@ -142,7 +169,7 @@ export default function PhotoLogger({
         carbs_g: num(it.carbs_g),
         fat_g: num(it.fat_g),
       })),
-      { note: note.trim() || null, confidence, asFrequent }
+      meta
     )
   }
 
@@ -295,6 +322,33 @@ export default function PhotoLogger({
             {Math.round(totals.fat)}F
           </div>
 
+          {items.length > 1 && (
+            <div className="space-y-2 rounded-xl bg-slate-800/50 p-2">
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={combine}
+                  onChange={(e) => setCombine(e.target.checked)}
+                  className="h-4 w-4 accent-green-500"
+                />
+                Log as one dish
+              </label>
+              {combine ? (
+                <Field label="Dish name">
+                  <Input
+                    value={dish}
+                    onChange={(e) => setDish(e.target.value)}
+                    placeholder="e.g. ก๋วยเตี๋ยวน้ำตกเนื้อ"
+                  />
+                </Field>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Logs each of the {items.length} items above as a separate entry.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <Field label="Meal">
               <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
@@ -318,7 +372,11 @@ export default function PhotoLogger({
 
           <div className="flex gap-2">
             <Button className="flex-1" onClick={submit} disabled={busy || items.length === 0}>
-              {busy ? 'Adding…' : `Add ${items.length} item${items.length > 1 ? 's' : ''} to log`}
+              {busy
+                ? 'Adding…'
+                : combine && items.length > 1
+                  ? 'Add dish to log'
+                  : `Add ${items.length} item${items.length > 1 ? 's' : ''} to log`}
             </Button>
             <Button variant="ghost" onClick={onCancel}>
               Cancel

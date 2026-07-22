@@ -69,6 +69,7 @@ Guidelines:
 - If the user provides a note/description, treat it as ground truth and prioritise it (stated amounts, ingredients, or cooking style override any visual guess).
 - If there is no photo, estimate from the text description alone. If amounts are unstated, assume typical Thai portions and lower the confidence.
 - Give per-component calories, protein, carbs, and fat in grams.
+- Also provide a short overall dish name in the "dish" field — the menu name a person would use for the whole meal (e.g. "ก๋วยเตี๋ยวน้ำตกเนื้อ", "ข้าวมันไก่"). Use the same language as the user's note when one is given; otherwise name it in Thai if it's a Thai dish.
 - Set overall confidence: "high" (clear photo, familiar dish, or a detailed description), "medium", or "low" (blurry, ambiguous, or portion hard to judge).
 - Respond ONLY with a JSON object matching the required schema. No commentary, no markdown.`
 
@@ -76,6 +77,7 @@ Guidelines:
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    dish: { type: 'STRING' },
     items: {
       type: 'ARRAY',
       items: {
@@ -195,7 +197,7 @@ async function callModel({ apiKey, model, body }) {
     }),
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
   )
-  return { items, confidence: parsed.confidence || 'low', totals }
+  return { items, dish: (parsed.dish || '').trim(), confidence: parsed.confidence || 'low', totals }
 }
 
 export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64, mediaType, note }) {
