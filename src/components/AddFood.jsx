@@ -75,12 +75,16 @@ export default function AddFood({
   const [grams, setGrams] = useState('')
   const [unit, setUnit] = useState('g')
   const [asFrequent, setAsFrequent] = useState(false)
-  const [aiNote, setAiNote] = useState('') // seeds the AI view (auto-analyzes)
+  const [aiNote, setAiNote] = useState('') // pre-fills the AI view's description
   const [aiHint, setAiHint] = useState('') // amber note shown atop the AI view
+  const [aiAuto, setAiAuto] = useState(false) // run analyze immediately on open?
 
-  const openAI = (note = '', hint = '') => {
+  // Open the AI view. By default we only pre-fill the note (no auto-analyze) so
+  // the user can still attach a photo before hitting Analyze.
+  const openAI = (note = '', hint = '', auto = false) => {
     setAiNote(note)
     setAiHint(hint)
+    setAiAuto(auto)
     setView('ai')
   }
 
@@ -212,7 +216,7 @@ export default function AddFood({
         onCancel={() => setView('home')}
         busy={busy}
         initialNote={aiNote}
-        autoAnalyze={!!aiNote}
+        autoAnalyze={aiAuto}
         hint={aiHint}
         defaultMeal={meal}
       />
@@ -453,8 +457,11 @@ export default function AddFood({
             onClick={() => openAI(q.trim())}
             className="block w-full rounded-lg border border-green-600/40 bg-green-600/10 px-3 py-2 text-left hover:bg-green-600/20"
           >
-            <span className="text-sm text-green-300">
+            <span className="block text-sm text-green-300">
               🤖 Analyze “{q.trim()}” with AI
+            </span>
+            <span className="block text-xs text-green-300/60">
+              Add a photo for a better estimate, then tap Analyze
             </span>
           </button>
           {localUnique.length > 0 && (
