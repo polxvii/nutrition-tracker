@@ -79,7 +79,7 @@ export default function Weight() {
   const { user, profile, refreshProfile } = useAuth()
   const [weightLogs, setWeightLogs] = useState([])
   const [foodByDay, setFoodByDay] = useState([])
-  const [preset, setPreset] = useState('30')
+  const [preset, setPreset] = useState('30d') // must match a RANGES label
   // Preset "Nd" = last N days *including today*, so it reads /N not /N+1.
   const [fromDate, setFromDate] = useState(isoDaysAgo(29))
   const [toDate, setToDate] = useState(todayISODate())
