@@ -143,6 +143,18 @@ export default function PhotoLogger({
     // drives the numbers either way.
     if (combine) {
       const totalG = items.reduce((s, it) => s + num(it.grams), 0)
+      // Keep the breakdown on the entry so you can drill in and edit it later.
+      const components =
+        items.length > 1
+          ? items.map((it) => ({
+              name: (it.name || '').trim(),
+              grams: num(it.grams),
+              calories: num(it.calories),
+              protein_g: num(it.protein_g),
+              carbs_g: num(it.carbs_g),
+              fat_g: num(it.fat_g),
+            }))
+          : null
       onSubmit(
         [
           {
@@ -153,6 +165,7 @@ export default function PhotoLogger({
             protein_g: Math.round(totals.protein),
             carbs_g: Math.round(totals.carbs),
             fat_g: Math.round(totals.fat),
+            components,
           },
         ],
         meta

@@ -224,21 +224,26 @@ export default function Today() {
   async function handlePhotoLog(entries, { note, confidence, asFrequent }) {
     setBusy(true)
     const ts = timestampFor(selectedDate)
-    const rows = entries.map((e) => ({
-      user_id: user.id,
-      logged_at: ts,
-      source: 'ai',
-      meal_type: e.meal_type,
-      food_name: e.food_name,
-      grams: e.grams,
-      unit: 'g',
-      calories: e.calories,
-      protein_g: e.protein_g,
-      carbs_g: e.carbs_g,
-      fat_g: e.fat_g,
-      user_note: note,
-      ai_confidence: confidence,
-    }))
+    const rows = entries.map((e) => {
+      const row = {
+        user_id: user.id,
+        logged_at: ts,
+        source: 'ai',
+        meal_type: e.meal_type,
+        food_name: e.food_name,
+        grams: e.grams,
+        unit: 'g',
+        calories: e.calories,
+        protein_g: e.protein_g,
+        carbs_g: e.carbs_g,
+        fat_g: e.fat_g,
+        user_note: note,
+        ai_confidence: confidence,
+      }
+      // Only reference the components column for a real breakdown (a dish).
+      if (e.components) row.components = e.components
+      return row
+    })
     const { error } = await supabase.from('food_logs').insert(rows)
     if (error) {
       alert(error.message)
@@ -666,6 +671,7 @@ export default function Today() {
                               {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C ·{' '}
                               {Math.round(num(l.fat_g))}F
                               {l.grams ? ` · ${Math.round(num(l.grams))}${l.unit || 'g'}` : ''}
+                              {l.components?.length ? ` · 🍱 ${l.components.length} items` : ''}
                             </div>
                           )}
                         </button>
