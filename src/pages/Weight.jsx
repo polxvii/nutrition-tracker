@@ -103,20 +103,31 @@ export default function Weight() {
         .from('food_logs')
         .select('logged_at,calories,protein_g,carbs_g,fat_g,source')
         .gte('logged_at', start + 'T00:00:00')
-        .neq('source', 'exercise')
         .order('logged_at', { ascending: true }),
     ])
     setWeightLogs(wRes.data ?? [])
+    // Per-day totals. `kcal` is NET of exercise (eaten − burned), matching the
+    // Today page ("calories back") and the Calendar month summary, so adherence
+    // and predicted-impact line up across pages. `eaten` keeps the gross intake
+    // for the incomplete-day floor. A day counts as "logged" only if it has food.
     const map = {}
     for (const l of fRes.data ?? []) {
       const day = todayISODate(new Date(l.logged_at)) // local day (matches Calendar)
-      if (!map[day]) map[day] = { date: day, kcal: 0, protein: 0, carbs: 0, fat: 0 }
-      map[day].kcal += Number(l.calories) || 0
-      map[day].protein += Number(l.protein_g) || 0
-      map[day].carbs += Number(l.carbs_g) || 0
-      map[day].fat += Number(l.fat_g) || 0
+      const b = map[day] || (map[day] = { date: day, eaten: 0, burned: 0, protein: 0, carbs: 0, fat: 0 })
+      if (l.source === 'exercise') {
+        b.burned += Number(l.calories) || 0
+      } else {
+        b.eaten += Number(l.calories) || 0
+        b.protein += Number(l.protein_g) || 0
+        b.carbs += Number(l.carbs_g) || 0
+        b.fat += Number(l.fat_g) || 0
+      }
     }
-    setFoodByDay(Object.values(map).sort((a, b) => (a.date < b.date ? -1 : 1)))
+    const rows = Object.values(map)
+      .filter((b) => b.eaten > 0)
+      .map((b) => ({ ...b, kcal: b.eaten - b.burned }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+    setFoodByDay(rows)
   }, [fromDate])
 
   useEffect(() => {
@@ -201,7 +212,7 @@ export default function Weight() {
       .filter((l) => l.logged_date >= winCut)
       .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
     const allDays = foodByDay.filter((d) => d.date >= winCut)
-    const fdays = allDays.filter((d) => d.kcal >= intakeFloor)
+    const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
     const excluded = allDays.length - fdays.length
     if (wpts.length < 2 || fdays.length < 5) return { ready: false }
     const spanDays = (new Date(wpts[wpts.length - 1].fullDate) - new Date(wpts[0].fullDate)) / 86400000
@@ -221,13 +232,13 @@ export default function Weight() {
   // impact vs real maintenance (measured TDEE if available, else the estimate).
   const weeklyRecap = useMemo(() => {
     const cut7 = isoDaysAgo(6) // last 7 days *including today*
-    const days = foodByDay.filter((d) => d.date >= cut7 && d.kcal >= intakeFloor)
+    const days = foodByDay.filter((d) => d.date >= cut7 && d.eaten >= intakeFloor)
     if (days.length === 0) return { ready: false }
     const n = days.length
-    const totalEaten = days.reduce((s, d) => s + d.kcal, 0)
+    const totalNet = days.reduce((s, d) => s + d.kcal, 0) // net of exercise
     const maint = (checkIn.ready ? checkIn.tdee : profile?.tdee || 0) || 0
-    const vsGoal = goalCal > 0 ? Math.round(totalEaten - goalCal * n) : null
-    const vsMaint = maint > 0 ? Math.round(totalEaten - maint * n) : null
+    const vsGoal = goalCal > 0 ? Math.round(totalNet - goalCal * n) : null
+    const vsMaint = maint > 0 ? Math.round(totalNet - maint * n) : null
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
     return { ready: true, n, vsGoal, predictedKg, maint }
   }, [foodByDay, goalCal, intakeFloor, checkIn, profile])
