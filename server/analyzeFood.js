@@ -147,6 +147,11 @@ async function callModel({ apiKey, model, body }) {
       resp.status === 429 ||
       resp.status === 404 ||
       resp.status === 503 ||
+      // A 400 "invalid argument" is often model-specific (one model rejects a
+      // config another accepts) — cascade to the next model rather than
+      // dead-ending. If the request is genuinely malformed, all models fail
+      // the same way and we still surface the last error.
+      resp.status === 400 ||
       badKey ||
       /not found|not supported|does not exist|quota|rate limit/i.test(msg)
     const e = httpError(msg, resp.status === 429 ? 429 : 502)
@@ -226,11 +231,13 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
     contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: 0.2,
-      // Disable model "thinking": faster, and stops thinking tokens from
-      // eating the output budget and truncating the JSON. Accepted by the
-      // flash / flash-lite / gemini-3 models in the chain.
-      thinkingConfig: { thinkingBudget: 0 },
-      maxOutputTokens: 2048,
+      // NB: do NOT send thinkingConfig{ thinkingBudget: 0 } — the current
+      // gemini-flash-latest and gemini-flash-lite-latest aliases now reject it
+      // with a 400 "Request contains an invalid argument" (they won't let
+      // thinking be fully disabled). Leaving it unset lets each model use its
+      // own default and works across the whole chain. maxOutputTokens keeps
+      // headroom so any thinking tokens don't truncate the JSON on big meals.
+      maxOutputTokens: 4096,
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
     },
