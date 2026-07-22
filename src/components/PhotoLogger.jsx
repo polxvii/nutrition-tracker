@@ -18,11 +18,12 @@ export default function PhotoLogger({
   initialNote = '',
   autoAnalyze = false,
   hint = '',
+  defaultMeal = 'lunch',
 }) {
   const [preview, setPreview] = useState(null)
   const [image, setImage] = useState(null) // { base64, mediaType }
   const [note, setNote] = useState(initialNote)
-  const [meal, setMeal] = useState('lunch')
+  const [meal, setMeal] = useState(defaultMeal)
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState(null)
   const [items, setItems] = useState(null)

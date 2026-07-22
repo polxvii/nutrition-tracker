@@ -8,7 +8,7 @@ import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
-import { Button, Card, Skeleton } from '../components/ui'
+import { Button, Card, Input, Skeleton } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -66,6 +66,9 @@ export default function Today() {
   const [repeatOpen, setRepeatOpen] = useState(false)
   const [repeatFrom, setRepeatFrom] = useState('')
   const [editingEntry, setEditingEntry] = useState(null)
+  const [mealPicker, setMealPicker] = useState(null) // { groupKey }
+  const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
+  const [mealName, setMealName] = useState('')
   const [busy, setBusy] = useState(false)
 
   const closePanels = () => {
@@ -278,10 +281,33 @@ export default function Today() {
     await load()
   }
 
-  // Save the food items of one diary section as a reusable meal (combo).
-  async function saveGroupAsMeal(key, items) {
-    const name = window.prompt('Name this meal', `My ${GROUP_LABELS[key]}`)
-    if (!name || !name.trim()) return
+  // Open the "save as meal" picker for a diary section — all items pre-selected;
+  // the user can uncheck any they don't want in the combo.
+  function openMealPicker(key, items) {
+    setMealPicker({ groupKey: key })
+    setMealSel(new Set(items.map((l) => l.id)))
+    setMealName(`My ${GROUP_LABELS[key]}`)
+  }
+
+  const toggleMealSel = (id) =>
+    setMealSel((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  // Save the selected items of a diary section as a reusable meal (combo).
+  async function confirmSaveMeal() {
+    const items = (groups[mealPicker.groupKey] || []).filter((l) => mealSel.has(l.id))
+    if (!items.length) {
+      alert('Pick at least one item')
+      return
+    }
+    const name = mealName.trim()
+    if (!name) {
+      alert('Name the meal')
+      return
+    }
     const mealItems = items.map((l) => ({
       food_name: l.food_name,
       grams: l.grams,
@@ -291,13 +317,16 @@ export default function Today() {
       carbs_g: num(l.carbs_g),
       fat_g: num(l.fat_g),
     }))
+    setBusy(true)
     const { error } = await supabase
       .from('saved_meals')
-      .insert({ user_id: user.id, name: name.trim(), items: mealItems })
+      .insert({ user_id: user.id, name, items: mealItems })
+    setBusy(false)
     if (error) {
       alert(error.message)
       return
     }
+    setMealPicker(null)
     await load()
   }
 
@@ -606,7 +635,7 @@ export default function Today() {
                       </span>
                       {!isEx && g.length > 0 && (
                         <button
-                          onClick={() => saveGroupAsMeal(key, g)}
+                          onClick={() => openMealPicker(key, g)}
                           className="text-xs text-slate-500 hover:text-green-400"
                         >
                           ＋ meal
@@ -688,6 +717,83 @@ export default function Today() {
               onClose={() => setEditingEntry(null)}
               busy={busy}
             />
+          </div>
+        </div>
+      )}
+
+      {mealPicker && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 p-3"
+          onClick={() => setMealPicker(null)}
+        >
+          <div
+            className="mb-2 w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-slate-900 p-4"
+            style={{ maxHeight: '85vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <div className="text-base font-bold text-white">Save as meal</div>
+              <p className="text-xs text-slate-500">Pick the items to include in this combo.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              {(groups[mealPicker.groupKey] || []).map((l) => {
+                const on = mealSel.has(l.id)
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => toggleMealSel(l.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                      on ? 'bg-slate-800' : 'bg-slate-900 opacity-50'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs ${
+                        on ? 'border-green-500 bg-green-600 text-white' : 'border-slate-600 text-transparent'
+                      }`}
+                    >
+                      ✓
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-white">{l.food_name}</span>
+                      <span className="text-xs text-slate-500">
+                        {Math.round(num(l.calories))} kcal · {Math.round(num(l.protein_g))}P{' '}
+                        {Math.round(num(l.carbs_g))}C {Math.round(num(l.fat_g))}F
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="text-center text-xs text-slate-400">
+              {mealSel.size} item{mealSel.size === 1 ? '' : 's'} ·{' '}
+              {Math.round(
+                (groups[mealPicker.groupKey] || [])
+                  .filter((l) => mealSel.has(l.id))
+                  .reduce((s, l) => s + num(l.calories), 0)
+              )}{' '}
+              kcal
+            </div>
+
+            <Input
+              value={mealName}
+              onChange={(e) => setMealName(e.target.value)}
+              placeholder="Meal name"
+            />
+
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={confirmSaveMeal}
+                disabled={busy || mealSel.size === 0}
+              >
+                {busy ? 'Saving…' : 'Save meal'}
+              </Button>
+              <Button variant="ghost" onClick={() => setMealPicker(null)}>
+                Cancel
+              </Button>
+            </div>
           </div>
         </div>
       )}

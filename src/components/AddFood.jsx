@@ -214,6 +214,7 @@ export default function AddFood({
         initialNote={aiNote}
         autoAnalyze={!!aiNote}
         hint={aiHint}
+        defaultMeal={meal}
       />
     )
   }
