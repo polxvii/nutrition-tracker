@@ -708,7 +708,7 @@ export default function Today() {
           onClick={() => setEditingEntry(null)}
         >
           <div
-            className="mb-2 w-full max-w-md overflow-y-auto rounded-2xl bg-slate-900 p-4"
+            className="mb-2 w-full max-w-md overflow-y-auto overflow-x-hidden rounded-2xl bg-slate-900 p-4"
             style={{ maxHeight: '85vh' }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -722,6 +722,9 @@ export default function Today() {
               }}
               onClose={() => setEditingEntry(null)}
               busy={busy}
+              recent={recent}
+              saved={frequents}
+              meals={savedMeals}
             />
           </div>
         </div>

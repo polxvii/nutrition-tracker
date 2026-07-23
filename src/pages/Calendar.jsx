@@ -210,16 +210,40 @@ export default function Calendar() {
               </div>
               <div className="grid grid-cols-4 gap-2 text-center">
                 {[
-                  { label: 'kcal', value: avg.cal },
-                  { label: 'P', value: `${avg.p}g` },
-                  { label: 'C', value: `${avg.c}g` },
-                  { label: 'F', value: `${avg.f}g` },
-                ].map((s) => (
-                  <div key={s.label} className="rounded-lg bg-slate-800 py-2">
-                    <div className="text-base font-bold text-white">{s.value}</div>
-                    <div className="text-[10px] text-slate-500">{s.label}</div>
-                  </div>
-                ))}
+                  { label: 'kcal', value: avg.cal, unit: '', goal: profile?.goal_calories },
+                  { label: 'P', value: avg.p, unit: 'g', goal: profile?.goal_protein_g },
+                  { label: 'C', value: avg.c, unit: 'g', goal: profile?.goal_carbs_g },
+                  { label: 'F', value: avg.f, unit: 'g', goal: profile?.goal_fat_g },
+                ].map((s) => {
+                  // Colour the average vs its goal. Fewer calories/carbs/fat than
+                  // goal reads "green" (under); protein is the opposite — hitting
+                  // or exceeding it is good.
+                  const good =
+                    s.goal > 0
+                      ? s.label === 'P'
+                        ? s.value >= s.goal * 0.9
+                        : s.value <= s.goal
+                      : null
+                  return (
+                    <div key={s.label} className="rounded-lg bg-slate-800 py-2">
+                      <div
+                        className={`text-base font-bold ${
+                          good == null ? 'text-white' : good ? 'text-green-400' : 'text-amber-400'
+                        }`}
+                      >
+                        {s.value}
+                        {s.unit}
+                      </div>
+                      <div className="text-[10px] text-slate-500">{s.label}</div>
+                      {s.goal > 0 && (
+                        <div className="text-[9px] text-slate-500">
+                          goal {s.goal}
+                          {s.unit}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
               {onTarget != null && (
                 <p className="text-center text-xs text-slate-500">

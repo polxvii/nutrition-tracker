@@ -296,7 +296,7 @@ export default function PhotoLogger({
                   <Input
                     value={it.name}
                     onChange={(e) => updateItem(i, 'name', e.target.value)}
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                   />
                   <button
                     onClick={() => removeItem(i)}
@@ -321,7 +321,7 @@ export default function PhotoLogger({
                       inputMode="decimal"
                       value={it[k]}
                       onChange={(e) => updateItem(i, k, e.target.value)}
-                      className="px-1 text-center"
+                      className="min-w-0 px-1 text-center"
                     />
                   ))}
                 </div>

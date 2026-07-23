@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS, UNITS } from './AddFoodForm'
 import { todayISODate } from '../lib/dateHelpers'
+import AddFood from './AddFood'
 
 const num = (v) => {
   const n = Number(v)
@@ -16,9 +17,20 @@ const MACRO_KEYS = ['grams', 'calories', 'protein_g', 'carbs_g', 'fat_g']
 // If the entry carries an AI `components` breakdown (a "dish" logged as one
 // row), it shows a drill-down editor instead: edit each component and the
 // dish totals recompute from their sum.
-export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onClose, busy }) {
+export default function EntryEditor({
+  entry,
+  onSave,
+  onDuplicate,
+  onDelete,
+  onClose,
+  busy,
+  recent = [],
+  saved = [],
+  meals = [],
+}) {
   const isEx = entry.source === 'exercise'
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
+  const [addingItem, setAddingItem] = useState(false)
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -85,11 +97,24 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
     )
   }
   const removeComp = (i) => setComps((prev) => prev.filter((_, idx) => idx !== i))
-  const addComp = () =>
-    setComps((prev) => [
-      ...prev,
-      { name: '', grams: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, _base: {} },
-    ])
+
+  // Append food(s) chosen via the full Add-food picker (search / barcode / AI /
+  // recent / saved) as new components of this dish.
+  function appendComps(entries) {
+    const mapped = (entries || []).map((e) => {
+      const v = {
+        name: (e.food_name || '').trim() || 'Item',
+        grams: Math.round(num(e.grams)),
+        calories: Math.round(num(e.calories)),
+        protein_g: Math.round(num(e.protein_g)),
+        carbs_g: Math.round(num(e.carbs_g)),
+        fat_g: Math.round(num(e.fat_g)),
+      }
+      return { ...v, _base: v }
+    })
+    if (mapped.length) setComps((prev) => [...prev, ...mapped])
+    setAddingItem(false)
+  }
 
   const compTotals = comps.reduce(
     (a, it) => ({
@@ -176,6 +201,37 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
     }
   }
 
+  // Add-item picker (reuses the full Add-food flow: search / barcode / AI /
+  // recent / saved). Picked foods are appended as components, not logged.
+  if (addingItem) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-200">Add item to dish</span>
+          <button
+            className="text-sm text-slate-400 hover:text-white"
+            onClick={() => setAddingItem(false)}
+          >
+            ‹ Back
+          </button>
+        </div>
+        <AddFood
+          defaultMeal={f.meal_type}
+          recent={recent}
+          saved={saved}
+          meals={meals}
+          onLog={(e) => appendComps([e])}
+          onLogMany={(entries) => appendComps(entries)}
+          onLogMeal={(entries) => appendComps(entries)}
+          onDeleteSaved={() => {}}
+          onDeleteMeal={() => {}}
+          onCancel={() => setAddingItem(false)}
+          busy={false}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
       <div className="text-sm font-medium text-slate-200">
@@ -235,7 +291,7 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
                 <Input
                   value={it.name}
                   onChange={(e) => updateComp(i, 'name', e.target.value)}
-                  className="flex-1"
+                  className="min-w-0 flex-1"
                 />
                 <button
                   onClick={() => removeComp(i)}
@@ -260,17 +316,17 @@ export default function EntryEditor({ entry, onSave, onDuplicate, onDelete, onCl
                     inputMode="decimal"
                     value={it[k]}
                     onChange={(e) => updateComp(i, k, e.target.value)}
-                    className="px-1 text-center"
+                    className="min-w-0 px-1 text-center"
                   />
                 ))}
               </div>
             </div>
           ))}
           <button
-            onClick={addComp}
+            onClick={() => setAddingItem(true)}
             className="w-full rounded-lg border border-dashed border-slate-600 py-1.5 text-xs text-slate-400 hover:border-green-500 hover:text-green-400"
           >
-            ＋ add item
+            ＋ add item (search / scan / AI)
           </button>
           <div className="text-center text-sm text-slate-300">
             Total: <b className="text-white">{Math.round(compTotals.calories)}</b> kcal ·{' '}

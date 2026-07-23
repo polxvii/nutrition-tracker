@@ -26,6 +26,7 @@ function FoodRow({ item, onAdd, onDelete }) {
         <div className="truncate text-xs text-slate-500">
           {r(item.calories)} kcal · {r(item.protein_g)}P {r(item.carbs_g)}C {r(item.fat_g)}F
           {amtOf(item) ? ` · ${amtOf(item)}` : ''}
+          {item.components?.length ? ` · 🍱 ${item.components.length}` : ''}
         </div>
       </button>
       <button
@@ -194,6 +195,9 @@ export default function AddFood({
         protein_g: t.protein_g,
         carbs_g: t.carbs_g,
         fat_g: t.fat_g,
+        // Re-adding a logged dish carries its breakdown along, so you can still
+        // drill in and edit the parts.
+        ...(t.components?.length ? { components: t.components } : {}),
       },
       { asFrequent: false }
     )
