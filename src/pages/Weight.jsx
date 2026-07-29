@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   ComposedChart,
   ReferenceLine,
@@ -73,6 +74,32 @@ function trendVerdict(rate, goalType) {
   // recomp / maintain — aim near-stable
   if (Math.abs(rate) <= 0.2) return { tone: 'good', text: `Weight steady (${wk}) — ideal for recomp.` }
   return { tone: 'warn', text: `Weight moving (${wk}) — keep it near-stable for recomp.` }
+}
+
+// Rich tooltip for the daily-calories bars: full date, net kcal vs goal, macros.
+function BarTooltip({ active, payload, goalCal }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  const over = goalCal > 0 && d.kcal > goalCal
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs">
+      <div className="text-slate-300">{d.date}</div>
+      <div className={over ? 'text-amber-400' : 'text-green-400'}>
+        <b>{Math.round(d.kcal)}</b> kcal{goalCal > 0 ? ` / ${goalCal}` : ''}
+        {goalCal > 0 && (
+          <span className="text-slate-500">
+            {' '}
+            ({over ? '+' : ''}
+            {Math.round(d.kcal - goalCal)})
+          </span>
+        )}
+      </div>
+      <div className="text-slate-400">
+        {Math.round(d.protein)}P · {Math.round(d.carbs)}C · {Math.round(d.fat)}F
+        {d.burned > 0 ? ` · 🔥${Math.round(d.burned)}` : ''}
+      </div>
+    </div>
+  )
 }
 
 export default function Weight() {
@@ -506,15 +533,20 @@ export default function Weight() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={20} />
                 <YAxis {...axis} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#1e293b55' }} />
+                <Tooltip content={<BarTooltip goalCal={goalCal} />} cursor={{ fill: '#1e293b55' }} />
                 {goalCal > 0 && <ReferenceLine y={goalCal} stroke="#ef4444" strokeDasharray="4 4" />}
-                <Bar dataKey="kcal" name="kcal" fill="#22c55e" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="kcal" name="kcal" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  {foodData.map((d, i) => (
+                    <Cell key={i} fill={goalCal > 0 && d.kcal > goalCal ? '#f59e0b' : '#22c55e'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
           {goalCal > 0 && (
             <p className="mt-1 text-center text-[11px] text-slate-500">
-              Daily calories · red line = your goal
+              Daily net calories · <span className="text-green-400">green</span> ≤ goal ·{' '}
+              <span className="text-amber-400">amber</span> over · red line = goal
             </p>
           )}
         </Card>
