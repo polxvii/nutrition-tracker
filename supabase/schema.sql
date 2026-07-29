@@ -214,6 +214,9 @@ grant select, insert, update, delete
 alter table public.profiles add column if not exists role text not null default 'user';
 -- Per-user meal-time windows (start times, HH:MM). Null → app defaults.
 alter table public.profiles add column if not exists meal_windows jsonb;
+-- Barcode cache: remember a resolved barcode → product so re-scans are instant.
+alter table public.frequent_foods add column if not exists barcode text;
+create index if not exists frequent_foods_barcode_idx on public.frequent_foods (user_id, barcode);
 
 -- 3.2  user_api_keys — one row per stored key. `encrypted_key` is AES-256-GCM
 --      ciphertext (base64(iv).base64(ct)); the plaintext key is NEVER stored.

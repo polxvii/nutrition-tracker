@@ -19,6 +19,7 @@ export default function PhotoLogger({
   autoAnalyze = false,
   hint = '',
   defaultMeal = 'lunch',
+  barcode = null,
 }) {
   const [images, setImages] = useState([]) // [{ base64, mediaType, previewUrl }]
   const [note, setNote] = useState(initialNote)
@@ -152,6 +153,22 @@ export default function PhotoLogger({
     // drives the numbers either way.
     if (combine) {
       const totalG = items.reduce((s, it) => s + num(it.grams), 0)
+      // If this AI run resolved a scanned barcode, cache the result (per-100
+      // basis) so a re-scan is instant next time.
+      if (barcode && totalG > 0) {
+        const k = 100 / totalG
+        meta.cache = {
+          barcode: String(barcode),
+          name: (dish || '').trim() || note.trim() || 'Product',
+          unit: 'g',
+          per100: {
+            calories: Math.round(totals.calories * k),
+            protein_g: Math.round(totals.protein * k * 10) / 10,
+            carbs_g: Math.round(totals.carbs * k * 10) / 10,
+            fat_g: Math.round(totals.fat * k * 10) / 10,
+          },
+        }
+      }
       // Keep the breakdown on the entry so you can drill in and edit it later.
       const components =
         items.length > 1

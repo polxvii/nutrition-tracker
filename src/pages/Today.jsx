@@ -198,8 +198,31 @@ export default function Today() {
     }
   }
 
+  // Cache a resolved barcode → product (stored per-100 basis) so the next scan
+  // of the same product is instant, with no OFF/AI round-trip. Keyed by barcode.
+  async function cacheBarcode(cache) {
+    if (!cache?.barcode || !cache.per100) return
+    const { data: existing } = await supabase
+      .from('frequent_foods')
+      .select('id')
+      .eq('barcode', String(cache.barcode))
+      .maybeSingle()
+    const row = {
+      food_name: cache.name || 'Product',
+      barcode: String(cache.barcode),
+      default_grams: 100,
+      unit: cache.unit || 'g',
+      calories: Math.round(num(cache.per100.calories)),
+      protein_g: num(cache.per100.protein_g),
+      carbs_g: num(cache.per100.carbs_g),
+      fat_g: num(cache.per100.fat_g),
+    }
+    if (existing) await supabase.from('frequent_foods').update(row).eq('id', existing.id)
+    else await supabase.from('frequent_foods').insert({ user_id: user.id, times_used: 1, ...row })
+  }
+
   // Single food added from any path (recent/saved/search/barcode/manual).
-  async function handleLog(entry, { asFrequent }) {
+  async function handleLog(entry, { asFrequent, cache } = {}) {
     setBusy(true)
     const { error } = await supabase.from('food_logs').insert({
       user_id: user.id,
@@ -213,12 +236,13 @@ export default function Today() {
       return
     }
     if (asFrequent) await upsertFrequent(entry)
+    if (cache) await cacheBarcode(cache)
     setShowAdd(false)
     setBusy(false)
     await load()
   }
 
-  async function handlePhotoLog(entries, { note, confidence, asFrequent }) {
+  async function handlePhotoLog(entries, { note, confidence, asFrequent, cache } = {}) {
     setBusy(true)
     const ts = timestampFor(selectedDate)
     const rows = entries.map((e) => {
@@ -250,6 +274,7 @@ export default function Today() {
     if (asFrequent) {
       for (const e of entries) await upsertFrequent(e)
     }
+    if (cache) await cacheBarcode(cache)
     setShowAdd(false)
     setBusy(false)
     await load()

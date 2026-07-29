@@ -79,14 +79,36 @@ export default function AddFood({
   const [aiNote, setAiNote] = useState('') // pre-fills the AI view's description
   const [aiHint, setAiHint] = useState('') // amber note shown atop the AI view
   const [aiAuto, setAiAuto] = useState(false) // run analyze immediately on open?
+  const [aiBarcode, setAiBarcode] = useState(null) // cache the AI result to this barcode
 
   // Open the AI view. By default we only pre-fill the note (no auto-analyze) so
-  // the user can still attach a photo before hitting Analyze.
-  const openAI = (note = '', hint = '', auto = false) => {
+  // the user can still attach a photo before hitting Analyze. `barcode` (from a
+  // scan miss) lets the AI result be cached against that product.
+  const openAI = (note = '', hint = '', auto = false, barcode = null) => {
     setAiNote(note)
     setAiHint(hint)
     setAiAuto(auto)
+    setAiBarcode(barcode)
     setView('ai')
+  }
+
+  // Rebuild a pickable food from a cached barcode row (stored per-100 basis).
+  const cachedToFood = (f) => {
+    const g = Number(f.default_grams) || 100
+    const k = 100 / g
+    return {
+      code: f.barcode,
+      name: f.food_name,
+      brand: null,
+      unit: f.unit === 'ml' ? 'ml' : 'g',
+      serving_g: null,
+      per100: {
+        calories: Math.round(Number(f.calories || 0) * k),
+        protein_g: Math.round(Number(f.protein_g || 0) * k * 10) / 10,
+        carbs_g: Math.round(Number(f.carbs_g || 0) * k * 10) / 10,
+        fat_g: Math.round(Number(f.fat_g || 0) * k * 10) / 10,
+      },
+    }
   }
 
   // Debounced Open Food Facts search.
@@ -136,13 +158,26 @@ export default function AddFood({
 
   async function onScan(code) {
     setView('home')
-    setSearching(true)
     setError(null)
+    // 1) Personal cache — have we resolved this barcode before? Instant, offline.
+    const cached = (saved || []).find((f) => f.barcode && String(f.barcode) === String(code))
+    if (cached) {
+      pick(cachedToFood(cached))
+      return
+    }
+    setSearching(true)
     try {
       const food = await lookupBarcode(code)
       if (food) pick(food)
-      // Not in the database → hand off to AI (snap the label / describe it).
-      else openAI('', `Barcode ${code} isn't in the database — snap the nutrition label or describe the product for AI.`)
+      // 3) Not in the database → hand off to AI, remembering the barcode so the
+      //    label read gets cached for next time.
+      else
+        openAI(
+          '',
+          `Barcode ${code} isn't in the database — snap the nutrition label (or describe it) and tap Analyze. We'll remember it for next time.`,
+          false,
+          code
+        )
     } catch (e) {
       setError(e.message)
     } finally {
@@ -153,16 +188,23 @@ export default function AddFood({
   const scaled = picked ? scaleFood(picked, unit, grams) : null
 
   function addPicked() {
+    const name = picked.brand ? `${picked.name} — ${picked.brand}` : picked.name
     onLog(
       {
-        food_name: picked.brand ? `${picked.name} — ${picked.brand}` : picked.name,
+        food_name: name,
         meal_type: meal,
         grams: Number(grams) || null,
         unit,
         source: picked.code ? 'barcode' : 'search',
         ...scaled,
       },
-      { asFrequent }
+      {
+        asFrequent,
+        // Cache barcode products (per-100 basis) so a re-scan is instant.
+        cache: picked.code
+          ? { barcode: String(picked.code), name, unit: picked.unit || 'g', per100: picked.per100 }
+          : null,
+      }
     )
   }
 
@@ -223,6 +265,7 @@ export default function AddFood({
         autoAnalyze={aiAuto}
         hint={aiHint}
         defaultMeal={meal}
+        barcode={aiBarcode}
       />
     )
   }
