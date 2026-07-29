@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
+import { useSwipe } from '../lib/useSwipe'
 import { Card, Skeleton } from '../components/ui'
 
 const num = (v) => {
@@ -137,8 +138,11 @@ export default function Calendar() {
     setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))
   const keyFor = (d) => `${cursor.y}-${pad(cursor.m + 1)}-${pad(d)}`
 
+  // Swipe left/right to move a month.
+  const monthSwipe = useSwipe({ onLeft: next, onRight: prev })
+
   return (
-    <div className="mx-auto max-w-md space-y-3 p-4">
+    <div className="mx-auto max-w-md space-y-3 p-4" {...monthSwipe}>
       <header className="flex items-center justify-between pt-4">
         <button onClick={prev} className="px-2 text-xl text-slate-400 hover:text-white">
           ‹

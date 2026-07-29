@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
+import { useSwipe } from '../lib/useSwipe'
 import ProgressRing from '../components/ProgressRing'
 import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
@@ -84,6 +85,13 @@ export default function Today() {
 
   const setDate = (d) =>
     setParams(d === todayISODate() ? {} : { date: d }, { replace: true })
+
+  // Swipe the diary left/right to move a day (disabled while a panel/modal is
+  // open, so a swipe there doesn't change the day underneath).
+  const daySwipe = useSwipe({
+    onLeft: () => setDate(shiftDate(selectedDate, 1)),
+    onRight: () => setDate(shiftDate(selectedDate, -1)),
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -456,8 +464,10 @@ export default function Today() {
     await load()
   }
 
+  const swipeEnabled = !(showAdd || showExercise || repeatOpen || editingEntry || mealPicker)
+
   return (
-    <div className="mx-auto max-w-md space-y-4 p-4">
+    <div className="mx-auto max-w-md space-y-4 p-4" {...(swipeEnabled ? daySwipe : {})}>
       {/* Date navigation */}
       <header className="flex items-center justify-between">
         <button
