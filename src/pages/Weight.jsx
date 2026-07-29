@@ -254,39 +254,48 @@ export default function Weight() {
     if (spanDays < 7 || rateWk == null) return { ready: false }
     const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length)
     const tdee = Math.round(avgIntake - (rateWk / 7) * KCAL_PER_KG)
+    // Sanity: a measured maintenance below BMR is physiologically impossible, and
+    // one wildly off the profile estimate means the data is too noisy/incomplete
+    // (missing food logs, water-weight swings, too few weigh-ins) to trust — so
+    // don't show a garbage number or suggest a goal from it.
+    const bmr = profile?.bmr || 1200
+    const est = profile?.tdee || 0
+    if (tdee < bmr || (est > 0 && (tdee < est * 0.6 || tdee > est * 1.6))) {
+      return { ready: false, unreliable: true }
+    }
     const gt = profile?.goal_type || 'recomp'
     const gr = profile?.goal_rate || 'medium'
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
-    const floor = profile?.bmr || 1200
-    const suggested = Math.max(floor, Math.round((tdee + offset) / 10) * 10)
+    const suggested = Math.max(bmr, Math.round((tdee + offset) / 10) * 10)
     return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays: Math.round(spanDays), excluded }
   }, [weightLogs, foodByDay, profile, intakeFloor])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
   // whole page describes one range): net intake vs goal, and the predicted
-  // weight impact vs maintenance (measured TDEE if available, else the estimate).
-  // Incomplete days (very low gross intake — likely forgotten entries) are
-  // excluded from the estimate.
+  // weight impact vs maintenance. Maintenance is the profile TDEE (a stable
+  // value the user set) — NOT the weekly check-in's measured estimate, which is
+  // a separate suggestion you opt into via Apply. Incomplete days (very low
+  // gross intake) are excluded.
   const periodRecap = useMemo(() => {
     const days = foodData.filter((d) => d.eaten >= intakeFloor)
     if (days.length === 0) return { ready: false }
     const n = days.length
     const totalNet = days.reduce((s, d) => s + d.kcal, 0) // net of exercise
-    const maint = (checkIn.ready ? checkIn.tdee : profile?.tdee || 0) || 0
+    const maint = profile?.tdee || 0
     const vsGoal = goalCal > 0 ? Math.round(totalNet - goalCal * n) : null
     const vsMaint = maint > 0 ? Math.round(totalNet - maint * n) : null
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
     return { ready: true, n, vsGoal, vsMaint, predictedKg, maint }
-  }, [foodData, goalCal, intakeFloor, checkIn, profile])
+  }, [foodData, goalCal, intakeFloor, profile])
 
   // Human label for the selected range, shown on the energy-balance card.
   const rangeText =
     preset === 'custom' ? `${fromDate} → ${toDate}` : `last ${preset.replace('d', ' days')}`
 
-  // Maintenance (measured TDEE if the check-in is ready, else the profile
-  // estimate) — drawn on the adherence chart so you can tell a day that's over
-  // goal but still under maintenance from one that's a real surplus.
-  const maint = (checkIn.ready ? checkIn.tdee : profile?.tdee) || 0
+  // Maintenance (profile TDEE — the stable value the user set) drawn on the
+  // adherence chart, so you can tell a day that's over goal but still under
+  // maintenance from one that's a real surplus.
+  const maint = profile?.tdee || 0
 
   // ---- Goal weight + projection ----
   const [goalW, setGoalW] = useState('')
@@ -471,10 +480,18 @@ export default function Weight() {
       ) : (
         <Card>
           <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
-          <p className="text-xs text-slate-500">
-            Unlocks with ≥2 weigh-ins over ≥7 days (within the last 30) and ≥5 days of food logged
-            between them. It estimates your real maintenance calories and suggests a goal.
-          </p>
+          {checkIn.unreliable ? (
+            <p className="text-xs text-slate-500">
+              Your logged data gives an unrealistic maintenance estimate (below your BMR) — usually
+              missing food logs or short-term water-weight swings. Keep logging food + weight
+              consistently and it'll settle.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Unlocks with ≥2 weigh-ins over ≥7 days (within the last 30) and ≥5 days of food logged
+              between them. It estimates your real maintenance calories and suggests a goal.
+            </p>
+          )}
         </Card>
       )}
 
