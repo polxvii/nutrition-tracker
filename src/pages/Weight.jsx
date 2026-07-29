@@ -116,10 +116,10 @@ export default function Weight() {
   const [applying, setApplying] = useState(false)
 
   const load = useCallback(async () => {
-    // Fetch far enough back to cover the chosen period AND the 14-day window the
-    // weekly check-in always needs. Filter to the period client-side.
-    const win14 = isoDaysAgo(14)
-    const start = fromDate < win14 ? fromDate : win14
+    // Fetch far enough back to cover the chosen period AND the 30-day window the
+    // weekly check-in looks at. Filter to the period client-side.
+    const win30 = isoDaysAgo(30)
+    const start = fromDate < win30 ? fromDate : win30
     const [wRes, fRes] = await Promise.all([
       supabase
         .from('weight_logs')
@@ -226,23 +226,28 @@ export default function Weight() {
     { key: 'f', label: 'Fat', avg: avgFat, goal: profile?.goal_fat_g ?? 0 },
   ]
 
-  // Adaptive check-in: estimate real maintenance (TDEE) from the last ~14 days
-  // of intake + weight change, then suggest a goal for the user's plan.
-  // actual TDEE = avg intake − (kg/day change × 7700).
-  // Days logging under half the goal are likely incomplete (forgotten entries)
-  // and would skew the maintenance estimate — exclude them.
+  // Adaptive check-in: estimate real maintenance (TDEE) from intake + weight
+  // change over the last ~30 days, then suggest a goal for the user's plan.
+  // actual TDEE = avg intake − (kg/day change × 7700). Intake is averaged over
+  // the SAME span as the weight change (first↔last weigh-in) so the two describe
+  // the same window. Days logging under half the goal are likely incomplete
+  // (forgotten entries) and would skew the estimate — exclude them.
   const intakeFloor = goalCal > 0 ? goalCal * 0.5 : 500
 
   const checkIn = useMemo(() => {
-    const winCut = isoDaysAgo(14)
+    const winCut = isoDaysAgo(30)
     const wpts = weightLogs
       .filter((l) => l.logged_date >= winCut)
       .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
-    const allDays = foodByDay.filter((d) => d.date >= winCut)
+    if (wpts.length < 2) return { ready: false }
+    // Average intake between the first and last weigh-in, not a fixed window.
+    const spanStart = wpts[0].fullDate
+    const spanEnd = wpts[wpts.length - 1].fullDate
+    const allDays = foodByDay.filter((d) => d.date >= spanStart && d.date <= spanEnd)
     const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
     const excluded = allDays.length - fdays.length
-    if (wpts.length < 2 || fdays.length < 5) return { ready: false }
-    const spanDays = (new Date(wpts[wpts.length - 1].fullDate) - new Date(wpts[0].fullDate)) / 86400000
+    if (fdays.length < 5) return { ready: false }
+    const spanDays = (new Date(spanEnd) - new Date(spanStart)) / 86400000
     const rateWk = weeklyRate(wpts)
     if (spanDays < 7 || rateWk == null) return { ready: false }
     const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length)
@@ -460,8 +465,8 @@ export default function Weight() {
         <Card>
           <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
           <p className="text-xs text-slate-500">
-            Unlocks after ~2 weeks of data — needs ≥2 weigh-ins over ≥7 days and ≥5 days of food
-            logged. It estimates your real maintenance calories and suggests a goal.
+            Unlocks with ≥2 weigh-ins over ≥7 days (within the last 30) and ≥5 days of food logged
+            between them. It estimates your real maintenance calories and suggests a goal.
           </p>
         </Card>
       )}
