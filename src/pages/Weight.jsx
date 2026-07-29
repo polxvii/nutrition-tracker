@@ -76,23 +76,25 @@ function trendVerdict(rate, goalType) {
   return { tone: 'warn', text: `Weight moving (${wk}) — keep it near-stable for recomp.` }
 }
 
-// Rich tooltip for the daily-calories bars: full date, net kcal vs goal, macros.
-function BarTooltip({ active, payload, goalCal }) {
+// Rich tooltip for the daily-calories bars: full date, net kcal vs goal +
+// maintenance, and macros. Colour tiers: green ≤ goal, amber over goal, red
+// over maintenance.
+function BarTooltip({ active, payload, goalCal, maint }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
-  const over = goalCal > 0 && d.kcal > goalCal
+  const overGoal = goalCal > 0 && d.kcal > goalCal
+  const overMaint = maint > 0 && d.kcal > maint
+  const cls = overMaint ? 'text-red-400' : overGoal ? 'text-amber-400' : 'text-green-400'
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs">
       <div className="text-slate-300">{d.date}</div>
-      <div className={over ? 'text-amber-400' : 'text-green-400'}>
-        <b>{Math.round(d.kcal)}</b> kcal{goalCal > 0 ? ` / ${goalCal}` : ''}
-        {goalCal > 0 && (
-          <span className="text-slate-500">
-            {' '}
-            ({over ? '+' : ''}
-            {Math.round(d.kcal - goalCal)})
-          </span>
-        )}
+      <div className={cls}>
+        <b>{Math.round(d.kcal)}</b> kcal
+        {overMaint ? ' · over maintenance' : overGoal ? ' · over goal' : ' · on target'}
+      </div>
+      <div className="text-slate-500">
+        goal {goalCal || '–'}
+        {maint > 0 ? ` · maint ${maint}` : ''}
       </div>
       <div className="text-slate-400">
         {Math.round(d.protein)}P · {Math.round(d.carbs)}C · {Math.round(d.fat)}F
@@ -280,6 +282,11 @@ export default function Weight() {
   // Human label for the selected range, shown on the energy-balance card.
   const rangeText =
     preset === 'custom' ? `${fromDate} → ${toDate}` : `last ${preset.replace('d', ' days')}`
+
+  // Maintenance (measured TDEE if the check-in is ready, else the profile
+  // estimate) — drawn on the adherence chart so you can tell a day that's over
+  // goal but still under maintenance from one that's a real surplus.
+  const maint = (checkIn.ready ? checkIn.tdee : profile?.tdee) || 0
 
   // ---- Goal weight + projection ----
   const [goalW, setGoalW] = useState('')
@@ -548,11 +555,38 @@ export default function Weight() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={20} />
                 <YAxis {...axis} />
-                <Tooltip content={<BarTooltip goalCal={goalCal} />} cursor={{ fill: '#1e293b55' }} />
-                {goalCal > 0 && <ReferenceLine y={goalCal} stroke="#ef4444" strokeDasharray="4 4" />}
+                <Tooltip
+                  content={<BarTooltip goalCal={goalCal} maint={maint} />}
+                  cursor={{ fill: '#1e293b55' }}
+                />
+                {goalCal > 0 && (
+                  <ReferenceLine
+                    y={goalCal}
+                    stroke="#ef4444"
+                    strokeDasharray="4 4"
+                    label={{ value: 'goal', position: 'insideBottomRight', fill: '#f87171', fontSize: 9 }}
+                  />
+                )}
+                {maint > 0 && maint !== goalCal && (
+                  <ReferenceLine
+                    y={maint}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    label={{ value: 'maint', position: 'insideTopRight', fill: '#fbbf24', fontSize: 9 }}
+                  />
+                )}
                 <Bar dataKey="kcal" name="kcal" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {foodData.map((d, i) => (
-                    <Cell key={i} fill={goalCal > 0 && d.kcal > goalCal ? '#f59e0b' : '#22c55e'} />
+                    <Cell
+                      key={i}
+                      fill={
+                        maint > 0 && d.kcal > maint
+                          ? '#ef4444'
+                          : goalCal > 0 && d.kcal > goalCal
+                            ? '#f59e0b'
+                            : '#22c55e'
+                      }
+                    />
                   ))}
                 </Bar>
               </BarChart>
@@ -560,8 +594,9 @@ export default function Weight() {
           </div>
           {goalCal > 0 && (
             <p className="mt-1 text-center text-[11px] text-slate-500">
-              Daily net calories · <span className="text-green-400">green</span> ≤ goal ·{' '}
-              <span className="text-amber-400">amber</span> over · red line = goal
+              Daily net kcal · <span className="text-green-400">green</span> ≤ goal ·{' '}
+              <span className="text-amber-400">amber</span> over goal ·{' '}
+              <span className="text-red-400">red</span> over maintenance
             </p>
           )}
         </Card>
