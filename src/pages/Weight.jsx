@@ -269,7 +269,7 @@ export default function Weight() {
     const vsGoal = goalCal > 0 ? Math.round(totalNet - goalCal * n) : null
     const vsMaint = maint > 0 ? Math.round(totalNet - maint * n) : null
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
-    return { ready: true, n, vsGoal, predictedKg, maint }
+    return { ready: true, n, vsGoal, vsMaint, predictedKg, maint }
   }, [foodData, goalCal, intakeFloor, checkIn, profile])
 
   // Human label for the selected range, shown on the energy-balance card.
@@ -481,6 +481,16 @@ export default function Weight() {
                 {periodRecap.vsGoal} kcal
               </b>{' '}
               {periodRecap.vsGoal <= 0 ? 'under' : 'over'}
+            </p>
+          )}
+          {periodRecap.vsMaint != null && (
+            <p className="text-sm text-slate-300">
+              vs maintenance:{' '}
+              <b className={periodRecap.vsMaint <= 0 ? 'text-green-400' : 'text-amber-400'}>
+                {periodRecap.vsMaint > 0 ? '+' : ''}
+                {periodRecap.vsMaint} kcal
+              </b>
+              <span className="text-slate-500"> · ~{periodRecap.maint} maintenance</span>
             </p>
           )}
           {periodRecap.predictedKg != null && (
