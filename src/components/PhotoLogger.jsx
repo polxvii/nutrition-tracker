@@ -74,7 +74,11 @@ export default function PhotoLogger({
       const joined = (res.items || []).slice(0, 2).map((it) => it.name).filter(Boolean).join(' + ')
       setDish((res.dish || '').trim() || note.trim() || joined)
     } catch (err) {
-      setError(err.message)
+      setError(
+        err.code === 'no_key'
+          ? 'No Gemini key yet. Add your own key in Settings → “AI — your Gemini key” to use analysis.'
+          : err.message
+      )
     } finally {
       setAnalyzing(false)
     }

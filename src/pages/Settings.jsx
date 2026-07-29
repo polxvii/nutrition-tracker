@@ -11,6 +11,7 @@ import {
 } from '../lib/nutrition'
 import ProfileFields from '../components/ProfileFields'
 import TargetsEditor from '../components/TargetsEditor'
+import ApiKeyManager from '../components/ApiKeyManager'
 import { Button, Card } from '../components/ui'
 
 export default function Settings() {
@@ -99,6 +100,8 @@ export default function Settings() {
       <Button className="w-full" disabled={!canSave || busy} onClick={save}>
         {busy ? 'Saving…' : 'Save targets'}
       </Button>
+
+      <ApiKeyManager />
     </div>
   )
 }
