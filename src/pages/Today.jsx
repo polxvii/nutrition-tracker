@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
+import { mealForNow } from '../lib/mealWindows'
 import ProgressRing from '../components/ProgressRing'
 import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
@@ -29,18 +30,6 @@ const GROUP_LABELS = {
   exercise: 'Exercise',
 }
 const MEAL_VALUES = MEALS.map((m) => m.value)
-
-// Default meal for a quick-add, based on the current time of day.
-//   04:00–10:30 breakfast · 10:31–16:00 lunch · 16:01–21:00 dinner
-//   21:01–03:59 night. (Snack has no slot — pick it manually.)
-function mealForNow() {
-  const now = new Date()
-  const m = now.getHours() * 60 + now.getMinutes()
-  if (m >= 240 && m <= 630) return 'breakfast' // 04:00–10:30
-  if (m >= 631 && m <= 960) return 'lunch' // 10:31–16:00
-  if (m >= 961 && m <= 1260) return 'dinner' // 16:01–21:00
-  return 'night' // 21:01–03:59
-}
 
 const dateObj = (dateStr) => new Date(dateStr + 'T00:00:00')
 // timestamp inside the selected local day (noon dodges timezone edges)
@@ -570,7 +559,7 @@ export default function Today() {
       {showAdd && (
         <Card>
           <AddFood
-            defaultMeal={mealForNow()}
+            defaultMeal={mealForNow(profile?.meal_windows)}
             recent={recent}
             saved={frequents}
             meals={savedMeals}
