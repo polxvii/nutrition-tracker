@@ -242,16 +242,20 @@ export default function Weight() {
       .filter((l) => l.logged_date >= winCut)
       .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
     if (wpts.length < 2) return { ready: false }
-    // Average intake between the first and last weigh-in, not a fixed window.
+    // Weight change + intake over the same span (first↔last weigh-in).
     const spanStart = wpts[0].fullDate
     const spanEnd = wpts[wpts.length - 1].fullDate
+    const spanDays = Math.round((new Date(spanEnd) - new Date(spanStart)) / 86400000)
+    const rateWk = weeklyRate(wpts)
+    if (spanDays < 7 || rateWk == null) return { ready: false }
     const allDays = foodByDay.filter((d) => d.date >= spanStart && d.date <= spanEnd)
     const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
     const excluded = allDays.length - fdays.length
-    if (fdays.length < 5) return { ready: false }
-    const spanDays = (new Date(spanEnd) - new Date(spanStart)) / 86400000
-    const rateWk = weeklyRate(wpts)
-    if (spanDays < 7 || rateWk == null) return { ready: false }
+    // Unlogged days in the span are approximated by the logged-day average, so a
+    // sparse span skews the estimate — require ≥5 logged days AND ≥half the span.
+    if (fdays.length < 5 || fdays.length < Math.ceil(spanDays * 0.5)) {
+      return { ready: false, lowLog: true, logged: fdays.length, spanDays }
+    }
     const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length)
     const tdee = Math.round(avgIntake - (rateWk / 7) * KCAL_PER_KG)
     // Sanity: a measured maintenance below BMR is physiologically impossible, and
@@ -267,7 +271,7 @@ export default function Weight() {
     const gr = profile?.goal_rate || 'medium'
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
     const suggested = Math.max(bmr, Math.round((tdee + offset) / 10) * 10)
-    return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays: Math.round(spanDays), excluded }
+    return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays, logged: fdays.length, excluded }
   }, [weightLogs, foodByDay, profile, intakeFloor])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
@@ -440,9 +444,10 @@ export default function Weight() {
         <Card className="space-y-2">
           <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
           <p className="text-xs text-slate-500">
-            From your last {checkIn.spanDays} days of weight + food.
+            Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} over{' '}
+            {checkIn.spanDays} days between weigh-ins.
             {checkIn.excluded > 0 &&
-              ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} excluded)`}
+              ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} skipped)`}
           </p>
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-slate-800 py-2">
@@ -486,10 +491,16 @@ export default function Weight() {
               missing food logs or short-term water-weight swings. Keep logging food + weight
               consistently and it'll settle.
             </p>
+          ) : checkIn.lowLog ? (
+            <p className="text-xs text-slate-500">
+              Only {checkIn.logged} of {checkIn.spanDays} days between your weigh-ins have food
+              logged — too many gaps to trust the estimate (the missing days get guessed from the
+              logged ones). Log food on more days and it'll unlock.
+            </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Unlocks with ≥2 weigh-ins over ≥7 days (within the last 30) and ≥5 days of food logged
-              between them. It estimates your real maintenance calories and suggests a goal.
+              Unlocks with ≥2 weigh-ins over ≥7 days (within the last 30) and food logged on ≥half
+              the days between them. It estimates your real maintenance calories and suggests a goal.
             </p>
           )}
         </Card>
@@ -576,21 +587,12 @@ export default function Weight() {
                   content={<BarTooltip goalCal={goalCal} maint={maint} />}
                   cursor={{ fill: '#1e293b55' }}
                 />
+                {/* Line colours match the bar legend: amber = goal, red = maintenance. */}
                 {goalCal > 0 && (
-                  <ReferenceLine
-                    y={goalCal}
-                    stroke="#ef4444"
-                    strokeDasharray="4 4"
-                    label={{ value: 'goal', position: 'insideBottomRight', fill: '#f87171', fontSize: 9 }}
-                  />
+                  <ReferenceLine y={goalCal} stroke="#f59e0b" strokeDasharray="4 4" />
                 )}
                 {maint > 0 && maint !== goalCal && (
-                  <ReferenceLine
-                    y={maint}
-                    stroke="#f59e0b"
-                    strokeDasharray="4 4"
-                    label={{ value: 'maint', position: 'insideTopRight', fill: '#fbbf24', fontSize: 9 }}
-                  />
+                  <ReferenceLine y={maint} stroke="#ef4444" strokeDasharray="4 4" />
                 )}
                 <Bar dataKey="kcal" name="kcal" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {foodData.map((d, i) => (
