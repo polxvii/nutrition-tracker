@@ -20,8 +20,7 @@ export default function PhotoLogger({
   hint = '',
   defaultMeal = 'lunch',
 }) {
-  const [preview, setPreview] = useState(null)
-  const [image, setImage] = useState(null) // { base64, mediaType }
+  const [images, setImages] = useState([]) // [{ base64, mediaType, previewUrl }]
   const [note, setNote] = useState(initialNote)
   const [meal, setMeal] = useState(defaultMeal)
   const [analyzing, setAnalyzing] = useState(false)
@@ -32,28 +31,34 @@ export default function PhotoLogger({
   const [dish, setDish] = useState('') // combined dish name (editable)
   const [combine, setCombine] = useState(true) // log as one dish vs N items
 
-  async function pickFile(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const MAX_IMAGES = 6
+
+  async function pickFiles(e) {
+    const files = Array.from(e.target.files || [])
+    e.target.value = '' // allow re-picking the same file later
+    if (!files.length) return
     setError(null)
     setItems(null)
     try {
-      const img = await fileToAnalyzableImage(file)
-      setPreview(img.previewUrl)
-      setImage({ base64: img.base64, mediaType: img.mediaType })
+      const added = []
+      for (const file of files) {
+        const img = await fileToAnalyzableImage(file)
+        added.push({ base64: img.base64, mediaType: img.mediaType, previewUrl: img.previewUrl })
+      }
+      setImages((prev) => [...prev, ...added].slice(0, MAX_IMAGES))
     } catch {
       setError('Could not read that image.')
     }
   }
+  const removeImage = (i) => setImages((prev) => prev.filter((_, idx) => idx !== i))
 
   async function analyze() {
-    if (!image && !note.trim()) return
+    if (!images.length && !note.trim()) return
     setAnalyzing(true)
     setError(null)
     try {
       const res = await analyzePhoto({
-        base64: image?.base64 || null,
-        mediaType: image?.mediaType,
+        images: images.map(({ base64, mediaType }) => ({ base64, mediaType })),
         note,
       })
       setItems(
@@ -203,48 +208,50 @@ export default function PhotoLogger({
         />
       </Field>
 
-      <div className="space-y-1">
-        <div className="text-xs text-slate-400">Add a photo (optional — improves accuracy)</div>
-        {!preview ? (
+      <div className="space-y-2">
+        <div className="text-xs text-slate-400">
+          Add photos (optional — more angles / dishes = better accuracy)
+        </div>
+        {images.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {images.map((im, i) => (
+              <div key={i} className="relative">
+                <img
+                  src={im.previewUrl}
+                  alt={`photo ${i + 1}`}
+                  className="h-24 w-full rounded-lg object-cover"
+                />
+                <button
+                  onClick={() => removeImage(i)}
+                  className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 text-xs leading-5 text-white"
+                  aria-label="Remove photo"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {images.length < MAX_IMAGES && (
           <div className="grid grid-cols-2 gap-2">
-            {/* Take photo — capture hints the camera on mobile */}
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-6 text-slate-300 hover:border-green-500">
-              <span className="text-3xl">📷</span>
-              <span className="mt-1 text-sm">Take photo</span>
+            {/* Take photo — capture hints the camera on mobile (one at a time) */}
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-4 text-slate-300 hover:border-green-500">
+              <span className="text-2xl">📷</span>
+              <span className="mt-1 text-sm">{images.length ? 'Add photo' : 'Take photo'}</span>
               <input
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={pickFile}
+                onChange={pickFiles}
               />
             </label>
-            {/* Upload — no capture, opens the gallery / file picker */}
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-6 text-slate-300 hover:border-green-500">
-              <span className="text-3xl">🖼️</span>
+            {/* Upload — multiple, opens the gallery / file picker */}
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-800 py-4 text-slate-300 hover:border-green-500">
+              <span className="text-2xl">🖼️</span>
               <span className="mt-1 text-sm">Upload</span>
-              <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
+              <input type="file" accept="image/*" multiple className="hidden" onChange={pickFiles} />
             </label>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <img src={preview} alt="meal" className="max-h-56 w-full rounded-xl object-cover" />
-            <div className="flex gap-4">
-              <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
-                📷 retake
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={pickFile}
-                />
-              </label>
-              <label className="inline-block cursor-pointer text-xs text-green-400 hover:text-green-300">
-                🖼️ upload
-                <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
-              </label>
-            </div>
           </div>
         )}
       </div>
@@ -254,7 +261,7 @@ export default function PhotoLogger({
           <Button
             className="flex-1"
             onClick={analyze}
-            disabled={(!image && !note.trim()) || analyzing}
+            disabled={(!images.length && !note.trim()) || analyzing}
           >
             {analyzing ? 'Analyzing…' : '✨ Analyze'}
           </Button>

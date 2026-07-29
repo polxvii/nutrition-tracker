@@ -187,7 +187,8 @@ export async function analyzeForUser({ authToken, env, body }) {
     result = await analyzeFood({
       apiKeys: keys,
       models: cfg.models,
-      imageBase64: body.image,
+      images: body.images,
+      imageBase64: body.image, // back-compat
       mediaType: body.mediaType,
       note: body.note,
     })

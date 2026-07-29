@@ -19,12 +19,13 @@ function asError(data, res) {
   return err
 }
 
-// Analyse a meal (photo and/or text) on the signed-in user's own key.
-export async function analyzePhoto({ base64, mediaType, note }) {
+// Analyse a meal (one or more photos and/or text) on the user's own key.
+// `images` is an array of { base64, mediaType }.
+export async function analyzePhoto({ images = [], note }) {
   const res = await fetch('/api/analyze', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ image: base64, mediaType, note }),
+    body: JSON.stringify({ images, note }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw asError(data, res)

@@ -203,7 +203,7 @@ async function callModel({ apiKey, model, body }) {
   return { items, dish: (parsed.dish || '').trim(), confidence: parsed.confidence || 'low', totals }
 }
 
-export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64, mediaType, note }) {
+export async function analyzeFood({ apiKey, apiKeys, model, models, images, imageBase64, mediaType, note }) {
   const keys = resolveKeys({ apiKey, apiKeys })
   if (keys.length === 0) {
     throw httpError(
@@ -211,23 +211,30 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
       500
     )
   }
+  // Accept an array of images (multi-photo), or a single legacy imageBase64.
+  const imgs = Array.isArray(images)
+    ? images.filter((i) => i && i.base64)
+    : imageBase64
+      ? [{ base64: imageBase64, mediaType }]
+      : []
   const hasNote = !!(note && note.trim())
-  if (!imageBase64 && !hasNote) {
+  if (imgs.length === 0 && !hasNote) {
     throw httpError('Describe the food or add a photo.', 400)
   }
 
+  const photoWord = imgs.length > 1 ? `${imgs.length} photos of the food I ate` : 'photo'
   let userText
-  if (imageBase64) {
+  if (imgs.length) {
     userText = hasNote
-      ? `Estimate the nutrition for this meal shown in the photo.\nUser note (treat as ground truth): ${note.trim()}`
-      : 'Estimate the nutrition for this meal shown in the photo.'
+      ? `Estimate the nutrition for the meal shown in the ${photoWord}.\nUser note (treat as ground truth): ${note.trim()}`
+      : `Estimate the nutrition for the meal shown in the ${photoWord}.`
   } else {
     userText = `Estimate the nutrition for this meal, described as:\n${note.trim()}`
   }
 
   const parts = []
-  if (imageBase64) {
-    parts.push({ inline_data: { mime_type: mediaType || 'image/jpeg', data: imageBase64 } })
+  for (const img of imgs) {
+    parts.push({ inline_data: { mime_type: img.mediaType || 'image/jpeg', data: img.base64 } })
   }
   parts.push({ text: userText })
 
