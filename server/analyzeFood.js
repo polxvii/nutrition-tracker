@@ -38,7 +38,10 @@ const OVERALL_BUDGET_MS = 25000
 // requests within a warm isolate (best-effort; fine if the isolate recycles).
 const COOLDOWN_MS = 5 * 60 * 1000
 const cooldownUntil = new Map()
-const ckey = (model, keyIdx) => `${keyIdx}::${model}`
+// Key the cooldown by the actual key (last 8 chars) + model, NOT the array
+// index — with per-user (BYOK) keys, index 0 means a different key for every
+// user, so an index-based cooldown would bleed across users.
+const ckey = (model, key) => `${(key || '').slice(-8)}::${model}`
 
 function resolveModels({ models, model }) {
   if (Array.isArray(models) && models.length) return models
@@ -255,7 +258,7 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
   for (const m of chain) {
     for (let ki = 0; ki < keys.length; ki++) attempts.push({ m, ki })
   }
-  const live = attempts.filter(({ m, ki }) => !(cooldownUntil.get(ckey(m, ki)) > now))
+  const live = attempts.filter(({ m, ki }) => !(cooldownUntil.get(ckey(m, keys[ki])) > now))
   // Everything is cooling down — recently rate-limited and/or keys unavailable.
   if (live.length === 0) {
     throw httpError(
@@ -271,31 +274,34 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, imageBase64,
     if (Date.now() - now > OVERALL_BUDGET_MS) break // out of time budget
     try {
       const result = await callModel({ apiKey: keys[ki], model: m, body })
-      cooldownUntil.delete(ckey(m, ki)) // it worked → clear any cooldown
-      return { ...result, model: m }
+      cooldownUntil.delete(ckey(m, keys[ki])) // it worked → clear any cooldown
+      return { ...result, model: m, keyIndex: ki }
     } catch (e) {
       lastErr = e
-      if (e.status === 429) cooldownUntil.set(ckey(m, ki), Date.now() + COOLDOWN_MS)
+      if (e.status === 429) cooldownUntil.set(ckey(m, keys[ki]), Date.now() + COOLDOWN_MS)
       if (e.badKey) {
         // Dead key (403/invalid): skip it for every remaining model this
         // request, and rest it a while so future requests skip it too.
         deadKeys.add(ki)
-        cooldownUntil.set(ckey(m, ki), Date.now() + COOLDOWN_MS)
+        cooldownUntil.set(ckey(m, keys[ki]), Date.now() + COOLDOWN_MS)
       }
       if (e.retryable) continue
       throw e
     }
   }
-  // Report the actual reason: dead keys vs quota vs other.
+  // Report the actual reason: dead keys vs quota vs other. Flags are preserved
+  // so the BYOK layer can flip the stored key's status (invalid / exhausted).
   if (lastErr?.badKey && lastErr?.status !== 429) {
-    throw httpError(
-      'The AI API keys are unavailable or denied — check the GEMINI keys on the server.',
+    const e = httpError(
+      'Your Gemini API key was rejected (invalid, revoked, or disabled). Re-add a key.',
       502
     )
+    e.badKey = true
+    throw e
   }
   if (lastErr?.status === 429) {
     throw httpError(
-      'All AI models have hit their free daily limit. Try again after the daily reset, or add the food manually / by search.',
+      'Your Gemini free daily limit is reached. It resets at midnight US Pacific time — or add the food manually / by search.',
       429
     )
   }

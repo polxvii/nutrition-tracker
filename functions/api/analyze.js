@@ -1,10 +1,9 @@
 // Cloudflare Pages Function — POST /api/analyze
-// Cloudflare auto-detects the functions/ directory; no extra config needed.
-// The GEMINI_API_KEY is read from the Pages project env (never sent to the
-// browser). Set it in: Cloudflare → Workers & Pages → project → Settings →
-// Environment variables (Production + Preview).
+// BYOK: analyses run on the *signed-in user's* own Gemini key (encrypted at
+// rest, decrypted server-side only). The client sends its Supabase access
+// token in the Authorization header — never a key.
 
-import { analyzeFood } from '../../server/analyzeFood.js'
+import { analyzeForUser, bearer } from '../../server/byok.js'
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -17,17 +16,9 @@ export async function onRequestPost(context) {
   const { request, env } = context
   try {
     const body = await request.json()
-    const result = await analyzeFood({
-      apiKey: env.GEMINI_API_KEY,
-      apiKeys: env.GEMINI_API_KEYS,
-      model: env.GEMINI_MODEL,
-      models: env.GEMINI_MODELS,
-      imageBase64: body.image,
-      mediaType: body.mediaType,
-      note: body.note,
-    })
+    const result = await analyzeForUser({ authToken: bearer(request), env, body })
     return json(result, 200)
   } catch (e) {
-    return json({ error: e.message || 'Analyze failed' }, e.status || 500)
+    return json({ error: e.message || 'Analyze failed', code: e.code }, e.status || 500)
   }
 }

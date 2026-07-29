@@ -2,43 +2,48 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { analyzeFood } from './server/analyzeFood.js'
+import { analyzeForUser, addKeyForUser } from './server/byok.js'
 
-// Dev-only: serve POST /api/analyze locally (mirrors the Cloudflare Pages
-// Function in functions/api/analyze.js). Reads GEMINI_API_KEY from .env
-// WITHOUT the VITE_ prefix, so the key stays server-side and is never bundled
-// into the client. Needs a dev-server restart after you add the key.
-function devAnalyzeApi(env) {
+// Dev-only: serve the BYOK API locally, mirroring the Cloudflare Pages
+// Functions in functions/api/*. Uses the same server/byok.js core, so dev and
+// prod behave identically. Reads Supabase config + KEY_ENCRYPTION_SECRET from
+// .env (no VITE_ prefix needed here — this runs server-side). Restart the dev
+// server after editing .env.
+function devByokApi(env) {
+  // Wrap the request/response plumbing shared by both routes.
+  const route = (handler) => async (req, res) => {
+    if (req.method !== 'POST') {
+      res.statusCode = 405
+      res.end('Method Not Allowed')
+      return
+    }
+    try {
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+      const authToken = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim()
+      const result = await handler({ authToken, env, body })
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify(result))
+    } catch (e) {
+      res.statusCode = e.status || 500
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: e.message || 'Request failed', code: e.code }))
+    }
+  }
   return {
-    name: 'dev-analyze-api',
+    name: 'dev-byok-api',
     configureServer(server) {
-      server.middlewares.use('/api/analyze', async (req, res) => {
-        if (req.method !== 'POST') {
-          res.statusCode = 405
-          res.end('Method Not Allowed')
-          return
-        }
-        try {
-          const chunks = []
-          for await (const c of req) chunks.push(c)
-          const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
-          const result = await analyzeFood({
-            apiKey: env.GEMINI_API_KEY,
-            apiKeys: env.GEMINI_API_KEYS,
-            model: env.GEMINI_MODEL,
-            models: env.GEMINI_MODELS,
-            imageBase64: body.image,
-            mediaType: body.mediaType,
-            note: body.note,
-          })
-          res.setHeader('content-type', 'application/json')
-          res.end(JSON.stringify(result))
-        } catch (e) {
-          res.statusCode = e.status || 500
-          res.setHeader('content-type', 'application/json')
-          res.end(JSON.stringify({ error: e.message || 'Analyze failed' }))
-        }
-      })
+      server.middlewares.use(
+        '/api/analyze',
+        route(({ authToken, env, body }) => analyzeForUser({ authToken, env, body }))
+      )
+      server.middlewares.use(
+        '/api/keys',
+        route(({ authToken, env, body }) =>
+          addKeyForUser({ authToken, env, key: body.key, label: body.label })
+        )
+      )
     },
   }
 }
@@ -82,7 +87,7 @@ export default defineConfig(({ mode }) => {
         },
         devOptions: { enabled: false },
       }),
-      devAnalyzeApi(env),
+      devByokApi(env),
     ],
   }
 })
