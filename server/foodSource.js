@@ -138,9 +138,31 @@ export async function searchProducts(q) {
   const ck = 's:' + query.toLowerCase()
   const hit = cget(ck)
   if (hit) return hit
-  // Prefer Search-a-licious; on failure OR no results, fall back to the legacy
-  // endpoint (the two are flaky at different times, so trying both is robust).
+  // Prefer Search-a-licious.
   let out = await viaSAL(query)
+  // Thai/unsegmented type-ahead: SAL matches whole word tokens, so a continuous
+  // query that runs past a word boundary (e.g. "มาม่าต้ม") returns nothing even
+  // though "มาม่าต้มยำกุ้ง" exists. Retry on shorter prefixes (down to the leading
+  // token), then keep only names that still contain the full query.
+  if ((!out || out.length === 0) && !/\s/.test(query) && query.length >= 4) {
+    const ql = query.toLowerCase()
+    const L = query.length
+    const lens = [...new Set([L - 2, L - 3, 5, 4])]
+      .filter((n) => n >= 2 && n < L)
+      .sort((a, b) => b - a)
+    for (const n of lens) {
+      const wide = await viaSAL(query.slice(0, n))
+      if (!wide || !wide.length) continue
+      // Only surface products whose name actually contains the full query — no
+      // unrelated noise. If none match, keep looking with a shorter prefix.
+      const narrowed = wide.filter((p) => (p.name || '').toLowerCase().includes(ql))
+      if (narrowed.length) {
+        out = narrowed
+        break
+      }
+    }
+  }
+  // Last resort: the legacy endpoint (flaky, but occasionally up when SAL isn't).
   if (!out || out.length === 0) {
     const legacy = await viaLegacy(query)
     if (legacy && legacy.length) out = legacy
