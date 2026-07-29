@@ -206,5 +206,66 @@ grant select, insert, update, delete
   to authenticated;
 
 -- =====================================================================
+--  BYOK : per-user Gemini API keys (encrypted at rest) + role-based limit
+--  Additive & idempotent — safe to re-run. Does NOT touch existing tables.
+-- =====================================================================
+
+-- 3.1  role on profiles (existing rows default to 'user')
+alter table public.profiles add column if not exists role text not null default 'user';
+
+-- 3.2  user_api_keys — one row per stored key. `encrypted_key` is AES-256-GCM
+--      ciphertext (base64(iv).base64(ct)); the plaintext key is NEVER stored.
+create table if not exists public.user_api_keys (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references auth.users (id) on delete cascade,
+  provider          text not null default 'gemini',
+  encrypted_key     text not null,           -- ciphertext only, never plaintext
+  key_last4         text not null,           -- for display only
+  key_label         text,                    -- optional nickname
+  status            text not null default 'active',  -- active | invalid | exhausted
+  last_used_at      timestamptz,
+  last_validated_at timestamptz,
+  created_at        timestamptz not null default now()
+);
+create index if not exists user_api_keys_user_idx on public.user_api_keys (user_id);
+
+-- 3.3  RLS — a user only ever sees / edits their own key rows.
+alter table public.user_api_keys enable row level security;
+drop policy if exists user_api_keys_all_own on public.user_api_keys;
+create policy user_api_keys_all_own on public.user_api_keys
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- §7  DB backstop for the per-role key limit (user 1 / admin 10). Runs even if
+--     the client and edge layer are bypassed. SECURITY DEFINER so it can read
+--     profiles.role regardless of the caller's RLS.
+create or replace function public.enforce_api_key_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r   text;
+  lim int;
+  cnt int;
+begin
+  select coalesce(role, 'user') into r from public.profiles where id = new.user_id;
+  lim := case when r = 'admin' then 10 else 1 end;
+  select count(*) into cnt from public.user_api_keys where user_id = new.user_id;
+  if cnt >= lim then
+    raise exception 'API key limit reached for role % (max %).', coalesce(r, 'user'), lim
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists user_api_keys_limit on public.user_api_keys;
+create trigger user_api_keys_limit
+  before insert on public.user_api_keys
+  for each row execute function public.enforce_api_key_limit();
+
+grant select, insert, update, delete on public.user_api_keys to authenticated;
+
+-- =====================================================================
 --  Done. Tables + RLS + grants ready.
 -- =====================================================================
