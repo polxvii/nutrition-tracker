@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { analyzeForUser, addKeyForUser } from './server/byok.js'
+import { searchProducts, lookupProduct } from './server/foodSource.js'
 
 // Dev-only: serve the BYOK API locally, mirroring the Cloudflare Pages
 // Functions in functions/api/*. Uses the same server/byok.js core, so dev and
@@ -44,6 +45,27 @@ function devByokApi(env) {
           addKeyForUser({ authToken, env, key: body.key, label: body.label })
         )
       )
+      // GET /api/food — proxied Open Food Facts search / barcode lookup.
+      server.middlewares.use('/api/food', async (req, res) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405
+          res.end('Method Not Allowed')
+          return
+        }
+        try {
+          const u = new URL(req.originalUrl || req.url, 'http://localhost')
+          const code = u.searchParams.get('code')
+          const out = code
+            ? { product: await lookupProduct(code) }
+            : { products: await searchProducts(u.searchParams.get('q') || '') }
+          res.setHeader('content-type', 'application/json')
+          res.end(JSON.stringify(out))
+        } catch (e) {
+          res.statusCode = e.status || 502
+          res.setHeader('content-type', 'application/json')
+          res.end(JSON.stringify({ error: e.message || 'Food lookup failed' }))
+        }
+      })
     },
   }
 }
