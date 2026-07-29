@@ -523,20 +523,24 @@ export default function Weight() {
       {/* Log weight */}
       <Card>
         <form onSubmit={save} className="flex items-end gap-2">
-          <Field label="Date">
-            <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
-          </Field>
-          <Field label="Weight (kg)">
-            <Input
-              type="number"
-              inputMode="decimal"
-              step="0.1"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              placeholder="70.5"
-            />
-          </Field>
-          <Button type="submit" disabled={busy}>
+          <div className="min-w-0 flex-1">
+            <Field label="Date">
+              <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+          </div>
+          <div className="min-w-0 flex-1">
+            <Field label="Weight (kg)">
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                placeholder="70.5"
+              />
+            </Field>
+          </div>
+          <Button type="submit" className="shrink-0" disabled={busy}>
             {busy ? '…' : 'Save'}
           </Button>
         </form>
