@@ -132,6 +132,15 @@ export default function Calendar() {
       ? Math.round(((totalNet - tdee * nLogged) / 7700) * 100) / 100
       : null
 
+  // Net-kcal colour tier, matching the Progress adherence chart:
+  // green ≤ goal · amber over goal · red over maintenance.
+  const kcalTier = (v) =>
+    tdee > 0 && v > tdee
+      ? 'text-red-400'
+      : goalCal > 0 && v > goalCal
+        ? 'text-amber-400'
+        : 'text-green-400'
+
   const prev = () =>
     setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))
   const next = () =>
@@ -166,7 +175,6 @@ export default function Calendar() {
           const b = byDate[k]
           const isToday = k === today
           const net = b ? Math.round(b.cal - b.burned) : null // eaten − exercise
-          const over = goalCal > 0 && net != null && net > goalCal
           return (
             <button
               key={i}
@@ -177,11 +185,7 @@ export default function Calendar() {
             >
               <span className="text-[11px] text-slate-400">{d}</span>
               {b && (
-                <span
-                  className={`text-[11px] font-semibold ${over ? 'text-red-400' : 'text-green-400'}`}
-                >
-                  {net}
-                </span>
+                <span className={`text-[11px] font-semibold ${kcalTier(net)}`}>{net}</span>
               )}
               {b && b.cal > 0 && (
                 <span className="text-[8px] leading-tight text-slate-500">
@@ -219,22 +223,20 @@ export default function Calendar() {
                   { label: 'C', value: avg.c, unit: 'g', goal: profile?.goal_carbs_g },
                   { label: 'F', value: avg.f, unit: 'g', goal: profile?.goal_fat_g },
                 ].map((s) => {
-                  // Colour the average vs its goal. Fewer calories/carbs/fat than
-                  // goal reads "green" (under); protein is the opposite — hitting
-                  // or exceeding it is good.
-                  const good =
-                    s.goal > 0
-                      ? s.label === 'P'
-                        ? s.value >= s.goal * 0.9
-                        : s.value <= s.goal
-                      : null
+                  // kcal uses the 3-tier scale (green ≤ goal · amber over goal ·
+                  // red over maintenance), matching the Progress chart. Macros
+                  // colour vs their goal (protein: higher is good; carbs/fat: lower).
+                  const cls =
+                    s.label === 'kcal'
+                      ? kcalTier(s.value)
+                      : s.goal > 0
+                        ? (s.label === 'P' ? s.value >= s.goal * 0.9 : s.value <= s.goal)
+                          ? 'text-green-400'
+                          : 'text-amber-400'
+                        : 'text-white'
                   return (
                     <div key={s.label} className="rounded-lg bg-slate-800 py-2">
-                      <div
-                        className={`text-base font-bold ${
-                          good == null ? 'text-white' : good ? 'text-green-400' : 'text-amber-400'
-                        }`}
-                      >
+                      <div className={`text-base font-bold ${cls}`}>
                         {s.value}
                         {s.unit}
                       </div>
