@@ -162,6 +162,16 @@ export default function Today() {
   const goalCal = profile?.goal_calories ?? 0
   // Remaining = goal − eaten + burned (exercise gives calories back).
   const remaining = Math.round(goalCal - totals.calories + totals.burned)
+  // Net kcal tiered like Progress/Calendar (green ≤ goal · amber over goal ·
+  // red over maintenance) — colours the calorie ring and the "over" number.
+  const netCal = totals.calories - totals.burned
+  const maint = profile?.tdee ?? 0
+  const calColor =
+    maint > 0 && netCal > maint
+      ? '#ef4444'
+      : goalCal > 0 && netCal > goalCal
+        ? '#f59e0b'
+        : '#22c55e'
 
   // ---- actions ----
   async function upsertFrequent(entry) {
@@ -519,16 +529,14 @@ export default function Today() {
             max={goalCal}
             size={120}
             stroke={11}
-            color="#22c55e"
+            color={calColor}
             label="Calories"
             unit="kcal"
           />
           <div className="text-center">
-            {remaining >= 0 ? (
-              <div className="text-4xl font-bold text-green-400">{remaining}</div>
-            ) : (
-              <div className="text-4xl font-bold text-red-400">{Math.abs(remaining)}</div>
-            )}
+            <div className="text-4xl font-bold" style={{ color: calColor }}>
+              {Math.abs(remaining)}
+            </div>
             <div className="text-sm text-slate-400">kcal {remaining >= 0 ? 'left' : 'over'}</div>
             {totals.burned > 0 && (
               <div className="mt-1 text-sm text-slate-400">🔥 {Math.round(totals.burned)} burned</div>
