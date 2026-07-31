@@ -11,7 +11,6 @@ export default function ProgressRing({
   const r = (size - stroke) / 2
   const circ = 2 * Math.PI * r
   const offset = circ * (1 - pct)
-  const over = max > 0 && value > max
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -29,7 +28,7 @@ export default function ProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={r}
-            stroke={over ? '#ef4444' : color}
+            stroke={color}
             strokeWidth={stroke}
             fill="none"
             strokeDasharray={circ}
