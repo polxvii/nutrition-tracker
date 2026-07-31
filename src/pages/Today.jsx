@@ -559,6 +559,7 @@ export default function Today() {
             size={92}
             stroke={8}
             color="#3b82f6"
+            overColor="#ef4444"
             label="Carbs"
             unit="g"
           />
@@ -568,6 +569,7 @@ export default function Today() {
             size={92}
             stroke={8}
             color="#f59e0b"
+            overColor="#ef4444"
             label="Fat"
             unit="g"
           />

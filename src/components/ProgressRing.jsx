@@ -4,6 +4,7 @@ export default function ProgressRing({
   size = 130,
   stroke = 11,
   color = '#22c55e',
+  overColor, // optional: stroke to use when value > max (e.g. over-budget red)
   label,
   unit = '',
 }) {
@@ -11,6 +12,7 @@ export default function ProgressRing({
   const r = (size - stroke) / 2
   const circ = 2 * Math.PI * r
   const offset = circ * (1 - pct)
+  const strokeColor = overColor && max > 0 && value > max ? overColor : color
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -28,7 +30,7 @@ export default function ProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={r}
-            stroke={color}
+            stroke={strokeColor}
             strokeWidth={stroke}
             fill="none"
             strokeDasharray={circ}
