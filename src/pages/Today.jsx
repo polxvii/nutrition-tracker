@@ -569,7 +569,7 @@ export default function Today() {
             max={profile?.goal_fat_g ?? 0}
             size={92}
             stroke={8}
-            color="#f59e0b"
+            color="#22c55e"
             overColor="#ef4444"
             label="Fat"
             unit="g"
