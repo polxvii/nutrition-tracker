@@ -550,6 +550,7 @@ export default function Today() {
             size={92}
             stroke={8}
             color="#22c55e"
+            underColor="#f59e0b"
             label="Protein"
             unit="g"
           />
