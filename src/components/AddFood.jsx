@@ -4,6 +4,7 @@ import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
 import AddFoodForm from './AddFoodForm'
 import PhotoLogger from './PhotoLogger'
+import ErrorBoundary from './ErrorBoundary'
 
 // Barcode scanner pulls in @zxing (~450 KB) — load it only when the scanner
 // actually opens, so it isn't in the initial bundle / PWA precache.
@@ -248,11 +249,25 @@ export default function AddFood({
   // ---- sub-views -------------------------------------------------------
   if (view === 'scan') {
     return (
-      <Suspense
-        fallback={<p className="py-6 text-center text-sm text-slate-500">Loading scanner…</p>}
+      <ErrorBoundary
+        fallback={
+          <div className="space-y-2 py-6 text-center text-sm text-slate-400">
+            <p>Couldn't load the scanner — a new version may have just deployed.</p>
+            <Button className="w-full" onClick={() => window.location.reload()}>
+              Reload
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={() => setView('home')}>
+              Back
+            </Button>
+          </div>
+        }
       >
-        <BarcodeScanner onDetected={onScan} onCancel={() => setView('home')} />
-      </Suspense>
+        <Suspense
+          fallback={<p className="py-6 text-center text-sm text-slate-500">Loading scanner…</p>}
+        >
+          <BarcodeScanner onDetected={onScan} onCancel={() => setView('home')} />
+        </Suspense>
+      </ErrorBoundary>
     )
   }
   if (view === 'ai') {
