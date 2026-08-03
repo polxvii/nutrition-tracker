@@ -58,22 +58,16 @@ export default function Today() {
   const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
   const [mealName, setMealName] = useState('')
   const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
-  const [fabOpen, setFabOpen] = useState(false) // floating add-menu open?
   const [busy, setBusy] = useState(false)
 
   const closePanels = () => {
     setShowAdd(false)
     setShowExercise(false)
   }
-  const openFood = () => {
-    setFabOpen(false)
+  const togglePanel = (isOpen, open) => () => {
+    const next = !isOpen
     closePanels()
-    setShowAdd(true)
-  }
-  const openExercise = () => {
-    setFabOpen(false)
-    closePanels()
-    setShowExercise(true)
+    open(next)
   }
 
   const setDate = (d) =>
@@ -501,7 +495,6 @@ export default function Today() {
             size={120}
             stroke={11}
             color={calColor}
-            glow
             label="Calories"
             unit="kcal"
           />
@@ -590,6 +583,20 @@ export default function Today() {
           })}
         </div>
       </Card>
+
+      {/* Quick actions */}
+      <div className="space-y-2">
+        <Button className="w-full py-3.5 text-base" onClick={togglePanel(showAdd, setShowAdd)}>
+          ＋ Add food
+        </Button>
+        <Button
+          variant="ghost"
+          className="w-full text-sm"
+          onClick={togglePanel(showExercise, setShowExercise)}
+        >
+          🏃 Exercise
+        </Button>
+      </div>
 
       {showAdd && (
         <Card>
@@ -822,43 +829,6 @@ export default function Today() {
         </div>
       )}
 
-      {/* Floating add — opens Food or Exercise (same flow as before) */}
-      {swipeEnabled && (
-        <>
-          {fabOpen && (
-            <div className="fixed inset-0 z-20" onClick={() => setFabOpen(false)} />
-          )}
-          <div className="pointer-events-none fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4">
-            <div className="flex flex-col items-end gap-2">
-              {fabOpen && (
-                <>
-                  <button
-                    onClick={openExercise}
-                    className="animate-rise pointer-events-auto flex items-center gap-2 rounded-full border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow-lg"
-                  >
-                    🏃 Exercise
-                  </button>
-                  <button
-                    onClick={openFood}
-                    className="animate-rise pointer-events-auto flex items-center gap-2 rounded-full border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow-lg"
-                  >
-                    🍽 Food
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => setFabOpen((o) => !o)}
-                aria-label="Add"
-                className="pointer-events-auto grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-green-500 to-green-600 text-white shadow-xl shadow-green-900/40 transition active:scale-95"
-              >
-                <span className={`text-3xl leading-none transition-transform ${fabOpen ? 'rotate-45' : ''}`}>
-                  ＋
-                </span>
-              </button>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }
