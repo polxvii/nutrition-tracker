@@ -487,7 +487,7 @@ export default function Today() {
       </header>
 
       {/* Daily summary */}
-      <Card className="space-y-4">
+      <Card className="animate-rise space-y-4">
         <div className="flex items-center justify-center gap-5">
           <ProgressRing
             value={totals.calories}
@@ -495,11 +495,12 @@ export default function Today() {
             size={120}
             stroke={11}
             color={calColor}
+            glow
             label="Calories"
             unit="kcal"
           />
           <div className="text-center">
-            <div className="text-4xl font-bold" style={{ color: calColor }}>
+            <div className="text-4xl font-bold tabular-nums" style={{ color: calColor, letterSpacing: '-0.02em' }}>
               {Math.abs(remaining)}
             </div>
             <div className="text-sm text-slate-400">kcal {remaining >= 0 ? 'left' : 'over'}</div>
@@ -508,6 +509,25 @@ export default function Today() {
             )}
           </div>
         </div>
+
+        {maint > 0 && (
+          <div className="flex items-baseline justify-between border-t border-white/5 pt-3">
+            <span className="text-sm text-slate-400">Net today</span>
+            <span className="text-sm font-semibold tabular-nums text-slate-200">
+              {Math.round(netCal)}
+              <span className="font-normal text-slate-500"> kcal</span>
+              <span
+                className={`font-normal ${netCal - maint <= 0 ? 'text-green-400' : 'text-amber-400'}`}
+              >
+                {' · '}
+                {netCal - maint > 0 ? '+' : ''}
+                {Math.round(netCal - maint)}
+              </span>
+              <span className="font-normal text-slate-500"> vs maint</span>
+            </span>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-2">
           <ProgressRing
             value={totals.protein}

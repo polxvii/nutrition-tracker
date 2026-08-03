@@ -6,6 +6,7 @@ export default function ProgressRing({
   color = '#22c55e',
   overColor, // optional: stroke when value > max (e.g. over-budget red)
   underColor, // optional: stroke while value < max (e.g. protein not-yet-hit amber)
+  glow = false, // soft outer glow tinted to the stroke (hero ring only)
   label,
   unit = '',
 }) {
@@ -42,13 +43,16 @@ export default function ProgressRing({
             strokeDasharray={circ}
             strokeDashoffset={offset}
             strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 0.4s ease, stroke 0.3s' }}
+            style={{
+              transition: 'stroke-dashoffset 0.7s cubic-bezier(0.2,0.7,0.2,1), stroke 0.3s',
+              filter: glow ? `drop-shadow(0 0 7px ${strokeColor}99)` : undefined,
+            }}
           />
         </svg>
         <div className="absolute flex flex-col items-center leading-none">
           <span
-            className="font-bold text-white"
-            style={{ fontSize: Math.round(size * 0.22) }}
+            className="font-bold tabular-nums text-white"
+            style={{ fontSize: Math.round(size * 0.22), letterSpacing: '-0.02em' }}
           >
             {Math.round(value)}
           </span>
