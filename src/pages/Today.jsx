@@ -488,24 +488,36 @@ export default function Today() {
 
       {/* Daily summary */}
       <Card className="animate-rise space-y-4">
-        <div className="flex items-center justify-center gap-5">
+        <div className="flex items-center gap-5">
           <ProgressRing
             value={totals.calories}
             max={goalCal}
-            size={120}
-            stroke={11}
+            size={128}
+            stroke={12}
             color={calColor}
-            label="Calories"
-            unit="kcal"
+            centerTop={Math.abs(remaining)}
+            centerBottom={`kcal ${remaining >= 0 ? 'left' : 'over'}`}
           />
-          <div className="text-center">
-            <div className="text-4xl font-bold tabular-nums" style={{ color: calColor, letterSpacing: '-0.02em' }}>
-              {Math.abs(remaining)}
-            </div>
-            <div className="text-sm text-slate-400">kcal {remaining >= 0 ? 'left' : 'over'}</div>
-            {totals.burned > 0 && (
-              <div className="mt-1 text-sm text-slate-400">🔥 {Math.round(totals.burned)} burned</div>
-            )}
+          <div className="flex-1">
+            {(() => {
+              const rows = [
+                { k: 'Eaten', v: Math.round(totals.calories), cls: 'text-white' },
+                { k: 'Goal', v: goalCal, cls: 'text-white' },
+              ]
+              if (totals.burned > 0)
+                rows.push({ k: '🔥 Burned', v: `+${Math.round(totals.burned)}`, cls: 'text-teal-400' })
+              return rows.map((r, i) => (
+                <div
+                  key={r.k}
+                  className={`flex items-baseline justify-between ${i > 0 ? 'pt-2.5' : ''} ${
+                    i < rows.length - 1 ? 'border-b border-white/5 pb-2.5' : ''
+                  }`}
+                >
+                  <span className="text-sm text-slate-400">{r.k}</span>
+                  <span className={`text-base font-semibold tabular-nums ${r.cls}`}>{r.v}</span>
+                </div>
+              ))
+            })()}
           </div>
         </div>
 

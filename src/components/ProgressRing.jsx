@@ -7,6 +7,8 @@ export default function ProgressRing({
   overColor, // optional: stroke when value > max (e.g. over-budget red)
   underColor, // optional: stroke while value < max (e.g. protein not-yet-hit amber)
   glow = false, // soft outer glow tinted to the stroke (hero ring only)
+  centerTop, // override the big center value (e.g. remaining "kcal left")
+  centerBottom, // override the center sub-label
   label,
   unit = '',
 }) {
@@ -50,19 +52,38 @@ export default function ProgressRing({
           />
         </svg>
         <div className="absolute flex flex-col items-center leading-none">
-          <span
-            className="font-bold tabular-nums text-white"
-            style={{ fontSize: Math.round(size * 0.22), letterSpacing: '-0.02em' }}
-          >
-            {Math.round(value)}
-          </span>
-          <span
-            className="text-slate-400"
-            style={{ fontSize: Math.max(9, Math.round(size * 0.1)) }}
-          >
-            /{Math.round(max)}
-            {unit ? ' ' + unit : ''}
-          </span>
+          {centerTop != null ? (
+            <>
+              <span
+                className="font-bold tabular-nums text-white"
+                style={{ fontSize: Math.round(size * 0.26), letterSpacing: '-0.03em' }}
+              >
+                {centerTop}
+              </span>
+              <span
+                className="mt-1 text-slate-400"
+                style={{ fontSize: Math.max(10, Math.round(size * 0.095)) }}
+              >
+                {centerBottom}
+              </span>
+            </>
+          ) : (
+            <>
+              <span
+                className="font-bold tabular-nums text-white"
+                style={{ fontSize: Math.round(size * 0.22), letterSpacing: '-0.02em' }}
+              >
+                {Math.round(value)}
+              </span>
+              <span
+                className="text-slate-400"
+                style={{ fontSize: Math.max(9, Math.round(size * 0.1)) }}
+              >
+                /{Math.round(max)}
+                {unit ? ' ' + unit : ''}
+              </span>
+            </>
+          )}
         </div>
       </div>
       {label && <span className="text-xs font-medium text-slate-300">{label}</span>}
