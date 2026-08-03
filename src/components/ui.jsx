@@ -2,12 +2,17 @@
 
 export function Card({ className = '', children }) {
   return (
-    <div className={`rounded-2xl bg-slate-900 p-4 ${className}`}>{children}</div>
+    <div
+      className={`rounded-2xl border border-white/[0.06] bg-slate-900 p-4 shadow-lg shadow-black/20 ${className}`}
+    >
+      {children}
+    </div>
   )
 }
 
 const buttonStyles = {
-  primary: 'bg-green-600 text-white hover:bg-green-500 active:bg-green-700',
+  primary:
+    'bg-gradient-to-b from-green-500 to-green-600 text-white shadow-lg shadow-green-900/30 hover:from-green-400 hover:to-green-500',
   ghost: 'bg-slate-800 text-slate-200 hover:bg-slate-700',
   danger: 'bg-red-600/90 text-white hover:bg-red-500',
 }
@@ -15,7 +20,7 @@ const buttonStyles = {
 export function Button({ variant = 'primary', className = '', ...props }) {
   return (
     <button
-      className={`rounded-xl px-4 py-2.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${buttonStyles[variant]} ${className}`}
+      className={`rounded-xl px-4 py-2.5 font-medium transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${buttonStyles[variant]} ${className}`}
       {...props}
     />
   )

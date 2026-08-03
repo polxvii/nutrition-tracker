@@ -9,7 +9,7 @@ const tabs = [
 
 export default function BottomNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-slate-800 bg-slate-900/95 backdrop-blur safe-bottom">
+    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-white/[0.06] bg-slate-950/80 backdrop-blur-xl safe-bottom">
       <div className="grid grid-cols-4">
         {tabs.map((t) => (
           <NavLink
@@ -17,13 +17,22 @@ export default function BottomNav() {
             to={t.to}
             end={t.end}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 py-2.5 text-xs transition ${
-                isActive ? 'text-green-400' : 'text-slate-400'
+              `relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition ${
+                isActive ? 'text-green-400' : 'text-slate-500 hover:text-slate-300'
               }`
             }
           >
-            <span className="text-xl leading-none">{t.icon}</span>
-            <span>{t.label}</span>
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span className="absolute top-0 h-0.5 w-8 rounded-full bg-green-400" />
+                )}
+                <span className={`text-xl leading-none transition ${isActive ? '' : 'opacity-80'}`}>
+                  {t.icon}
+                </span>
+                <span>{t.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </div>

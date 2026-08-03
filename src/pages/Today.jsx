@@ -58,16 +58,22 @@ export default function Today() {
   const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
   const [mealName, setMealName] = useState('')
   const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
+  const [fabOpen, setFabOpen] = useState(false) // floating add-menu open?
   const [busy, setBusy] = useState(false)
 
   const closePanels = () => {
     setShowAdd(false)
     setShowExercise(false)
   }
-  const togglePanel = (isOpen, open) => () => {
-    const next = !isOpen
+  const openFood = () => {
+    setFabOpen(false)
     closePanels()
-    open(next)
+    setShowAdd(true)
+  }
+  const openExercise = () => {
+    setFabOpen(false)
+    closePanels()
+    setShowExercise(true)
   }
 
   const setDate = (d) =>
@@ -528,53 +534,62 @@ export default function Today() {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2">
-          <ProgressRing
-            value={totals.protein}
-            max={profile?.goal_protein_g ?? 0}
-            size={92}
-            stroke={8}
-            color="#22c55e"
-            underColor="#f59e0b"
-            label="Protein"
-            unit="g"
-          />
-          <ProgressRing
-            value={totals.carbs}
-            max={profile?.goal_carbs_g ?? 0}
-            size={92}
-            stroke={8}
-            color="#3b82f6"
-            overColor="#ef4444"
-            label="Carbs"
-            unit="g"
-          />
-          <ProgressRing
-            value={totals.fat}
-            max={profile?.goal_fat_g ?? 0}
-            size={92}
-            stroke={8}
-            color="#94a3b8"
-            overColor="#ef4444"
-            label="Fat"
-            unit="g"
-          />
+        <div className="space-y-3">
+          {[
+            {
+              label: 'Protein',
+              val: totals.protein,
+              goal: profile?.goal_protein_g ?? 0,
+              // reach it → green; short → amber
+              over: false,
+              color:
+                (profile?.goal_protein_g ?? 0) > 0 && totals.protein >= (profile?.goal_protein_g ?? 0)
+                  ? '#22c55e'
+                  : '#f59e0b',
+            },
+            {
+              label: 'Carbs',
+              val: totals.carbs,
+              goal: profile?.goal_carbs_g ?? 0,
+              color:
+                (profile?.goal_carbs_g ?? 0) > 0 && totals.carbs > (profile?.goal_carbs_g ?? 0)
+                  ? '#ef4444'
+                  : '#3b82f6',
+            },
+            {
+              label: 'Fat',
+              val: totals.fat,
+              goal: profile?.goal_fat_g ?? 0,
+              color:
+                (profile?.goal_fat_g ?? 0) > 0 && totals.fat > (profile?.goal_fat_g ?? 0)
+                  ? '#ef4444'
+                  : '#94a3b8',
+            },
+          ].map((m) => {
+            const pct = m.goal > 0 ? Math.min((m.val / m.goal) * 100, 100) : 0
+            return (
+              <div key={m.label} className="space-y-1.5">
+                <div className="flex items-baseline justify-between text-xs">
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />
+                    {m.label}
+                  </span>
+                  <span className="tabular-nums text-slate-400">
+                    <b className="text-sm font-semibold text-white">{Math.round(m.val)}</b>
+                    {m.goal > 0 ? ` / ${m.goal} g` : ' g'}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-700"
+                    style={{ width: `${pct}%`, background: m.color }}
+                  />
+                </div>
+              </div>
+            )
+          })}
         </div>
       </Card>
-
-      {/* Quick actions */}
-      <div className="space-y-2">
-        <Button className="w-full py-3.5 text-base" onClick={togglePanel(showAdd, setShowAdd)}>
-          ＋ Add food
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full text-sm"
-          onClick={togglePanel(showExercise, setShowExercise)}
-        >
-          🏃 Exercise
-        </Button>
-      </div>
 
       {showAdd && (
         <Card>
@@ -606,7 +621,7 @@ export default function Today() {
       )}
 
       {/* Log list */}
-      <div className="space-y-2">
+      <div className="animate-rise space-y-2" style={{ animationDelay: '0.08s' }}>
         <h2 className="text-sm font-medium text-slate-300">
           {isToday ? "Today's log" : 'Log'}
         </h2>
@@ -676,7 +691,7 @@ export default function Today() {
                         </button>
                         <div className="ml-3 flex items-center gap-3">
                           <span
-                            className={`whitespace-nowrap text-sm font-medium ${
+                            className={`whitespace-nowrap text-sm font-medium tabular-nums ${
                               isEx ? 'text-green-400' : 'text-slate-200'
                             }`}
                           >
@@ -805,6 +820,44 @@ export default function Today() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Floating add — opens Food or Exercise (same flow as before) */}
+      {swipeEnabled && (
+        <>
+          {fabOpen && (
+            <div className="fixed inset-0 z-20" onClick={() => setFabOpen(false)} />
+          )}
+          <div className="pointer-events-none fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4">
+            <div className="flex flex-col items-end gap-2">
+              {fabOpen && (
+                <>
+                  <button
+                    onClick={openExercise}
+                    className="animate-rise pointer-events-auto flex items-center gap-2 rounded-full border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow-lg"
+                  >
+                    🏃 Exercise
+                  </button>
+                  <button
+                    onClick={openFood}
+                    className="animate-rise pointer-events-auto flex items-center gap-2 rounded-full border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow-lg"
+                  >
+                    🍽 Food
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setFabOpen((o) => !o)}
+                aria-label="Add"
+                className="pointer-events-auto grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-green-500 to-green-600 text-white shadow-xl shadow-green-900/40 transition active:scale-95"
+              >
+                <span className={`text-3xl leading-none transition-transform ${fabOpen ? 'rotate-45' : ''}`}>
+                  ＋
+                </span>
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
