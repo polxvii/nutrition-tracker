@@ -27,10 +27,12 @@ export default function EntryEditor({
   recent = [],
   saved = [],
   meals = [],
+  onSaveFrequent,
 }) {
   const isEx = entry.source === 'exercise'
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
   const [addingItem, setAddingItem] = useState(false)
+  const [savedFreq, setSavedFreq] = useState(false)
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -361,6 +363,24 @@ export default function EntryEditor({
           edit the values if needed.
         </p>
       )}
+
+      {!isEx &&
+        onSaveFrequent &&
+        (savedFreq ? (
+          <p className="text-center text-sm text-green-400">⭐ Saved to your foods</p>
+        ) : (
+          <Button
+            variant="ghost"
+            className="w-full text-sm"
+            disabled={busy}
+            onClick={async () => {
+              await onSaveFrequent(build())
+              setSavedFreq(true)
+            }}
+          >
+            ⭐ Save to Saved foods
+          </Button>
+        ))}
 
       <div className="flex flex-wrap gap-2">
         <Button className="flex-1" disabled={busy} onClick={() => onSave(build())}>

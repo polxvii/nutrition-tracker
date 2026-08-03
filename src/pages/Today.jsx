@@ -53,8 +53,6 @@ export default function Today() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [showExercise, setShowExercise] = useState(false)
-  const [repeatOpen, setRepeatOpen] = useState(false)
-  const [repeatFrom, setRepeatFrom] = useState('')
   const [editingEntry, setEditingEntry] = useState(null)
   const [mealPicker, setMealPicker] = useState(null) // { groupKey }
   const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
@@ -65,7 +63,6 @@ export default function Today() {
   const closePanels = () => {
     setShowAdd(false)
     setShowExercise(false)
-    setRepeatOpen(false)
   }
   const togglePanel = (isOpen, open) => () => {
     const next = !isOpen
@@ -420,56 +417,6 @@ export default function Today() {
     await supabase.from('frequent_foods').delete().eq('id', id)
   }
 
-  function toggleRepeat() {
-    const next = !repeatOpen
-    closePanels()
-    if (next) {
-      setRepeatFrom(shiftDate(selectedDate, -1))
-      setRepeatOpen(true)
-    }
-  }
-
-  async function copyFromDay() {
-    if (!repeatFrom) return
-    if (repeatFrom === selectedDate) {
-      alert('Pick a different day')
-      return
-    }
-    setBusy(true)
-    const { start, end } = dayRange(dateObj(repeatFrom))
-    const { data } = await supabase
-      .from('food_logs')
-      .select('*')
-      .gte('logged_at', start)
-      .lt('logged_at', end)
-    if (!data || data.length === 0) {
-      setBusy(false)
-      alert('No entries on that day')
-      return
-    }
-    const ts = timestampFor(selectedDate)
-    const rows = data.map((l) => ({
-      user_id: user.id,
-      logged_at: ts,
-      meal_type: l.meal_type,
-      food_name: l.food_name,
-      source: l.source,
-      grams: l.grams,
-      calories: l.calories,
-      protein_g: l.protein_g,
-      carbs_g: l.carbs_g,
-      fat_g: l.fat_g,
-    }))
-    const { error } = await supabase.from('food_logs').insert(rows)
-    setBusy(false)
-    if (error) {
-      alert(error.message)
-      return
-    }
-    setRepeatOpen(false)
-    await load()
-  }
-
   async function deleteLog(id) {
     setLogs((prev) => prev.filter((l) => l.id !== id))
     await supabase.from('food_logs').delete().eq('id', id)
@@ -506,7 +453,7 @@ export default function Today() {
     await load()
   }
 
-  const swipeEnabled = !(showAdd || showExercise || repeatOpen || editingEntry || mealPicker)
+  const swipeEnabled = !(showAdd || showExercise || editingEntry || mealPicker)
 
   return (
     <div className="mx-auto max-w-md space-y-4 p-4" {...(swipeEnabled ? daySwipe : {})}>
@@ -600,14 +547,13 @@ export default function Today() {
         <Button className="w-full py-3.5 text-base" onClick={togglePanel(showAdd, setShowAdd)}>
           ＋ Add food
         </Button>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="ghost" className="text-sm" onClick={togglePanel(showExercise, setShowExercise)}>
-            🏃 Exercise
-          </Button>
-          <Button variant="ghost" className="text-sm" onClick={toggleRepeat}>
-            🔁 Repeat day
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          className="w-full text-sm"
+          onClick={togglePanel(showExercise, setShowExercise)}
+        >
+          🏃 Exercise
+        </Button>
       </div>
 
       {showAdd && (
@@ -638,27 +584,6 @@ export default function Today() {
           />
         </Card>
       )}
-
-      {repeatOpen && (
-        <Card className="space-y-2">
-          <p className="text-sm text-slate-300">
-            Copy all meals from a day into {isToday ? 'today' : selectedDate}:
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={repeatFrom}
-              max={todayISODate()}
-              onChange={(e) => setRepeatFrom(e.target.value)}
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none focus:border-green-500"
-            />
-            <Button onClick={copyFromDay} disabled={busy || !repeatFrom}>
-              {busy ? '…' : 'Copy'}
-            </Button>
-          </div>
-        </Card>
-      )}
-
 
       {/* Log list */}
       <div className="space-y-2">
@@ -779,6 +704,7 @@ export default function Today() {
               recent={recent}
               saved={frequents}
               meals={savedMeals}
+              onSaveFrequent={upsertFrequent}
             />
           </div>
         </div>
