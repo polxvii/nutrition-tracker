@@ -1,7 +1,18 @@
 import { useState } from 'react'
 import { Button, Field, Input } from './ui'
 
-export default function ExerciseForm({ onSubmit, onCancel, busy }) {
+// Rough kcal starting points for first-timers with no history yet. These are
+// just prefills — the user adjusts before adding.
+const PRESETS = [
+  { name: 'Running', calories: 300 },
+  { name: 'Walking', calories: 120 },
+  { name: 'Cycling', calories: 250 },
+  { name: 'Gym / Weights', calories: 200 },
+  { name: 'Swimming', calories: 300 },
+  { name: 'Yoga', calories: 150 },
+]
+
+export default function ExerciseForm({ onSubmit, onCancel, busy, recent = [] }) {
   const [name, setName] = useState('')
   const [kcal, setKcal] = useState('')
 
@@ -13,14 +24,41 @@ export default function ExerciseForm({ onSubmit, onCancel, busy }) {
     setKcal('')
   }
 
+  // Your own exercises first (real kcal), then any presets you haven't done.
+  const seen = new Set(recent.map((r) => (r.name || '').toLowerCase()))
+  const chips = [...recent, ...PRESETS.filter((p) => !seen.has(p.name.toLowerCase()))].slice(0, 10)
+
+  const pick = (c) => {
+    setName(c.name)
+    setKcal(c.calories ? String(Math.round(c.calories)) : '')
+  }
+
   return (
     <form onSubmit={submit} className="space-y-3">
+      {chips.length > 0 && (
+        <div>
+          <div className="mb-1 text-xs text-slate-400">Quick pick — tap to fill, then adjust</div>
+          <div className="flex flex-wrap gap-1.5">
+            {chips.map((c, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => pick(c)}
+                className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700 active:bg-slate-600"
+              >
+                {c.name}
+                {c.calories ? ` · ${Math.round(c.calories)}` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <Field label="Exercise">
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Running, Gym, Walk"
-          autoFocus
         />
       </Field>
       <Field label="Calories burned (kcal)">

@@ -59,6 +59,7 @@ export default function Today() {
   const [mealPicker, setMealPicker] = useState(null) // { groupKey }
   const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
   const [mealName, setMealName] = useState('')
+  const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
   const [busy, setBusy] = useState(false)
 
   const closePanels = () => {
@@ -85,7 +86,7 @@ export default function Today() {
   const load = useCallback(async () => {
     setLoading(true)
     const { start, end } = dayRange(dateObj(selectedDate))
-    const [logsRes, freqRes, recentRes, mealsRes] = await Promise.all([
+    const [logsRes, freqRes, recentRes, mealsRes, exRes] = await Promise.all([
       supabase
         .from('food_logs')
         .select('*')
@@ -107,6 +108,12 @@ export default function Today() {
         .from('saved_meals')
         .select('*')
         .order('created_at', { ascending: false }),
+      supabase
+        .from('food_logs')
+        .select('food_name,calories,created_at')
+        .eq('source', 'exercise')
+        .order('created_at', { ascending: false })
+        .limit(60),
     ])
     setLogs(logsRes.data ?? [])
     setFrequents(freqRes.data ?? [])
@@ -122,6 +129,17 @@ export default function Today() {
       if (recentFoods.length >= 25) break
     }
     setRecent(recentFoods)
+    // Recent exercises, de-duped by name (keeps the most recent kcal).
+    const exSeen = new Set()
+    const exList = []
+    for (const l of exRes.data ?? []) {
+      const k = (l.food_name || '').toLowerCase()
+      if (!k || exSeen.has(k)) continue
+      exSeen.add(k)
+      exList.push({ name: l.food_name, calories: Math.round(num(l.calories)) })
+      if (exList.length >= 8) break
+    }
+    setRecentExercises(exList)
     setLoading(false)
   }, [selectedDate])
 
@@ -616,6 +634,7 @@ export default function Today() {
             onSubmit={handleAddExercise}
             onCancel={() => setShowExercise(false)}
             busy={busy}
+            recent={recentExercises}
           />
         </Card>
       )}
