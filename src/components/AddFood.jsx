@@ -498,7 +498,7 @@ export default function AddFood({
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <Button className="text-sm" onClick={() => openAI()}>
+        <Button className="text-sm" onClick={() => openAI(q.trim())}>
           🤖 AI
         </Button>
         <Button variant="ghost" className="text-sm" onClick={() => setView('scan')}>
