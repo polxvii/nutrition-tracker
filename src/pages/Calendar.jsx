@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
+import { loadGoalHistory, goalForDate } from '../lib/goalHistory'
 import { Card } from '../components/ui'
 
 const num = (v) => {
@@ -20,6 +21,7 @@ export default function Calendar() {
   const [byDate, setByDate] = useState({})
   const [monthWeight, setMonthWeight] = useState(null)
   const [streak, setStreak] = useState(0)
+  const [goalHist, setGoalHist] = useState([]) // goal snapshots (ascending by date)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -96,6 +98,10 @@ export default function Calendar() {
     // Streak is global (not tied to the viewed month); compute once per mount.
   }, [])
 
+  useEffect(() => {
+    loadGoalHistory().then(setGoalHist)
+  }, [])
+
   const goalCal = profile?.goal_calories ?? 0
   const monthName = new Date(cursor.y, cursor.m, 1).toLocaleDateString('en-US', {
     month: 'long',
@@ -125,7 +131,16 @@ export default function Calendar() {
         f: Math.round(logged.reduce((s, b) => s + b.f, 0) / nLogged),
       }
     : null
-  const onTarget = goalCal > 0 ? logged.filter((b) => netOf(b) <= goalCal).length : null
+  // Days at or under the goal that was in effect on each day (history-aware, so
+  // it doesn't shift when you change your goal). Needs the date key, so iterate
+  // entries rather than the value-only `logged` array.
+  const goalOn = (k) => goalForDate(goalHist, k)?.goal_calories ?? goalCal
+  const maintOn = (k) => goalForDate(goalHist, k)?.tdee ?? tdee
+  const loggedEntries = Object.entries(byDate).filter(([, b]) => b.cal > 0)
+  const onTarget =
+    goalCal > 0 || goalHist.length
+      ? loggedEntries.filter(([k, b]) => goalOn(k) > 0 && netOf(b) <= goalOn(k)).length
+      : null
 
   // Predicted weight impact: (net eaten − maintenance TDEE) / 7700 kcal-per-kg.
   const tdee = profile?.tdee ?? 0
@@ -137,21 +152,24 @@ export default function Calendar() {
 
   // Net-kcal colour tier, matching the Progress adherence chart:
   // green ≤ goal · amber over goal · red over maintenance.
-  const kcalTier = (v) =>
-    tdee > 0 && v > tdee
-      ? 'text-red-400'
-      : goalCal > 0 && v > goalCal
-        ? 'text-amber-400'
-        : 'text-green-400'
+  // 3-tier text colour for a value against a given goal / maintenance:
+  // green ≤ goal · amber over goal · red over maintenance.
+  const tierText = (v, g, m) =>
+    m > 0 && v > m ? 'text-red-400' : g > 0 && v > g ? 'text-amber-400' : 'text-green-400'
+  // Aggregate helper (month tile) uses the current goal.
+  const kcalTier = (v) => tierText(v, goalCal, tdee)
 
   // Heatmap tint for a day cell — same 3-tier scale as the text colour, but as a
-  // faint background so the whole month reads at a glance. Days with no food fall
-  // back to neutral: exercise-only, future (dimmer), or past-unlogged.
+  // faint background so the whole month reads at a glance. Each day is judged
+  // against the goal in effect *that* day. Days with no food fall back to
+  // neutral: exercise-only, future (dimmer), or past-unlogged.
   const cellStyle = (b, k) => {
     if (b && b.cal > 0) {
       const net = netOf(b)
-      if (tdee > 0 && net > tdee) return 'border-red-500/40 bg-red-500/10'
-      if (goalCal > 0 && net > goalCal) return 'border-amber-500/40 bg-amber-500/10'
+      const g = goalOn(k)
+      const m = maintOn(k)
+      if (m > 0 && net > m) return 'border-red-500/40 bg-red-500/10'
+      if (g > 0 && net > g) return 'border-amber-500/40 bg-amber-500/10'
       return 'border-green-500/40 bg-green-500/10'
     }
     if (b && b.burned > 0) return 'border-slate-700 bg-slate-900' // exercise only
@@ -196,6 +214,9 @@ export default function Calendar() {
           const wAvg = bs.length
             ? Math.round(bs.reduce((s, b) => s + netOf(b), 0) / bs.length)
             : null
+          // colour the week avg against the goal at the week's last in-month day
+          const lastDay = [...week].reverse().find((d) => d != null)
+          const wKey = lastDay ? keyFor(lastDay) : today
           return (
             <Fragment key={wi}>
               {week.map((d, di) => {
@@ -217,7 +238,9 @@ export default function Calendar() {
                     <span className="text-[11px] text-slate-400">{d}</span>
                     {hasFood ? (
                       <>
-                        <span className={`text-[11px] font-semibold ${kcalTier(net)}`}>
+                        <span
+                          className={`text-[11px] font-semibold ${tierText(net, goalOn(k), maintOn(k))}`}
+                        >
                           {net}
                         </span>
                         <span className="text-[8px] leading-tight text-slate-500">
@@ -241,7 +264,9 @@ export default function Calendar() {
                 </span>
                 {wAvg != null ? (
                   <>
-                    <span className={`text-[12px] font-bold tabular-nums ${kcalTier(wAvg)}`}>
+                    <span
+                      className={`text-[12px] font-bold tabular-nums ${tierText(wAvg, goalOn(wKey), maintOn(wKey))}`}
+                    >
                       {wAvg}
                     </span>
                     <span className="text-[7px] text-slate-400">{bs.length}d avg</span>
@@ -321,7 +346,7 @@ export default function Calendar() {
               </div>
               {onTarget != null && (
                 <p className="text-center text-xs text-slate-500">
-                  {onTarget}/{nLogged} days at or under goal ({goalCal} kcal)
+                  {onTarget}/{nLogged} days at or under goal
                 </p>
               )}
               {predictedKg != null && (

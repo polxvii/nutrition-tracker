@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
 import { Button, Card, Field, Input } from '../components/ui'
 import BodyMeasurements from '../components/BodyMeasurements'
+import { loadGoalHistory, goalForDate, recordGoalHistory } from '../lib/goalHistory'
 
 const RANGES = [
   { days: 7, label: '7d' },
@@ -82,8 +83,10 @@ function trendVerdict(rate, goalType) {
 function BarTooltip({ active, payload, goalCal, maint }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
-  const overGoal = goalCal > 0 && d.kcal > goalCal
-  const overMaint = maint > 0 && d.kcal > maint
+  const g = d.dayGoal || goalCal // that day's goal / maintenance (history-aware)
+  const m = d.dayMaint || maint
+  const overGoal = g > 0 && d.kcal > g
+  const overMaint = m > 0 && d.kcal > m
   const cls = overMaint ? 'text-red-400' : overGoal ? 'text-amber-400' : 'text-green-400'
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs">
@@ -93,8 +96,8 @@ function BarTooltip({ active, payload, goalCal, maint }) {
         {overMaint ? ' · over maintenance' : overGoal ? ' · over goal' : ' · on target'}
       </div>
       <div className="text-slate-500">
-        goal {goalCal || '–'}
-        {maint > 0 ? ` · maint ${maint}` : ''}
+        goal {g || '–'}
+        {m > 0 ? ` · maint ${m}` : ''}
       </div>
       <div className="text-slate-400">
         {Math.round(d.protein)}P · {Math.round(d.carbs)}C · {Math.round(d.fat)}F
@@ -108,6 +111,7 @@ export default function Weight() {
   const { user, profile, refreshProfile } = useAuth()
   const [weightLogs, setWeightLogs] = useState([])
   const [foodByDay, setFoodByDay] = useState([])
+  const [goalHist, setGoalHist] = useState([]) // goal snapshots, ascending by date
   const [preset, setPreset] = useState('30d') // must match a RANGES label
   // Preset "Nd" = last N days *including today*, so it reads /N not /N+1.
   const [fromDate, setFromDate] = useState(isoDaysAgo(29))
@@ -162,6 +166,10 @@ export default function Weight() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    loadGoalHistory().then(setGoalHist)
+  }, [])
 
   async function save(e) {
     e.preventDefault()
@@ -224,9 +232,15 @@ export default function Weight() {
 
   // Adherence over the range.
   const foodData = useMemo(
-    () => foodByDay.filter((d) => inPeriod(d.date)).map((d) => ({ ...d, label: d.date.slice(5) })),
+    () =>
+      foodByDay.filter((d) => inPeriod(d.date)).map((d) => {
+        // The goal + maintenance that were in effect on this specific day, so
+        // each bar is coloured against its own target (not the current one).
+        const g = goalForDate(goalHist, d.date)
+        return { ...d, label: d.date.slice(5), dayGoal: g?.goal_calories ?? 0, dayMaint: g?.tdee ?? 0 }
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [foodByDay, fromDate, toDate]
+    [foodByDay, fromDate, toDate, goalHist]
   )
   const goalCal = profile?.goal_calories ?? 0
   const goalProtein = profile?.goal_protein_g ?? 0
@@ -301,10 +315,15 @@ export default function Weight() {
     if (days.length === 0) return { ready: false }
     const n = days.length
     const totalNet = days.reduce((s, d) => s + d.kcal, 0) // net of exercise
-    const maint = profile?.tdee || 0
-    const vsGoal = goalCal > 0 ? Math.round(totalNet - goalCal * n) : null
-    const vsMaint = maint > 0 ? Math.round(totalNet - maint * n) : null
+    // Sum each day's own goal + maintenance (from history) so the recap is exact
+    // across a period where the goal changed — not a flat current-goal × n.
+    const curMaint = profile?.tdee || 0
+    const totalGoal = days.reduce((s, d) => s + (d.dayGoal || goalCal), 0)
+    const totalMaint = days.reduce((s, d) => s + (d.dayMaint || curMaint), 0)
+    const vsGoal = totalGoal > 0 ? Math.round(totalNet - totalGoal) : null
+    const vsMaint = totalMaint > 0 ? Math.round(totalNet - totalMaint) : null
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
+    const maint = totalMaint > 0 ? Math.round(totalMaint / n) : curMaint // avg, for display
     return { ready: true, n, vsGoal, vsMaint, predictedKg, maint }
   }, [foodData, goalCal, intakeFloor, profile])
 
@@ -380,6 +399,14 @@ export default function Weight() {
       alert(error.message)
       return
     }
+    // Snapshot the new goal so days from today on are judged against it.
+    await recordGoalHistory(user.id, {
+      goal_calories: newCal,
+      goal_protein_g: protein,
+      goal_carbs_g: carbs,
+      goal_fat_g: fat,
+      tdee: profile?.tdee,
+    })
     await refreshProfile()
   }
 
@@ -636,18 +663,23 @@ export default function Weight() {
                   <ReferenceLine y={maint} stroke="#ef4444" strokeDasharray="4 4" />
                 )}
                 <Bar dataKey="kcal" name="kcal" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  {foodData.map((d, i) => (
-                    <Cell
-                      key={i}
-                      fill={
-                        maint > 0 && d.kcal > maint
-                          ? '#ef4444'
-                          : goalCal > 0 && d.kcal > goalCal
-                            ? '#f59e0b'
-                            : '#22c55e'
-                      }
-                    />
-                  ))}
+                  {foodData.map((d, i) => {
+                    // colour against THIS day's goal/maintenance (history-aware)
+                    const dg = d.dayGoal || goalCal
+                    const dm = d.dayMaint || maint
+                    return (
+                      <Cell
+                        key={i}
+                        fill={
+                          dm > 0 && d.kcal > dm
+                            ? '#ef4444'
+                            : dg > 0 && d.kcal > dg
+                              ? '#f59e0b'
+                              : '#22c55e'
+                        }
+                      />
+                    )
+                  })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

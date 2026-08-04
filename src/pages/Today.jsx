@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
 import { mealForNow } from '../lib/mealWindows'
+import { loadGoalHistory, goalForDate } from '../lib/goalHistory'
 import ProgressRing from '../components/ProgressRing'
 import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
@@ -57,6 +58,7 @@ export default function Today() {
   const [editingEntry, setEditingEntry] = useState(null)
   const [mealPicker, setMealPicker] = useState(null) // { groupKey }
   const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
+  const [goalHist, setGoalHist] = useState([]) // goal snapshots (ascending by date)
   const [mealName, setMealName] = useState('')
   const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
   const [busy, setBusy] = useState(false)
@@ -145,6 +147,10 @@ export default function Today() {
     load()
   }, [load])
 
+  useEffect(() => {
+    loadGoalHistory().then(setGoalHist)
+  }, [])
+
   const totals = useMemo(
     () =>
       logs.reduce(
@@ -175,13 +181,20 @@ export default function Today() {
     return g
   }, [logs])
 
-  const goalCal = profile?.goal_calories ?? 0
+  // Targets that were in effect on the *viewed* day (history-aware), so a past
+  // day is judged against its own goal — changing your goal later won't recolour
+  // it. For today this resolves to the current goal.
+  const dayTargets = goalForDate(goalHist, selectedDate)
+  const goalCal = dayTargets?.goal_calories ?? profile?.goal_calories ?? 0
+  const goalProtein = dayTargets?.goal_protein_g ?? profile?.goal_protein_g ?? 0
+  const goalCarbs = dayTargets?.goal_carbs_g ?? profile?.goal_carbs_g ?? 0
+  const goalFat = dayTargets?.goal_fat_g ?? profile?.goal_fat_g ?? 0
   // Remaining = goal − eaten + burned (exercise gives calories back).
   const remaining = Math.round(goalCal - totals.calories + totals.burned)
   // Net kcal tiered like Progress/Calendar (green ≤ goal · amber over goal ·
   // red over maintenance) — colours the calorie ring and the "over" number.
   const netCal = totals.calories - totals.burned
-  const maint = profile?.tdee ?? 0
+  const maint = dayTargets?.tdee ?? profile?.tdee ?? 0
   const calColor =
     maint > 0 && netCal > maint
       ? '#ef4444'
@@ -575,31 +588,22 @@ export default function Today() {
             {
               label: 'Protein',
               val: totals.protein,
-              goal: profile?.goal_protein_g ?? 0,
+              goal: goalProtein,
               // reach it → green; short → amber
               over: false,
-              color:
-                (profile?.goal_protein_g ?? 0) > 0 && totals.protein >= (profile?.goal_protein_g ?? 0)
-                  ? '#22c55e'
-                  : '#f59e0b',
+              color: goalProtein > 0 && totals.protein >= goalProtein ? '#22c55e' : '#f59e0b',
             },
             {
               label: 'Carbs',
               val: totals.carbs,
-              goal: profile?.goal_carbs_g ?? 0,
-              color:
-                (profile?.goal_carbs_g ?? 0) > 0 && totals.carbs > (profile?.goal_carbs_g ?? 0)
-                  ? '#ef4444'
-                  : '#3b82f6',
+              goal: goalCarbs,
+              color: goalCarbs > 0 && totals.carbs > goalCarbs ? '#ef4444' : '#3b82f6',
             },
             {
               label: 'Fat',
               val: totals.fat,
-              goal: profile?.goal_fat_g ?? 0,
-              color:
-                (profile?.goal_fat_g ?? 0) > 0 && totals.fat > (profile?.goal_fat_g ?? 0)
-                  ? '#ef4444'
-                  : '#94a3b8',
+              goal: goalFat,
+              color: goalFat > 0 && totals.fat > goalFat ? '#ef4444' : '#94a3b8',
             },
           ].map((m) => {
             const pct = m.goal > 0 ? Math.min((m.val / m.goal) * 100, 100) : 0

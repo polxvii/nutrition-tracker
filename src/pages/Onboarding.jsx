@@ -13,6 +13,7 @@ import {
 import ProfileFields from '../components/ProfileFields'
 import TargetsEditor from '../components/TargetsEditor'
 import { Button, Card } from '../components/ui'
+import { recordGoalHistory } from '../lib/goalHistory'
 
 export default function Onboarding() {
   const { user, refreshProfile } = useAuth()
@@ -46,6 +47,7 @@ export default function Onboarding() {
       setBusy(false)
       return
     }
+    await recordGoalHistory(user.id, payload) // snapshot the initial goal
     await refreshProfile()
     navigate('/', { replace: true })
   }

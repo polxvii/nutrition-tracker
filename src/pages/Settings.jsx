@@ -14,6 +14,7 @@ import TargetsEditor from '../components/TargetsEditor'
 import ApiKeyManager from '../components/ApiKeyManager'
 import MealWindowsCard from '../components/MealWindowsCard'
 import { Button, Card } from '../components/ui'
+import { recordGoalHistory } from '../lib/goalHistory'
 
 export default function Settings() {
   const { user, profile, refreshProfile, signOut } = useAuth()
@@ -54,6 +55,7 @@ export default function Settings() {
       setBusy(false)
       return
     }
+    await recordGoalHistory(user.id, payload) // snapshot today's goal for history
     await refreshProfile()
     setBusy(false)
     setSaved(true)

@@ -274,5 +274,42 @@ create trigger user_api_keys_limit
 grant select, insert, update, delete on public.user_api_keys to authenticated;
 
 -- =====================================================================
+--  goal_history : snapshot of the calorie/macro/maintenance targets in
+--  effect from a given date. Lets each day be judged against the goal that
+--  was active *that* day, so changing your goal later doesn't recolour the
+--  past. One row per (user, effective_from); re-applying today upserts.
+-- =====================================================================
+create table if not exists public.goal_history (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users (id) on delete cascade,
+  effective_from date not null,
+  goal_calories  integer,
+  goal_protein_g integer,
+  goal_carbs_g   integer,
+  goal_fat_g     integer,
+  tdee           integer,
+  created_at     timestamptz not null default now(),
+  unique (user_id, effective_from)
+);
+create index if not exists goal_history_user_date_idx
+  on public.goal_history (user_id, effective_from);
+
+alter table public.goal_history enable row level security;
+drop policy if exists goal_history_all_own on public.goal_history;
+create policy goal_history_all_own on public.goal_history
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.goal_history to authenticated;
+
+-- Backfill: seed each existing profile's current goal effective from account
+-- creation, so all past logs stay coloured by that goal until it's changed.
+insert into public.goal_history
+  (user_id, effective_from, goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g, tdee)
+select id, created_at::date, goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g, tdee
+  from public.profiles
+  where goal_calories is not null
+on conflict (user_id, effective_from) do nothing;
+
+-- =====================================================================
 --  Done. Tables + RLS + grants ready.
 -- =====================================================================
