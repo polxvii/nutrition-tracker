@@ -34,6 +34,7 @@ export default function EntryEditor({
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
   const [serv, setServ] = useState(1) // dish serving multiplier (scales all components)
+  const [servText, setServText] = useState('1') // editable text buffer for the multiplier
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -101,36 +102,49 @@ export default function EntryEditor({
   }
   const removeComp = (i) => setComps((prev) => prev.filter((_, idx) => idx !== i))
 
-  // Serving stepper at the dish level: scale every component (its current value
-  // AND its grams-scaling base) by a ratio, so one control resizes the whole dish
-  // instead of editing each sub-item. Composes with per-item edits and add/remove.
-  function stepServ(delta) {
-    const next = Math.round((serv + delta) * 10) / 10
-    if (next < 0.5) return
+  // Serving control at the dish level: scale every component (its current value
+  // AND its grams-scaling base) so one control resizes the whole dish instead of
+  // editing each sub-item. Composes with per-item edits and add/remove. Applied
+  // as a single ratio per commit (button click or typed value on blur/Enter) so
+  // free-typing can't compound rounding or divide by an in-progress empty value.
+  function applyServ(next) {
+    if (!(next > 0)) return
     const r = next / serv
-    const s = (n) => Math.round(num(n) * r)
-    setComps((prev) =>
-      prev.map((it) => {
-        const base = it._base || it
-        return {
-          ...it,
-          grams: s(it.grams),
-          calories: s(it.calories),
-          protein_g: s(it.protein_g),
-          carbs_g: s(it.carbs_g),
-          fat_g: s(it.fat_g),
-          _base: {
-            ...base,
-            grams: s(base.grams),
-            calories: s(base.calories),
-            protein_g: s(base.protein_g),
-            carbs_g: s(base.carbs_g),
-            fat_g: s(base.fat_g),
-          },
-        }
-      })
-    )
+    if (r !== 1) {
+      const s = (n) => Math.round(num(n) * r)
+      setComps((prev) =>
+        prev.map((it) => {
+          const base = it._base || it
+          return {
+            ...it,
+            grams: s(it.grams),
+            calories: s(it.calories),
+            protein_g: s(it.protein_g),
+            carbs_g: s(it.carbs_g),
+            fat_g: s(it.fat_g),
+            _base: {
+              ...base,
+              grams: s(base.grams),
+              calories: s(base.calories),
+              protein_g: s(base.protein_g),
+              carbs_g: s(base.carbs_g),
+              fat_g: s(base.fat_g),
+            },
+          }
+        })
+      )
+    }
     setServ(next)
+    setServText(String(next))
+  }
+  const stepServ = (delta) => {
+    const next = Math.round((serv + delta) * 10) / 10
+    if (next >= 0.5) applyServ(next)
+  }
+  const commitServ = () => {
+    const n = num(servText)
+    if (n > 0) applyServ(Math.round(n * 100) / 100)
+    else setServText(String(serv)) // revert empty / invalid
   }
 
   // Append food(s) chosen via the full Add-food picker (search / barcode / AI /
@@ -322,21 +336,33 @@ export default function EntryEditor({
               <div className="text-sm font-medium text-slate-200">Servings</div>
               <div className="text-[11px] text-slate-500">scales the whole dish</div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => stepServ(-0.5)}
                 disabled={serv <= 0.5}
-                className="h-8 w-8 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
+                className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
                 aria-label="Fewer servings"
               >
                 −
               </button>
-              <span className="w-12 text-center text-base font-bold tabular-nums text-white">
-                ×{serv}
-              </span>
+              <div className="flex items-center">
+                <span className="text-slate-400">×</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={servText}
+                  onChange={(e) => setServText(e.target.value)}
+                  onBlur={commitServ}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                  }}
+                  className="w-14 px-1 text-center text-base font-bold tabular-nums"
+                  aria-label="Servings"
+                />
+              </div>
               <button
                 onClick={() => stepServ(0.5)}
-                className="h-8 w-8 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
+                className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
                 aria-label="More servings"
               >
                 ＋
