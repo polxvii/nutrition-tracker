@@ -10,6 +10,7 @@ import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
+import SwipeRow from '../components/SwipeRow'
 import { Button, Card, Input, Skeleton } from '../components/ui'
 
 const num = (v) => {
@@ -422,6 +423,21 @@ export default function Today() {
     await supabase.from('food_logs').delete().eq('id', id)
   }
 
+  // Duplicate a logged entry into the currently selected day.
+  async function duplicateLog(l) {
+    const { id, created_at, logged_at, ...rest } = l
+    setBusy(true)
+    const { error } = await supabase
+      .from('food_logs')
+      .insert({ ...rest, logged_at: timestampFor(selectedDate) })
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await load()
+  }
+
   async function saveEntry(patch) {
     const { date, ...fields } = patch
     fields.logged_at = timestampFor(date)
@@ -687,10 +703,12 @@ export default function Today() {
                   </div>
                   <div className="space-y-1.5">
                     {g.map((l) => (
-                      <div
+                      <SwipeRow
                         key={l.id}
-                        className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2.5"
+                        onDuplicate={() => duplicateLog(l)}
+                        onDelete={() => deleteLog(l.id)}
                       >
+                      <div className="flex items-center justify-between bg-slate-900 px-3 py-2.5">
                         <button
                           onClick={() => setEditingEntry(l)}
                           className="min-w-0 flex-1 text-left"
@@ -726,6 +744,7 @@ export default function Today() {
                           </button>
                         </div>
                       </div>
+                      </SwipeRow>
                     ))}
                   </div>
                 </div>

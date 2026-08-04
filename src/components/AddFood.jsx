@@ -141,6 +141,9 @@ export default function AddFood({
   const ql = q.trim().toLowerCase()
   const matchLocal = (list) =>
     ql ? list.filter((f) => (f.food_name || '').toLowerCase().includes(ql)) : list
+  // Saved-foods list excludes auto-cached barcode entries (they exist only so a
+  // re-scan is instant — they shouldn't clutter your hand-saved foods).
+  const savedFoods = saved.filter((f) => !f.barcode)
 
   function pick(food) {
     setPicked(food)
@@ -365,7 +368,7 @@ export default function AddFood({
 
   // Saved (frequent) foods list.
   if (view === 'saved') {
-    const list = matchLocal(saved)
+    const list = matchLocal(savedFoods)
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -383,12 +386,12 @@ export default function AddFood({
             ))}
           </Select>
         </Field>
-        {saved.length > 0 && (
+        {savedFoods.length > 0 && (
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter saved…" />
         )}
         {list.length === 0 ? (
           <p className="py-2 text-sm text-slate-500">
-            {saved.length === 0 ? 'No saved foods yet.' : 'No match.'}
+            {savedFoods.length === 0 ? 'No saved foods yet.' : 'No match.'}
           </p>
         ) : (
           <div className="max-h-80 space-y-1 overflow-y-auto">
@@ -460,7 +463,7 @@ export default function AddFood({
   }
 
   // ---- home ------------------------------------------------------------
-  const localHits = ql ? [...matchLocal(saved), ...matchLocal(recent)] : []
+  const localHits = ql ? [...matchLocal(savedFoods), ...matchLocal(recent)] : []
   // De-dupe local hits by name (saved wins).
   const seen = new Set()
   const localUnique = localHits.filter((f) => {
