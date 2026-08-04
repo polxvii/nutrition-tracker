@@ -189,13 +189,16 @@ export default function Calendar() {
 
       <div className={`grid grid-cols-8 gap-1 transition-opacity ${loading ? 'opacity-40' : ''}`}>
         {weeks.map((week, wi) => {
-          // week average (net) over days that have food, for the trailing column
+          // week average (net) over days that have food, for the trailing column.
+          // Only meaningful with ≥2 logged days — boundary weeks that show a single
+          // day would otherwise render a "1-day average" that just repeats the cell.
           const bs = week
             .filter((d) => d && byDate[keyFor(d)]?.cal > 0)
             .map((d) => byDate[keyFor(d)])
-          const wAvg = bs.length
-            ? Math.round(bs.reduce((s, b) => s + netOf(b), 0) / bs.length)
-            : null
+          const wAvg =
+            bs.length >= 2
+              ? Math.round(bs.reduce((s, b) => s + netOf(b), 0) / bs.length)
+              : null
           return (
             <Fragment key={wi}>
               {week.map((d, di) => {
