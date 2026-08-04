@@ -389,6 +389,21 @@ export default function Today() {
     await supabase.from('saved_meals').delete().eq('id', id)
   }
 
+  // Rename / edit the items of a saved meal.
+  async function updateMeal(id, patch) {
+    setBusy(true)
+    const { error } = await supabase
+      .from('saved_meals')
+      .update({ name: patch.name, items: patch.items })
+      .eq('id', id)
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await load()
+  }
+
   async function handleAddExercise({ name, calories }) {
     setBusy(true)
     const { error } = await supabase.from('food_logs').insert({
@@ -638,6 +653,7 @@ export default function Today() {
             onLogMeal={handleLogMeal}
             onDeleteSaved={(f) => deleteFrequent(f.id)}
             onDeleteMeal={(m) => deleteMeal(m.id)}
+            onUpdateMeal={updateMeal}
             onCancel={() => setShowAdd(false)}
             busy={busy}
           />

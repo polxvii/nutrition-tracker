@@ -4,6 +4,7 @@ import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
 import AddFoodForm from './AddFoodForm'
 import PhotoLogger from './PhotoLogger'
+import MealEditor from './MealEditor'
 import ErrorBoundary from './ErrorBoundary'
 
 // Barcode scanner pulls in @zxing (~450 KB) — load it only when the scanner
@@ -63,11 +64,13 @@ export default function AddFood({
   onLogMeal,
   onDeleteSaved,
   onDeleteMeal,
+  onUpdateMeal,
   onCancel,
   busy,
 }) {
   const [meal, setMeal] = useState(defaultMeal || 'lunch')
   const [view, setView] = useState('home') // home | saved | ai | manual | scan
+  const [editingMeal, setEditingMeal] = useState(null)
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
@@ -404,6 +407,25 @@ export default function AddFood({
     )
   }
 
+  // Edit a saved meal.
+  if (editingMeal) {
+    return (
+      <MealEditor
+        meal={editingMeal}
+        busy={busy}
+        onSave={(patch) => {
+          onUpdateMeal?.(editingMeal.id, patch)
+          setEditingMeal(null)
+        }}
+        onDelete={() => {
+          onDeleteMeal?.(editingMeal)
+          setEditingMeal(null)
+        }}
+        onCancel={() => setEditingMeal(null)}
+      />
+    )
+  }
+
   // Saved meals (combos) — one tap logs every item into the chosen meal slot.
   if (view === 'meals') {
     return (
@@ -446,6 +468,15 @@ export default function AddFood({
                   >
                     ＋
                   </button>
+                  {onUpdateMeal && (
+                    <button
+                      onClick={() => setEditingMeal(m)}
+                      className="px-1 text-slate-500 hover:text-white"
+                      aria-label="Edit meal"
+                    >
+                      ✎
+                    </button>
+                  )}
                   <button
                     onClick={() => onDeleteMeal(m)}
                     className="px-1 text-slate-500 hover:text-red-400"
