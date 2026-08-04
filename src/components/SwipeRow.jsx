@@ -73,7 +73,13 @@ export default function SwipeRow({ onDuplicate, onDelete, children }) {
           Delete
         </button>
       </div>
-      <div ref={el} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div
+        ref={el}
+        className="relative bg-slate-900"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         {children}
       </div>
     </div>
