@@ -180,9 +180,10 @@ export default function Weight() {
     await load()
   }
 
-  async function deleteLog(id) {
-    setWeightLogs((prev) => prev.filter((l) => l.id !== id))
-    await supabase.from('weight_logs').delete().eq('id', id)
+  async function deleteLog(l) {
+    if (!window.confirm(`Delete weigh-in ${Number(l.weight_kg).toFixed(1)} kg on ${l.logged_date}?`)) return
+    setWeightLogs((prev) => prev.filter((x) => x.id !== l.id))
+    await supabase.from('weight_logs').delete().eq('id', l.id)
   }
 
   const inPeriod = (d) => d >= fromDate && d <= toDate
@@ -205,6 +206,21 @@ export default function Weight() {
   const verdict = trendVerdict(rate, profile?.goal_type)
   const curWeight = weightData.length ? weightData[weightData.length - 1].weight : null
   const delta = weightData.length >= 2 ? r1(curWeight - weightData[0].weight) : null
+
+  // Goal-weight line on the trend chart. Extend the Y domain to include the
+  // target so the line always shows, not just when it's inside the data range.
+  const goalWkg = profile?.goal_weight_kg != null ? Number(profile.goal_weight_kg) : null
+  const weightDomain = (() => {
+    if (!weightData.length) return ['auto', 'auto']
+    const ws = weightData.map((p) => p.weight)
+    let lo = Math.min(...ws)
+    let hi = Math.max(...ws)
+    if (goalWkg != null) {
+      lo = Math.min(lo, goalWkg)
+      hi = Math.max(hi, goalWkg)
+    }
+    return [Math.floor(lo - 1), Math.ceil(hi + 1)]
+  })()
 
   // Adherence over the range.
   const foodData = useMemo(
@@ -300,6 +316,17 @@ export default function Weight() {
   // adherence chart, so you can tell a day that's over goal but still under
   // maintenance from one that's a real surplus.
   const maint = profile?.tdee || 0
+
+  // Tier colour for the avg-kcal tile, matching the chart + Calendar + Log:
+  // green ≤ goal · amber over goal · red over maintenance (neutral with no goal).
+  const avgKcalCls =
+    goalCal <= 0
+      ? 'text-white'
+      : maint > 0 && avgKcal > maint
+        ? 'text-red-400'
+        : avgKcal > goalCal
+          ? 'text-amber-400'
+          : 'text-green-400'
 
   // ---- Goal weight + projection ----
   const [goalW, setGoalW] = useState('')
@@ -552,7 +579,7 @@ export default function Weight() {
           <h2 className="mb-2 text-sm font-medium text-slate-300">Adherence</h2>
           <div className="mb-2 grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">{avgKcal}</div>
+              <div className={`text-lg font-bold ${avgKcalCls}`}>{avgKcal}</div>
               <div className="text-xs text-slate-500">avg kcal / day{goalCal ? ` · goal ${goalCal}` : ''}</div>
             </div>
             <div className="rounded-lg bg-slate-800 py-2">
@@ -564,9 +591,19 @@ export default function Weight() {
             </div>
           </div>
           <div className="mb-2 grid grid-cols-3 gap-2 text-center">
-            {macroStats.map((m) => (
+            {macroStats.map((m) => {
+              // Protein is "higher is good" → green at ≥90% of goal, else amber.
+              // Carbs/fat stay neutral (kept out of the colour system to avoid the
+              // "is under-goal good or bad?" ambiguity for those macros).
+              const cls =
+                m.key === 'p' && m.goal > 0
+                  ? m.avg >= m.goal * 0.9
+                    ? 'text-green-400'
+                    : 'text-amber-400'
+                  : 'text-white'
+              return (
               <div key={m.key} className="rounded-lg bg-slate-800 py-2">
-                <div className="text-sm font-bold text-white">
+                <div className={`text-sm font-bold ${cls}`}>
                   {m.avg}
                   <span className="text-xs font-normal text-slate-500">g</span>
                 </div>
@@ -575,7 +612,8 @@ export default function Weight() {
                   {m.goal ? ` · ${m.goal}g` : ''}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
@@ -668,8 +706,21 @@ export default function Weight() {
               <ComposedChart data={weightData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="date" {...axis} />
-                <YAxis {...axis} domain={['dataMin - 1', 'dataMax + 1']} />
+                <YAxis {...axis} domain={weightDomain} allowDecimals={false} />
                 <Tooltip contentStyle={tooltipStyle} />
+                {goalWkg != null && (
+                  <ReferenceLine
+                    y={goalWkg}
+                    stroke="#38bdf8"
+                    strokeDasharray="5 4"
+                    label={{
+                      value: `goal ${goalWkg}`,
+                      position: 'insideTopRight',
+                      fill: '#38bdf8',
+                      fontSize: 10,
+                    }}
+                  />
+                )}
                 <Line
                   type="monotone"
                   dataKey="weight"
@@ -692,7 +743,13 @@ export default function Weight() {
             </ResponsiveContainer>
           </div>
           <p className="mt-1 text-center text-[11px] text-slate-500">
-            Grey = daily · Green = 7-point average (the real trend)
+            Grey = daily · <span className="text-green-400">green</span> = 7-point average
+            {goalWkg != null && (
+              <>
+                {' '}
+                · <span className="text-sky-400">blue</span> = goal
+              </>
+            )}
           </p>
         </Card>
       ) : (
@@ -767,7 +824,7 @@ export default function Weight() {
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium text-white">{Number(l.weight_kg).toFixed(1)} kg</span>
                   <button
-                    onClick={() => deleteLog(l.id)}
+                    onClick={() => deleteLog(l)}
                     className="text-slate-500 hover:text-red-400"
                     aria-label="Delete"
                   >
