@@ -33,8 +33,11 @@ export default function EntryEditor({
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
-  const [serv, setServ] = useState(1) // dish serving multiplier (scales all components)
-  const [servText, setServText] = useState('1') // editable text buffer for the multiplier
+  // Dish serving multiplier. Restored from the saved entry so the stepper stays
+  // anchored on re-open (was resetting to ×1 while the stored components already
+  // held the scaled amounts, which made further steps compound wrongly).
+  const [serv, setServ] = useState(() => num(entry.servings) || 1)
+  const [servText, setServText] = useState(() => String(num(entry.servings) || 1))
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -223,6 +226,7 @@ export default function EntryEditor({
       return {
         ...base,
         meal_type: f.meal_type,
+        servings: serv, // remembered so the stepper re-opens anchored, not at ×1
         grams: Math.round(compTotals.grams) || null,
         unit: f.unit,
         calories: Math.round(compTotals.calories),

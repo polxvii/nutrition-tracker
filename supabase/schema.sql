@@ -54,12 +54,14 @@ create table if not exists public.food_logs (
   user_note     text,
   ai_confidence text,                     -- low / medium / high (ใช้ตอน Stage 2)
   components    jsonb,                     -- AI dish breakdown [{name,grams,calories,protein_g,carbs_g,fat_g}] — drill-down/edit
+  servings      numeric(6,2) default 1,    -- dish serving multiplier (so the serving stepper is anchored on re-open)
   created_at    timestamptz not null default now()
 );
 create index if not exists food_logs_user_time_idx
   on public.food_logs (user_id, logged_at desc);
--- Existing databases: add the column if it isn't there yet.
+-- Existing databases: add the columns if they aren't there yet.
 alter table public.food_logs add column if not exists components jsonb;
+alter table public.food_logs add column if not exists servings numeric(6,2) default 1;
 
 -- ---------------------------------------------------------------------
 --  frequent_foods : อาหารกินบ่อย (cache ไว้ log เร็ว)
