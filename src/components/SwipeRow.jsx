@@ -1,17 +1,26 @@
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 
-// Swipe a row left to reveal Copy / Delete actions. Touch events are stopped
-// once a horizontal drag starts, so the page's day-swipe doesn't also fire.
-// A plain tap (no drag) passes straight through to the row's own handlers.
+// Swipe a row left to reveal Copy / Delete. During a drag we move the DOM node
+// imperatively (no React re-render per touchmove — that was the janky part) and
+// stop touch propagation so the page's day-swipe doesn't also fire. A plain tap
+// (no drag) passes straight through to the row's own handlers.
 export default function SwipeRow({ onDuplicate, onDelete, children }) {
   const REVEAL = 128 // width of the two action buttons
-  const [dx, setDx] = useState(0)
+  const el = useRef(null)
+  const dx = useRef(0)
   const start = useRef(null)
   const dragging = useRef(false)
 
+  function setX(x, animate) {
+    const n = el.current
+    if (!n) return
+    n.style.transition = animate ? 'transform 0.2s ease' : 'none'
+    n.style.transform = `translateX(${x}px)`
+    dx.current = x
+  }
   function onTouchStart(e) {
     const t = e.touches[0]
-    start.current = { x: t.clientX, y: t.clientY, base: dx }
+    start.current = { x: t.clientX, y: t.clientY, base: dx.current }
     dragging.current = false
   }
   function onTouchMove(e) {
@@ -28,8 +37,8 @@ export default function SwipeRow({ onDuplicate, onDelete, children }) {
       }
       dragging.current = true
     }
-    e.stopPropagation() // keep the page day-swipe from seeing this
-    setDx(Math.max(-REVEAL, Math.min(0, s.base + mx)))
+    e.stopPropagation()
+    setX(Math.max(-REVEAL, Math.min(0, s.base + mx)), false)
   }
   function onTouchEnd(e) {
     const s = start.current
@@ -38,15 +47,16 @@ export default function SwipeRow({ onDuplicate, onDelete, children }) {
     dragging.current = false
     if (!s || !wasDrag) return
     e.stopPropagation()
-    setDx(dx < -REVEAL / 2 ? -REVEAL : 0)
+    setX(dx.current < -REVEAL / 2 ? -REVEAL : 0, true)
   }
+  const close = () => setX(0, true)
 
   return (
     <div className="relative overflow-hidden rounded-xl">
       <div className="absolute inset-y-0 right-0 flex">
         <button
           onClick={() => {
-            setDx(0)
+            close()
             onDuplicate?.()
           }}
           className="flex w-16 items-center justify-center bg-slate-700 text-xs font-medium text-white active:bg-slate-600"
@@ -55,7 +65,7 @@ export default function SwipeRow({ onDuplicate, onDelete, children }) {
         </button>
         <button
           onClick={() => {
-            setDx(0)
+            close()
             onDelete?.()
           }}
           className="flex w-16 items-center justify-center bg-red-600 text-xs font-medium text-white active:bg-red-700"
@@ -63,15 +73,7 @@ export default function SwipeRow({ onDuplicate, onDelete, children }) {
           Delete
         </button>
       </div>
-      <div
-        style={{
-          transform: `translateX(${dx}px)`,
-          transition: dragging.current ? 'none' : 'transform 0.2s ease',
-        }}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-      >
+      <div ref={el} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
         {children}
       </div>
     </div>
