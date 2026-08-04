@@ -597,13 +597,13 @@ export default function Today() {
       </Card>
 
       {/* Quick actions */}
-      <div className="space-y-2">
-        <Button className="w-full py-3.5 text-base" onClick={togglePanel(showAdd, setShowAdd)}>
+      <div className="grid grid-cols-2 gap-2">
+        <Button className="text-base" onClick={togglePanel(showAdd, setShowAdd)}>
           ＋ Add food
         </Button>
         <Button
           variant="ghost"
-          className="w-full text-sm"
+          className="text-base"
           onClick={togglePanel(showExercise, setShowExercise)}
         >
           🏃 Exercise
