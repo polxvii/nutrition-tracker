@@ -33,6 +33,7 @@ export default function EntryEditor({
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
+  const [serv, setServ] = useState(1) // dish serving multiplier (scales all components)
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -99,6 +100,38 @@ export default function EntryEditor({
     )
   }
   const removeComp = (i) => setComps((prev) => prev.filter((_, idx) => idx !== i))
+
+  // Serving stepper at the dish level: scale every component (its current value
+  // AND its grams-scaling base) by a ratio, so one control resizes the whole dish
+  // instead of editing each sub-item. Composes with per-item edits and add/remove.
+  function stepServ(delta) {
+    const next = Math.round((serv + delta) * 10) / 10
+    if (next < 0.5) return
+    const r = next / serv
+    const s = (n) => Math.round(num(n) * r)
+    setComps((prev) =>
+      prev.map((it) => {
+        const base = it._base || it
+        return {
+          ...it,
+          grams: s(it.grams),
+          calories: s(it.calories),
+          protein_g: s(it.protein_g),
+          carbs_g: s(it.carbs_g),
+          fat_g: s(it.fat_g),
+          _base: {
+            ...base,
+            grams: s(base.grams),
+            calories: s(base.calories),
+            protein_g: s(base.protein_g),
+            carbs_g: s(base.carbs_g),
+            fat_g: s(base.fat_g),
+          },
+        }
+      })
+    )
+    setServ(next)
+  }
 
   // Append food(s) chosen via the full Add-food picker (search / barcode / AI /
   // recent / saved) as new components of this dish.
@@ -284,6 +317,32 @@ export default function EntryEditor({
         </Field>
       ) : hasComps ? (
         <div className="space-y-2">
+          <div className="flex items-center justify-between rounded-xl bg-slate-800 p-2">
+            <div>
+              <div className="text-sm font-medium text-slate-200">Servings</div>
+              <div className="text-[11px] text-slate-500">scales the whole dish</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => stepServ(-0.5)}
+                disabled={serv <= 0.5}
+                className="h-8 w-8 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
+                aria-label="Fewer servings"
+              >
+                −
+              </button>
+              <span className="w-12 text-center text-base font-bold tabular-nums text-white">
+                ×{serv}
+              </span>
+              <button
+                onClick={() => stepServ(0.5)}
+                className="h-8 w-8 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
+                aria-label="More servings"
+              >
+                ＋
+              </button>
+            </div>
+          </div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Breakdown — edit any part
           </div>
