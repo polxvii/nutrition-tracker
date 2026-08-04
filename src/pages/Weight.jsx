@@ -593,13 +593,16 @@ export default function Weight() {
           <div className="mb-2 grid grid-cols-3 gap-2 text-center">
             {macroStats.map((m) => {
               // Protein is "higher is good" → green at ≥90% of goal, else amber.
-              // Carbs/fat stay neutral (kept out of the colour system to avoid the
-              // "is under-goal good or bad?" ambiguity for those macros).
+              // Carbs/fat are budgets → green at or under goal, amber when over.
               const cls =
-                m.key === 'p' && m.goal > 0
-                  ? m.avg >= m.goal * 0.9
-                    ? 'text-green-400'
-                    : 'text-amber-400'
+                m.goal > 0
+                  ? m.key === 'p'
+                    ? m.avg >= m.goal * 0.9
+                      ? 'text-green-400'
+                      : 'text-amber-400'
+                    : m.avg <= m.goal
+                      ? 'text-green-400'
+                      : 'text-amber-400'
                   : 'text-white'
               return (
               <div key={m.key} className="rounded-lg bg-slate-800 py-2">
