@@ -190,15 +190,12 @@ export default function Calendar() {
       <div className={`grid grid-cols-8 gap-1 transition-opacity ${loading ? 'opacity-40' : ''}`}>
         {weeks.map((week, wi) => {
           // week average (net) over days that have food, for the trailing column.
-          // Only meaningful with ≥2 logged days — boundary weeks that show a single
-          // day would otherwise render a "1-day average" that just repeats the cell.
           const bs = week
             .filter((d) => d && byDate[keyFor(d)]?.cal > 0)
             .map((d) => byDate[keyFor(d)])
-          const wAvg =
-            bs.length >= 2
-              ? Math.round(bs.reduce((s, b) => s + netOf(b), 0) / bs.length)
-              : null
+          const wAvg = bs.length
+            ? Math.round(bs.reduce((s, b) => s + netOf(b), 0) / bs.length)
+            : null
           return (
             <Fragment key={wi}>
               {week.map((d, di) => {
@@ -238,14 +235,19 @@ export default function Calendar() {
                   </button>
                 )
               })}
-              <div className="flex min-h-[54px] flex-col items-center justify-center rounded-lg bg-slate-800/40">
-                {wAvg != null && (
+              <div className="ml-0.5 flex min-h-[54px] flex-col items-center justify-center gap-0.5 rounded-lg bg-slate-950/70 ring-1 ring-inset ring-slate-700/60">
+                <span className="text-[7px] font-medium uppercase tracking-wider text-slate-500">
+                  wk
+                </span>
+                {wAvg != null ? (
                   <>
-                    <span className={`text-[11px] font-semibold ${kcalTier(wAvg)}`}>
+                    <span className={`text-[12px] font-bold tabular-nums ${kcalTier(wAvg)}`}>
                       {wAvg}
                     </span>
-                    <span className="text-[7px] text-slate-600">{bs.length}d</span>
+                    <span className="text-[7px] text-slate-600">{bs.length}d avg</span>
                   </>
+                ) : (
+                  <span className="text-[11px] text-slate-700">–</span>
                 )}
               </div>
             </Fragment>
