@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
-import { Card, Skeleton } from '../components/ui'
+import { Card } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -108,6 +108,9 @@ export default function Calendar() {
   const cells = []
   for (let i = 0; i < firstWeekday; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null) // pad tail to full weeks
+  const weeks = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
 
   // net calories for a day = eaten − exercise burned.
   const netOf = (b) => b.cal - b.burned
@@ -141,6 +144,21 @@ export default function Calendar() {
         ? 'text-amber-400'
         : 'text-green-400'
 
+  // Heatmap tint for a day cell — same 3-tier scale as the text colour, but as a
+  // faint background so the whole month reads at a glance. Days with no food fall
+  // back to neutral: exercise-only, future (dimmer), or past-unlogged.
+  const cellStyle = (b, k) => {
+    if (b && b.cal > 0) {
+      const net = netOf(b)
+      if (tdee > 0 && net > tdee) return 'border-red-500/40 bg-red-500/10'
+      if (goalCal > 0 && net > goalCal) return 'border-amber-500/40 bg-amber-500/10'
+      return 'border-green-500/40 bg-green-500/10'
+    }
+    if (b && b.burned > 0) return 'border-slate-700 bg-slate-900' // exercise only
+    if (k > today) return 'border-slate-800/40 bg-slate-900/20' // future
+    return 'border-slate-800 bg-slate-900/40' // past / today, unlogged
+  }
+
   const prev = () =>
     setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))
   const next = () =>
@@ -162,38 +180,72 @@ export default function Calendar() {
         </button>
       </header>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-slate-500">
+      <div className="grid grid-cols-8 gap-1 text-center text-[10px] text-slate-500">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
           <div key={i}>{d}</div>
         ))}
+        <div className="text-slate-600">avg</div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((d, i) => {
-          if (d === null) return <div key={i} />
-          const k = keyFor(d)
-          const b = byDate[k]
-          const isToday = k === today
-          const net = b ? Math.round(b.cal - b.burned) : null // eaten − exercise
+      <div className={`grid grid-cols-8 gap-1 transition-opacity ${loading ? 'opacity-40' : ''}`}>
+        {weeks.map((week, wi) => {
+          // week average (net) over days that have food, for the trailing column
+          const bs = week
+            .filter((d) => d && byDate[keyFor(d)]?.cal > 0)
+            .map((d) => byDate[keyFor(d)])
+          const wAvg = bs.length
+            ? Math.round(bs.reduce((s, b) => s + netOf(b), 0) / bs.length)
+            : null
           return (
-            <button
-              key={i}
-              onClick={() => navigate(`/?date=${k}`)}
-              className={`flex min-h-[54px] flex-col items-center rounded-lg border p-1 text-center ${
-                isToday ? 'border-green-500' : 'border-slate-800'
-              } ${b ? 'bg-slate-900' : 'bg-slate-900/40'}`}
-            >
-              <span className="text-[11px] text-slate-400">{d}</span>
-              {b && (
-                <span className={`text-[11px] font-semibold ${kcalTier(net)}`}>{net}</span>
-              )}
-              {b && b.cal > 0 && (
-                <span className="text-[8px] leading-tight text-slate-500">
-                  {Math.round(b.p)}·{Math.round(b.c)}·{Math.round(b.f)}
-                  {b.burned > 0 && <span className="text-amber-500"> 🔥</span>}
-                </span>
-              )}
-            </button>
+            <Fragment key={wi}>
+              {week.map((d, di) => {
+                if (d === null) return <div key={di} />
+                const k = keyFor(d)
+                const b = byDate[k]
+                const isToday = k === today
+                const hasFood = b && b.cal > 0
+                const net = b ? Math.round(netOf(b)) : null
+                const missed = !b && k < today
+                let cls = cellStyle(b, k)
+                if (isToday) cls = cls.replace(/border-\S+/, 'border-green-500')
+                return (
+                  <button
+                    key={di}
+                    onClick={() => navigate(`/?date=${k}`)}
+                    className={`flex min-h-[54px] flex-col items-center rounded-lg border p-1 text-center ${cls}`}
+                  >
+                    <span className="text-[11px] text-slate-400">{d}</span>
+                    {hasFood ? (
+                      <>
+                        <span className={`text-[11px] font-semibold ${kcalTier(net)}`}>
+                          {net}
+                        </span>
+                        <span className="text-[8px] leading-tight text-slate-500">
+                          {Math.round(b.p)}·{Math.round(b.c)}·{Math.round(b.f)}
+                          {b.burned > 0 && <span className="text-amber-500"> 🔥</span>}
+                        </span>
+                      </>
+                    ) : b && b.burned > 0 ? (
+                      <span className="mt-0.5 text-[9px] text-amber-500">
+                        🔥{Math.round(b.burned)}
+                      </span>
+                    ) : missed ? (
+                      <span className="mt-1.5 h-1 w-1 rounded-full bg-slate-700" />
+                    ) : null}
+                  </button>
+                )
+              })}
+              <div className="flex min-h-[54px] flex-col items-center justify-center rounded-lg bg-slate-800/40">
+                {wAvg != null && (
+                  <>
+                    <span className={`text-[11px] font-semibold ${kcalTier(wAvg)}`}>
+                      {wAvg}
+                    </span>
+                    <span className="text-[7px] text-slate-600">{bs.length}d</span>
+                  </>
+                )}
+              </div>
+            </Fragment>
           )
         })}
       </div>
@@ -201,9 +253,20 @@ export default function Calendar() {
       <p className="text-center text-[11px] text-slate-500">
         net kcal (food − 🔥exercise) · P·C·F (g) — tap a day to view / log
       </p>
+      <div className="flex justify-center gap-3 text-[10px] text-slate-500">
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-green-500/70" /> ≤ goal
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-amber-500/70" /> &gt; goal
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-red-500/70" /> &gt; maint
+        </span>
+      </div>
 
       {(avg || streak > 0 || monthWeight) && (
-        <Card className="space-y-2">
+        <Card className={`space-y-2 transition-opacity ${loading ? 'opacity-40' : ''}`}>
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-slate-300">Month summary</span>
             <span className="text-xs text-slate-500">
@@ -300,7 +363,6 @@ export default function Calendar() {
           </div>
         </Card>
       )}
-      {loading && <Skeleton className="h-28 w-full" />}
     </div>
   )
 }
