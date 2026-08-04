@@ -13,6 +13,7 @@ import ProfileFields from '../components/ProfileFields'
 import TargetsEditor from '../components/TargetsEditor'
 import ApiKeyManager from '../components/ApiKeyManager'
 import MealWindowsCard from '../components/MealWindowsCard'
+import GoalHistoryCard from '../components/GoalHistoryCard'
 import { Button, Card } from '../components/ui'
 import { recordGoalHistory } from '../lib/goalHistory'
 
@@ -103,6 +104,8 @@ export default function Settings() {
       <Button className="w-full" disabled={!canSave || busy} onClick={save}>
         {busy ? 'Saving…' : 'Save targets'}
       </Button>
+
+      <GoalHistoryCard />
 
       <MealWindowsCard />
 
