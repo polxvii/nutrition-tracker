@@ -184,7 +184,7 @@ export default function Calendar() {
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
           <div key={i}>{d}</div>
         ))}
-        <div className="text-slate-600">avg</div>
+        <div className="font-semibold text-slate-300">avg</div>
       </div>
 
       <div className={`grid grid-cols-8 gap-1 transition-opacity ${loading ? 'opacity-40' : ''}`}>
@@ -235,8 +235,8 @@ export default function Calendar() {
                   </button>
                 )
               })}
-              <div className="ml-0.5 flex min-h-[54px] flex-col items-center justify-center gap-0.5 rounded-lg bg-slate-950/70 ring-1 ring-inset ring-slate-700/60">
-                <span className="text-[7px] font-medium uppercase tracking-wider text-slate-500">
+              <div className="ml-0.5 flex min-h-[54px] flex-col items-center justify-center gap-0.5 rounded-lg bg-slate-700/50 ring-1 ring-inset ring-slate-500/40">
+                <span className="text-[7px] font-semibold uppercase tracking-wider text-slate-300">
                   wk
                 </span>
                 {wAvg != null ? (
@@ -244,10 +244,10 @@ export default function Calendar() {
                     <span className={`text-[12px] font-bold tabular-nums ${kcalTier(wAvg)}`}>
                       {wAvg}
                     </span>
-                    <span className="text-[7px] text-slate-600">{bs.length}d avg</span>
+                    <span className="text-[7px] text-slate-400">{bs.length}d avg</span>
                   </>
                 ) : (
-                  <span className="text-[11px] text-slate-700">–</span>
+                  <span className="text-[11px] text-slate-500">–</span>
                 )}
               </div>
             </Fragment>
