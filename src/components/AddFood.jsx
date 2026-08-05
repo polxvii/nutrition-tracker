@@ -78,6 +78,7 @@ export default function AddFood({
   onDeleteMeal,
   onUpdateMeal,
   onUpdateSaved,
+  onSaveFrequent,
   onCancel,
   busy,
 }) {
@@ -813,11 +814,25 @@ export default function AddFood({
             <p className="py-1 text-sm text-slate-500">No history yet — add your first food.</p>
           ) : (
             <>
-            <p className="text-[11px] text-slate-500">Tap a name to set servings · ＋ adds 1</p>
+            <p className="text-[11px] text-slate-500">
+              Tap a name to set servings · ＋ adds 1{onSaveFrequent ? ' · swipe to ⭐ save' : ''}
+            </p>
             <div className="max-h-80 space-y-1 overflow-y-auto">
-              {recent.map((f, i) => (
-                <FoodRow key={f.id || `r${i}`} item={f} onAdd={quickAdd} onOpen={openSavedPick} />
-              ))}
+              {recent.map((f, i) => {
+                const row = <FoodRow item={f} onAdd={quickAdd} onOpen={openSavedPick} />
+                return onSaveFrequent ? (
+                  <SwipeRow
+                    key={f.id || `r${i}`}
+                    actions={[
+                      { label: '⭐ Save', onClick: () => onSaveFrequent(f), className: 'bg-green-700 active:bg-green-600' },
+                    ]}
+                  >
+                    {row}
+                  </SwipeRow>
+                ) : (
+                  <div key={f.id || `r${i}`}>{row}</div>
+                )
+              })}
             </div>
             </>
           )}

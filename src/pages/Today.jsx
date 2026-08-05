@@ -670,6 +670,10 @@ export default function Today() {
             onDeleteMeal={(m) => deleteMeal(m.id)}
             onUpdateMeal={updateMeal}
             onUpdateSaved={updateFrequent}
+            onSaveFrequent={async (f) => {
+              await upsertFrequent(f)
+              await load()
+            }}
             onCancel={() => setShowAdd(false)}
             busy={busy}
           />
@@ -689,9 +693,14 @@ export default function Today() {
 
       {/* Log list */}
       <div className="animate-rise space-y-2" style={{ animationDelay: '0.08s' }}>
-        <h2 className="text-sm font-medium text-slate-300">
-          {isToday ? "Today's log" : 'Log'}
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium text-slate-300">
+            {isToday ? "Today's log" : 'Log'}
+          </h2>
+          {logs.length > 0 && (
+            <span className="text-[11px] text-slate-500">tap to edit · swipe to copy / delete</span>
+          )}
+        </div>
         {loading ? (
           <div className="space-y-2">
             {[0, 1, 2].map((i) => (
@@ -758,7 +767,7 @@ export default function Today() {
                             </div>
                           )}
                         </button>
-                        <div className="ml-3 flex items-center gap-3">
+                        <div className="ml-3 flex items-center">
                           <span
                             className={`whitespace-nowrap text-sm font-medium tabular-nums ${
                               isEx ? 'text-green-400' : 'text-slate-200'
@@ -767,13 +776,6 @@ export default function Today() {
                             {isEx ? '−' : ''}
                             {Math.round(num(l.calories))} kcal
                           </span>
-                          <button
-                            onClick={() => deleteLog(l.id)}
-                            className="text-slate-500 hover:text-red-400"
-                            aria-label="Delete"
-                          >
-                            ✕
-                          </button>
                         </div>
                       </div>
                       </SwipeRow>
