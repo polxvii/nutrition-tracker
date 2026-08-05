@@ -840,13 +840,20 @@ export default function Weight() {
 
       {/* Weigh-in history (within the selected period) */}
       <div className="space-y-2">
-        <h2 className="text-sm font-medium text-slate-300">Weigh-in history</h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium text-slate-300">Weigh-in history</h2>
+          {weightLogs.filter((l) => inPeriod(l.logged_date)).length > 0 && (
+            <span className="text-xs text-slate-500">
+              {weightLogs.filter((l) => inPeriod(l.logged_date)).length}
+            </span>
+          )}
+        </div>
         {weightLogs.filter((l) => inPeriod(l.logged_date)).length === 0 ? (
           <Card>
             <p className="text-center text-sm text-slate-500">No weigh-ins in this period</p>
           </Card>
         ) : (
-          <div className="space-y-2">
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-0.5">
             {weightLogs
               .filter((l) => inPeriod(l.logged_date))
               .reverse()
