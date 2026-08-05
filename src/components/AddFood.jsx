@@ -14,6 +14,7 @@ import ErrorBoundary from './ErrorBoundary'
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 
 const r = (n) => Math.round(Number(n) || 0)
+const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
 // Grams/amount label for a stored template (recent log or saved food).
 const amtOf = (t) => {
@@ -22,10 +23,10 @@ const amtOf = (t) => {
 }
 
 // One-line food row with a big ＋; saved rows also get a ✕ to remove.
-function FoodRow({ item, onAdd, onDelete, onEdit }) {
+function FoodRow({ item, onAdd, onOpen, onDelete, onEdit }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
-      <button onClick={() => onAdd(item)} className="min-w-0 flex-1 text-left">
+      <button onClick={() => (onOpen || onAdd)(item)} className="min-w-0 flex-1 text-left">
         <div className="truncate text-sm text-white">{item.food_name}</div>
         <div className="truncate text-xs text-slate-500">
           {r(item.calories)} kcal · {r(item.protein_g)}P {r(item.carbs_g)}C {r(item.fat_g)}F
@@ -84,6 +85,11 @@ export default function AddFood({
   const [view, setView] = useState('home') // home | saved | ai | manual | scan
   const [editingMeal, setEditingMeal] = useState(null)
   const [editingSaved, setEditingSaved] = useState(null)
+  // Saved food being logged with a per-log serving multiplier (does NOT change
+  // the saved record — reopening always starts back at ×1).
+  const [savedPick, setSavedPick] = useState(null)
+  const [savedServ, setSavedServ] = useState(1)
+  const [savedServText, setSavedServText] = useState('1')
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
@@ -265,6 +271,51 @@ export default function AddFood({
     )
   }
 
+  // Open the serving picker for a saved food (always starts at ×1).
+  function openSavedPick(f) {
+    setSavedPick(f)
+    setSavedServ(1)
+    setSavedServText('1')
+  }
+  const stepSaved = (d) => {
+    const n = Math.round((savedServ + d) * 10) / 10
+    if (n >= 0.5) {
+      setSavedServ(n)
+      setSavedServText(String(n))
+    }
+  }
+  const commitSavedServ = () => {
+    const n = Number(savedServText)
+    if (n > 0) {
+      const v = Math.round(n * 100) / 100
+      setSavedServ(v)
+      setSavedServText(String(v))
+    } else {
+      setSavedServText(String(savedServ))
+    }
+  }
+  // Log the saved food scaled by the chosen servings. The saved record is left
+  // untouched; only this log entry gets the multiplied amounts.
+  function addSaved() {
+    const N = savedServ
+    const t = savedPick
+    onLog(
+      {
+        food_name: t.food_name,
+        meal_type: meal,
+        grams: t.default_grams != null ? r1(Number(t.default_grams) * N) : null,
+        unit: t.unit ?? 'g',
+        source: 'frequent',
+        calories: Math.round(Number(t.calories || 0) * N),
+        protein_g: r1(Number(t.protein_g || 0) * N),
+        carbs_g: r1(Number(t.carbs_g || 0) * N),
+        fat_g: r1(Number(t.fat_g || 0) * N),
+      },
+      { asFrequent: false }
+    )
+    setSavedPick(null)
+  }
+
   // ---- sub-views -------------------------------------------------------
   if (view === 'scan') {
     return (
@@ -382,6 +433,86 @@ export default function AddFood({
     )
   }
 
+  // Serving picker for a saved food (before the list, so it swaps in on tap).
+  if (savedPick) {
+    const N = savedServ
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="min-w-0 truncate text-sm font-medium text-white">{savedPick.food_name}</span>
+          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setSavedPick(null)}>
+            ‹ Back
+          </button>
+        </div>
+        <div className="text-xs text-slate-500">
+          per serving: {r(savedPick.calories)} kcal · {r(savedPick.protein_g)}P {r(savedPick.carbs_g)}C{' '}
+          {r(savedPick.fat_g)}F
+          {savedPick.default_grams ? ` · ${r(savedPick.default_grams)}${savedPick.unit || 'g'}` : ''}
+        </div>
+
+        <Field label="Meal">
+          <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
+            {MEALS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Servings">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => stepSaved(-0.5)}
+              disabled={savedServ <= 0.5}
+              className="h-9 w-9 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
+              aria-label="Fewer servings"
+            >
+              −
+            </button>
+            <div className="flex items-center">
+              <span className="text-slate-400">×</span>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={savedServText}
+                onChange={(e) => setSavedServText(e.target.value)}
+                onBlur={commitSavedServ}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                }}
+                className="w-16 px-1 text-center text-base font-bold tabular-nums"
+                aria-label="Servings"
+              />
+            </div>
+            <button
+              onClick={() => stepSaved(0.5)}
+              className="h-9 w-9 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
+              aria-label="More servings"
+            >
+              ＋
+            </button>
+          </div>
+        </Field>
+
+        <div className="text-center text-sm text-slate-300">
+          <b className="text-white">{Math.round(Number(savedPick.calories || 0) * N)}</b> kcal ·{' '}
+          {r1(Number(savedPick.protein_g || 0) * N)}P · {r1(Number(savedPick.carbs_g || 0) * N)}C ·{' '}
+          {r1(Number(savedPick.fat_g || 0) * N)}F
+        </div>
+
+        <div className="flex gap-2">
+          <Button className="flex-1" onClick={addSaved} disabled={busy}>
+            {busy ? 'Adding…' : 'Add to log'}
+          </Button>
+          <Button variant="ghost" onClick={() => setSavedPick(null)}>
+            Back
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // Edit a saved (frequent) food. Checked BEFORE the saved-list view so opening
   // the editor from that list actually swaps to it (the list no longer wins).
   if (editingSaved) {
@@ -426,7 +557,9 @@ export default function AddFood({
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter saved…" />
         )}
         {list.length > 0 && (
-          <p className="text-[11px] text-slate-500">Tap to add · swipe a row left to edit / delete</p>
+          <p className="text-[11px] text-slate-500">
+            Tap a name to set servings · ＋ adds 1 · swipe a row to edit / delete
+          </p>
         )}
         {list.length === 0 ? (
           <p className="py-2 text-sm text-slate-500">
@@ -444,7 +577,7 @@ export default function AddFood({
                   { label: 'Delete', onClick: () => onDeleteSaved?.(f), className: 'bg-red-600 active:bg-red-700' },
                 ]}
               >
-                <FoodRow item={f} onAdd={quickAdd} />
+                <FoodRow item={f} onAdd={quickAdd} onOpen={openSavedPick} />
               </SwipeRow>
             ))}
           </div>
