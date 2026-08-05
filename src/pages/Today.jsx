@@ -446,6 +446,17 @@ export default function Today() {
     await supabase.from('frequent_foods').delete().eq('id', id)
   }
 
+  async function updateFrequent(id, patch) {
+    setBusy(true)
+    const { error } = await supabase.from('frequent_foods').update(patch).eq('id', id)
+    setBusy(false)
+    if (error) {
+      alert(error.code === '23505' ? 'You already have a saved food with that name.' : error.message)
+      return
+    }
+    await load()
+  }
+
   async function deleteLog(id) {
     setLogs((prev) => prev.filter((l) => l.id !== id))
     await supabase.from('food_logs').delete().eq('id', id)
@@ -658,6 +669,7 @@ export default function Today() {
             onDeleteSaved={(f) => deleteFrequent(f.id)}
             onDeleteMeal={(m) => deleteMeal(m.id)}
             onUpdateMeal={updateMeal}
+            onUpdateSaved={updateFrequent}
             onCancel={() => setShowAdd(false)}
             busy={busy}
           />

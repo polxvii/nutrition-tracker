@@ -5,6 +5,7 @@ import { MEALS } from './AddFoodForm'
 import AddFoodForm from './AddFoodForm'
 import PhotoLogger from './PhotoLogger'
 import MealEditor from './MealEditor'
+import FrequentEditor from './FrequentEditor'
 import ErrorBoundary from './ErrorBoundary'
 
 // Barcode scanner pulls in @zxing (~450 KB) — load it only when the scanner
@@ -20,7 +21,7 @@ const amtOf = (t) => {
 }
 
 // One-line food row with a big ＋; saved rows also get a ✕ to remove.
-function FoodRow({ item, onAdd, onDelete }) {
+function FoodRow({ item, onAdd, onDelete, onEdit }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
       <button onClick={() => onAdd(item)} className="min-w-0 flex-1 text-left">
@@ -38,6 +39,15 @@ function FoodRow({ item, onAdd, onDelete }) {
       >
         ＋
       </button>
+      {onEdit && (
+        <button
+          onClick={() => onEdit(item)}
+          className="px-1 text-slate-500 hover:text-white"
+          aria-label="Edit saved food"
+        >
+          ✎
+        </button>
+      )}
       {onDelete && (
         <button
           onClick={() => onDelete(item)}
@@ -65,12 +75,14 @@ export default function AddFood({
   onDeleteSaved,
   onDeleteMeal,
   onUpdateMeal,
+  onUpdateSaved,
   onCancel,
   busy,
 }) {
   const [meal, setMeal] = useState(defaultMeal || 'lunch')
   const [view, setView] = useState('home') // home | saved | ai | manual | scan
   const [editingMeal, setEditingMeal] = useState(null)
+  const [editingSaved, setEditingSaved] = useState(null)
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
@@ -399,11 +411,36 @@ export default function AddFood({
         ) : (
           <div className="max-h-80 space-y-1 overflow-y-auto">
             {list.map((f) => (
-              <FoodRow key={f.id} item={f} onAdd={quickAdd} onDelete={onDeleteSaved} />
+              <FoodRow
+                key={f.id}
+                item={f}
+                onAdd={quickAdd}
+                onDelete={onDeleteSaved}
+                onEdit={onUpdateSaved ? setEditingSaved : undefined}
+              />
             ))}
           </div>
         )}
       </div>
+    )
+  }
+
+  // Edit a saved (frequent) food.
+  if (editingSaved) {
+    return (
+      <FrequentEditor
+        food={editingSaved}
+        busy={busy}
+        onSave={(patch) => {
+          onUpdateSaved?.(editingSaved.id, patch)
+          setEditingSaved(null)
+        }}
+        onDelete={() => {
+          onDeleteSaved?.(editingSaved)
+          setEditingSaved(null)
+        }}
+        onCancel={() => setEditingSaved(null)}
+      />
     )
   }
 
