@@ -94,12 +94,14 @@ export default function GoalHistoryCard() {
     <Collapsible
       title="🎯 Goal history"
       subtitle="Set which goal applied when — colours the past accordingly"
+      right={view.length > 0 ? <span className="text-xs text-slate-500">{view.length}</span> : null}
     >
       {view.length === 0 && !draft && (
         <p className="text-xs text-slate-500">No goal periods yet.</p>
       )}
 
-      <div className="space-y-2">
+      {/* Cap the height and scroll so a long history stays tidy. */}
+      <div className="max-h-72 space-y-2 overflow-y-auto">
         {view.map((r, i) => {
           // "until" = day before the next (chronologically later) period; the
           // most recent one runs to "now". view is reversed, so the later period
