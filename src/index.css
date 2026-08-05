@@ -17,6 +17,15 @@ html {
   height: 100dvh;
 }
 
+/* Installed PWA (no browser chrome): on iOS `dvh` can under-report and leave a
+   dark band below the bottom nav. There's no retracting address bar here, so
+   plain 100% = the full screen and the nav sits flush. */
+@media (display-mode: standalone) {
+  html {
+    height: 100%;
+  }
+}
+
 /* Keep content clear of the iPhone notch / front camera in standalone PWA
    mode (viewport-fit=cover). No effect on devices without a safe area. */
 #root {
