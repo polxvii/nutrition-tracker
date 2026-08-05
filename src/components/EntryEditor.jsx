@@ -275,7 +275,18 @@ export default function EntryEditor({
           meals={meals}
           onLog={(e) => appendComps([e])}
           onLogMany={(entries) => appendComps(entries)}
-          onLogMeal={(entries) => appendComps(entries)}
+          onLogMeal={(dish) =>
+            appendComps(
+              (dish.components || []).map((c) => ({
+                food_name: c.name,
+                grams: c.grams,
+                calories: c.calories,
+                protein_g: c.protein_g,
+                carbs_g: c.carbs_g,
+                fat_g: c.fat_g,
+              }))
+            )
+          }
           onDeleteSaved={() => {}}
           onDeleteMeal={() => {}}
           onCancel={() => setAddingItem(false)}

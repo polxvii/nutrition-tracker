@@ -319,24 +319,24 @@ export default function Today() {
     await load()
   }
 
-  // Log every item of a saved meal at once.
-  async function handleLogMeal(entries) {
+  // Log a saved meal as ONE dish row (its items become the components), so the
+  // diary shows a single drill-in entry instead of N loose rows.
+  async function handleLogMeal(dish) {
     setBusy(true)
-    const ts = timestampFor(selectedDate)
-    const rows = entries.map((e) => ({
+    const { error } = await supabase.from('food_logs').insert({
       user_id: user.id,
-      logged_at: ts,
-      source: e.source || 'meal',
-      meal_type: e.meal_type,
-      food_name: e.food_name,
-      grams: e.grams,
-      unit: e.unit ?? 'g',
-      calories: e.calories,
-      protein_g: e.protein_g,
-      carbs_g: e.carbs_g,
-      fat_g: e.fat_g,
-    }))
-    const { error } = await supabase.from('food_logs').insert(rows)
+      logged_at: timestampFor(selectedDate),
+      source: dish.source || 'meal',
+      meal_type: dish.meal_type,
+      food_name: dish.food_name,
+      grams: dish.grams,
+      unit: dish.unit ?? 'g',
+      calories: dish.calories,
+      protein_g: dish.protein_g,
+      carbs_g: dish.carbs_g,
+      fat_g: dish.fat_g,
+      components: dish.components?.length ? dish.components : null,
+    })
     if (error) {
       alert(error.message)
       setBusy(false)

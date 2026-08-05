@@ -234,20 +234,41 @@ export default function AddFood({
     )
   }
 
-  // Log every item of a saved meal at once, into the chosen meal slot.
+  // Log a saved meal as ONE dish row whose items become its components (like an
+  // AI dish), so the diary shows a single entry you can drill into — not N loose
+  // rows. Totals are the sum of the items.
   function logMeal(m) {
-    const entries = (m.items || []).map((it) => ({
-      food_name: it.food_name,
+    const items = m.items || []
+    if (!items.length) return
+    const tot = items.reduce(
+      (a, it) => ({
+        grams: a.grams + (Number(it.grams) || 0),
+        calories: a.calories + (Number(it.calories) || 0),
+        protein_g: a.protein_g + (Number(it.protein_g) || 0),
+        carbs_g: a.carbs_g + (Number(it.carbs_g) || 0),
+        fat_g: a.fat_g + (Number(it.fat_g) || 0),
+      }),
+      { grams: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    )
+    onLogMeal({
+      food_name: m.name,
       meal_type: meal,
       source: 'meal',
-      grams: it.grams ?? null,
-      unit: it.unit ?? 'g',
-      calories: it.calories,
-      protein_g: it.protein_g,
-      carbs_g: it.carbs_g,
-      fat_g: it.fat_g,
-    }))
-    if (entries.length) onLogMeal(entries)
+      grams: tot.grams || null,
+      unit: 'g',
+      calories: Math.round(tot.calories),
+      protein_g: r1(tot.protein_g),
+      carbs_g: r1(tot.carbs_g),
+      fat_g: r1(tot.fat_g),
+      components: items.map((it) => ({
+        name: it.food_name || 'Item',
+        grams: Number(it.grams) || null,
+        calories: Number(it.calories) || 0,
+        protein_g: Number(it.protein_g) || 0,
+        carbs_g: Number(it.carbs_g) || 0,
+        fat_g: Number(it.fat_g) || 0,
+      })),
+    })
   }
 
   // Quick-add a stored template (recent log / saved food) with the chosen meal.
@@ -294,25 +315,36 @@ export default function AddFood({
       setSavedServText(String(savedServ))
     }
   }
-  // Log the saved food scaled by the chosen servings. The saved record is left
-  // untouched; only this log entry gets the multiplied amounts.
+  // Log the picked template (saved food OR recent item) scaled by the chosen
+  // servings. The source template is left untouched; only this log entry gets
+  // the multiplied amounts. A recent dish carries its component breakdown along
+  // (scaled too), so the drill-down still works.
   function addSaved() {
     const N = savedServ
     const t = savedPick
-    onLog(
-      {
-        food_name: t.food_name,
-        meal_type: meal,
-        grams: t.default_grams != null ? r1(Number(t.default_grams) * N) : null,
-        unit: t.unit ?? 'g',
-        source: 'frequent',
-        calories: Math.round(Number(t.calories || 0) * N),
-        protein_g: r1(Number(t.protein_g || 0) * N),
-        carbs_g: r1(Number(t.carbs_g || 0) * N),
-        fat_g: r1(Number(t.fat_g || 0) * N),
-      },
-      { asFrequent: false }
-    )
+    const g = t.default_grams ?? t.grams
+    const entry = {
+      food_name: t.food_name,
+      meal_type: meal,
+      grams: g != null ? r1(Number(g) * N) : null,
+      unit: t.unit ?? 'g',
+      source: t.source || 'frequent',
+      calories: Math.round(Number(t.calories || 0) * N),
+      protein_g: r1(Number(t.protein_g || 0) * N),
+      carbs_g: r1(Number(t.carbs_g || 0) * N),
+      fat_g: r1(Number(t.fat_g || 0) * N),
+    }
+    if (t.components?.length) {
+      entry.components = t.components.map((c) => ({
+        name: c.name,
+        grams: c.grams != null ? r1(Number(c.grams) * N) : null,
+        calories: Math.round(Number(c.calories || 0) * N),
+        protein_g: r1(Number(c.protein_g || 0) * N),
+        carbs_g: r1(Number(c.carbs_g || 0) * N),
+        fat_g: r1(Number(c.fat_g || 0) * N),
+      }))
+    }
+    onLog(entry, { asFrequent: false })
     setSavedPick(null)
   }
 
@@ -742,7 +774,7 @@ export default function AddFood({
                 Your foods
               </div>
               {localUnique.map((f, i) => (
-                <FoodRow key={f.id || `l${i}`} item={f} onAdd={quickAdd} />
+                <FoodRow key={f.id || `l${i}`} item={f} onAdd={quickAdd} onOpen={openSavedPick} />
               ))}
             </div>
           )}
@@ -780,11 +812,14 @@ export default function AddFood({
           {recent.length === 0 ? (
             <p className="py-1 text-sm text-slate-500">No history yet — add your first food.</p>
           ) : (
+            <>
+            <p className="text-[11px] text-slate-500">Tap a name to set servings · ＋ adds 1</p>
             <div className="max-h-80 space-y-1 overflow-y-auto">
               {recent.map((f, i) => (
-                <FoodRow key={f.id || `r${i}`} item={f} onAdd={quickAdd} />
+                <FoodRow key={f.id || `r${i}`} item={f} onAdd={quickAdd} onOpen={openSavedPick} />
               ))}
             </div>
+            </>
           )}
         </div>
       )}
