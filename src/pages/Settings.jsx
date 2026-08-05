@@ -14,7 +14,7 @@ import TargetsEditor from '../components/TargetsEditor'
 import ApiKeyManager from '../components/ApiKeyManager'
 import MealWindowsCard from '../components/MealWindowsCard'
 import GoalHistoryCard from '../components/GoalHistoryCard'
-import { Button, Card } from '../components/ui'
+import { Button, Collapsible } from '../components/ui'
 import { recordGoalHistory } from '../lib/goalHistory'
 
 export default function Settings() {
@@ -74,36 +74,38 @@ export default function Settings() {
         </Button>
       </header>
 
-      <Card>
-        <p className="mb-3 text-sm text-slate-300">
-          Edit your body info / goal. Use “Reset to calculated” to recompute
-          targets, or edit calories / macros directly.
+      <Collapsible title="🧍 Body info" subtitle="Age, weight, height, activity & goal type">
+        <p className="text-xs text-slate-500">
+          Edit your body info, then “Reset to calculated” in Targets to recompute.
         </p>
         <ProfileFields values={values} onChange={setValues} />
-      </Card>
+      </Collapsible>
 
-      <TargetsEditor
-        targets={targets}
-        calc={calc}
-        onChange={(t) => {
-          setTargets(t)
-          setDirty(true)
-          setSaved(false)
-        }}
-        onReset={() => setDirty(false)}
-      />
+      <Collapsible title="🎯 Targets" subtitle="Calorie goal & macro split">
+        <TargetsEditor
+          bare
+          targets={targets}
+          calc={calc}
+          onChange={(t) => {
+            setTargets(t)
+            setDirty(true)
+            setSaved(false)
+          }}
+          onReset={() => setDirty(false)}
+        />
 
-      {targets && !macroSplitOk(targets) && (
-        <p className="text-sm text-red-400">
-          Protein + carbs + fat must total 100% before saving.
-        </p>
-      )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      {saved && <p className="text-sm text-green-400">Saved ✓</p>}
+        {targets && !macroSplitOk(targets) && (
+          <p className="text-sm text-red-400">
+            Protein + carbs + fat must total 100% before saving.
+          </p>
+        )}
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        {saved && <p className="text-sm text-green-400">Saved ✓</p>}
 
-      <Button className="w-full" disabled={!canSave || busy} onClick={save}>
-        {busy ? 'Saving…' : 'Save targets'}
-      </Button>
+        <Button className="w-full" disabled={!canSave || busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save targets'}
+        </Button>
+      </Collapsible>
 
       <GoalHistoryCard />
 

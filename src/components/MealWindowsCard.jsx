@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { DEFAULT_MEAL_WINDOWS, MEAL_ORDER } from '../lib/mealWindows'
-import { Button, Card, Field, Input } from './ui'
+import { Button, Collapsible, Field, Input } from './ui'
 
 // Let each user set when their meals start — used to pick the default meal
 // slot when logging (people eat on different schedules).
@@ -30,14 +30,13 @@ export default function MealWindowsCard() {
   }
 
   return (
-    <Card className="space-y-3">
-      <div>
-        <span className="text-sm font-medium text-slate-200">🕒 Meal times</span>
-        <p className="text-xs text-slate-500">
-          When each meal starts. Used to pick the default meal when you log — each runs until the
-          next begins, and Night wraps past midnight.
-        </p>
-      </div>
+    <Collapsible
+      title="🕒 Meal times"
+      subtitle="When each meal starts — sets the default slot when you log"
+    >
+      <p className="text-xs text-slate-500">
+        Each runs until the next begins, and Night wraps past midnight.
+      </p>
       <div className="grid grid-cols-2 gap-2">
         {MEAL_ORDER.map(([k, label]) => (
           <Field key={k} label={label}>
@@ -51,6 +50,6 @@ export default function MealWindowsCard() {
         </Button>
         {saved && <span className="text-sm text-green-400">Saved ✓</span>}
       </div>
-    </Card>
+    </Collapsible>
   )
 }

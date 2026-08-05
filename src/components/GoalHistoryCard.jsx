@@ -6,7 +6,7 @@ import {
   saveGoalPeriod,
   deleteGoalPeriod,
 } from '../lib/goalHistory'
-import { Button, Card, Field, Input } from './ui'
+import { Button, Collapsible, Field, Input } from './ui'
 
 // Local, TZ-safe date math (no UTC drift).
 function addDays(iso, n) {
@@ -91,15 +91,10 @@ export default function GoalHistoryCard() {
   const view = [...rows].reverse() // newest first for display
 
   return (
-    <Card className="space-y-3">
-      <div>
-        <h2 className="text-sm font-medium text-slate-300">Goal history</h2>
-        <p className="text-xs text-slate-500">
-          Each goal applies from its start date until the next one. Past days are
-          coloured against the goal that applied then.
-        </p>
-      </div>
-
+    <Collapsible
+      title="🎯 Goal history"
+      subtitle="Set which goal applied when — colours the past accordingly"
+    >
       {view.length === 0 && !draft && (
         <p className="text-xs text-slate-500">No goal periods yet.</p>
       )}
@@ -190,6 +185,6 @@ export default function GoalHistoryCard() {
           ＋ add / backdate a goal period
         </button>
       )}
-    </Card>
+    </Collapsible>
   )
 }

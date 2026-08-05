@@ -49,26 +49,41 @@ function MacroRow({ label, gramKey, color, targets, onChange }) {
   )
 }
 
-// Editable calorie goal + macro split. P/C/F % must total ~100%.
-export default function TargetsEditor({ targets, onChange, onReset, calc }) {
+// Editable calorie goal + macro split. P/C/F % must total ~100%. `bare` drops
+// the Card + title (for when a Collapsible already supplies the header).
+export default function TargetsEditor({ targets, onChange, onReset, calc, bare = false }) {
   if (!targets) return null
   const { sum } = macroPercents(targets)
   const ok = Math.abs(sum - 100) <= 1.5
 
-  return (
-    <Card className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-200">Targets (editable)</span>
-        {calc && (
-          <button
-            type="button"
-            onClick={onReset}
-            className="text-xs text-green-400 hover:text-green-300"
-          >
-            Reset to calculated
-          </button>
-        )}
-      </div>
+  const body = (
+    <>
+      {bare ? (
+        calc && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs text-green-400 hover:text-green-300"
+            >
+              Reset to calculated
+            </button>
+          </div>
+        )
+      ) : (
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-200">Targets (editable)</span>
+          {calc && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs text-green-400 hover:text-green-300"
+            >
+              Reset to calculated
+            </button>
+          )}
+        </div>
+      )}
 
       {calc && (
         <div className="flex gap-4 rounded-lg bg-slate-800 px-3 py-2 text-xs text-slate-400">
@@ -99,6 +114,8 @@ export default function TargetsEditor({ targets, onChange, onReset, calc }) {
       <div className={`text-xs ${ok ? 'text-slate-400' : 'text-red-400'}`}>
         P/C/F total: {Math.round(sum)}% {ok ? '✓' : '— must be 100%'}
       </div>
-    </Card>
+    </>
   )
+
+  return bare ? <div className="space-y-3">{body}</div> : <Card className="space-y-3">{body}</Card>
 }

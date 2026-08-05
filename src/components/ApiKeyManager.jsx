@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { addApiKey } from '../lib/analyzeApi'
-import { Button, Card, Field, Input } from './ui'
+import { Button, Collapsible, Field, Input } from './ui'
 
 // Per-role cap (spec §2). Backed up by the DB trigger — this is just UX.
 const KEY_LIMITS = { user: 1, admin: 10 }
@@ -107,13 +107,11 @@ export default function ApiKeyManager() {
   }
 
   return (
-    <Card className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-200">🤖 AI — your Gemini key</span>
-        <span className="text-xs text-slate-500">
-          {keys.length}/{limit}
-        </span>
-      </div>
+    <Collapsible
+      title="🤖 AI — your Gemini key"
+      subtitle="Your own free Gemini key powers AI meal analysis"
+      right={<span className="text-xs text-slate-500">{keys.length}/{limit}</span>}
+    >
       <p className="text-xs text-slate-500">
         AI meal analysis runs on your own free Gemini key, on your quota. Your key is encrypted and
         used only on the server — never shared.
@@ -207,6 +205,6 @@ export default function ApiKeyManager() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
       {ok && <p className="text-sm text-green-400">{ok}</p>}
-    </Card>
+    </Collapsible>
   )
 }
