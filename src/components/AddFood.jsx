@@ -6,6 +6,7 @@ import AddFoodForm from './AddFoodForm'
 import PhotoLogger from './PhotoLogger'
 import MealEditor from './MealEditor'
 import FrequentEditor from './FrequentEditor'
+import SwipeRow from './SwipeRow'
 import ErrorBoundary from './ErrorBoundary'
 
 // Barcode scanner pulls in @zxing (~450 KB) — load it only when the scanner
@@ -404,6 +405,9 @@ export default function AddFood({
         {savedFoods.length > 0 && (
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter saved…" />
         )}
+        {list.length > 0 && (
+          <p className="text-[11px] text-slate-500">Tap to add · swipe a row left to edit / delete</p>
+        )}
         {list.length === 0 ? (
           <p className="py-2 text-sm text-slate-500">
             {savedFoods.length === 0 ? 'No saved foods yet.' : 'No match.'}
@@ -411,13 +415,17 @@ export default function AddFood({
         ) : (
           <div className="max-h-80 space-y-1 overflow-y-auto">
             {list.map((f) => (
-              <FoodRow
+              <SwipeRow
                 key={f.id}
-                item={f}
-                onAdd={quickAdd}
-                onDelete={onDeleteSaved}
-                onEdit={onUpdateSaved ? setEditingSaved : undefined}
-              />
+                actions={[
+                  ...(onUpdateSaved
+                    ? [{ label: 'Edit', onClick: () => setEditingSaved(f), className: 'bg-slate-600 active:bg-slate-500' }]
+                    : []),
+                  { label: 'Delete', onClick: () => onDeleteSaved?.(f), className: 'bg-red-600 active:bg-red-700' },
+                ]}
+              >
+                <FoodRow item={f} onAdd={quickAdd} />
+              </SwipeRow>
             ))}
           </div>
         )}
@@ -487,44 +495,41 @@ export default function AddFood({
             No saved meals yet. On the Log page, tap “＋ meal” on a meal section to save its items as a combo.
           </p>
         ) : (
+          <>
+          <p className="text-[11px] text-slate-500">Tap to add · swipe a row left to edit / delete</p>
           <div className="max-h-80 space-y-1 overflow-y-auto">
             {meals.map((m) => {
               const kcal = (m.items || []).reduce((s, it) => s + (Number(it.calories) || 0), 0)
               return (
-                <div key={m.id} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
-                  <button onClick={() => logMeal(m)} className="min-w-0 flex-1 text-left">
-                    <div className="truncate text-sm text-white">{m.name}</div>
-                    <div className="text-xs text-slate-500">
-                      {(m.items || []).length} items · {r(kcal)} kcal
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => logMeal(m)}
-                    className="rounded-lg bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-500"
-                    aria-label="Add meal"
-                  >
-                    ＋
-                  </button>
-                  {onUpdateMeal && (
-                    <button
-                      onClick={() => setEditingMeal(m)}
-                      className="px-1 text-slate-500 hover:text-white"
-                      aria-label="Edit meal"
-                    >
-                      ✎
+                <SwipeRow
+                  key={m.id}
+                  actions={[
+                    ...(onUpdateMeal
+                      ? [{ label: 'Edit', onClick: () => setEditingMeal(m), className: 'bg-slate-600 active:bg-slate-500' }]
+                      : []),
+                    { label: 'Delete', onClick: () => onDeleteMeal(m), className: 'bg-red-600 active:bg-red-700' },
+                  ]}
+                >
+                  <div className="flex items-center gap-2 bg-slate-800 px-3 py-2">
+                    <button onClick={() => logMeal(m)} className="min-w-0 flex-1 text-left">
+                      <div className="truncate text-sm text-white">{m.name}</div>
+                      <div className="text-xs text-slate-500">
+                        {(m.items || []).length} items · {r(kcal)} kcal
+                      </div>
                     </button>
-                  )}
-                  <button
-                    onClick={() => onDeleteMeal(m)}
-                    className="px-1 text-slate-500 hover:text-red-400"
-                    aria-label="Delete meal"
-                  >
-                    ✕
-                  </button>
-                </div>
+                    <button
+                      onClick={() => logMeal(m)}
+                      className="rounded-lg bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-500"
+                      aria-label="Add meal"
+                    >
+                      ＋
+                    </button>
+                  </div>
+                </SwipeRow>
               )
             })}
           </div>
+          </>
         )}
       </div>
     )

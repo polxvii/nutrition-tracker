@@ -1,11 +1,18 @@
 import { useRef } from 'react'
 
-// Swipe a row left to reveal Copy / Delete. During a drag we move the DOM node
+// Swipe a row left to reveal action buttons. During a drag we move the DOM node
 // imperatively (no React re-render per touchmove — that was the janky part) and
 // stop touch propagation so the page's day-swipe doesn't also fire. A plain tap
 // (no drag) passes straight through to the row's own handlers.
-export default function SwipeRow({ onDuplicate, onDelete, children }) {
-  const REVEAL = 128 // width of the two action buttons
+//
+// Actions default to Copy / Delete (the diary rows), but any row can pass its
+// own `actions` = [{ label, onClick, className }]. Each button is 64px wide.
+export default function SwipeRow({ actions, onDuplicate, onDelete, children }) {
+  const acts = actions || [
+    { label: 'Copy', onClick: onDuplicate, className: 'bg-slate-700 active:bg-slate-600' },
+    { label: 'Delete', onClick: onDelete, className: 'bg-red-600 active:bg-red-700' },
+  ]
+  const REVEAL = acts.length * 64 // total width of the revealed buttons
   const el = useRef(null)
   const dx = useRef(0)
   const start = useRef(null)
@@ -54,24 +61,20 @@ export default function SwipeRow({ onDuplicate, onDelete, children }) {
   return (
     <div className="relative overflow-hidden rounded-xl">
       <div className="absolute inset-y-0 right-0 flex">
-        <button
-          onClick={() => {
-            close()
-            onDuplicate?.()
-          }}
-          className="flex w-16 items-center justify-center bg-slate-700 text-xs font-medium text-white active:bg-slate-600"
-        >
-          Copy
-        </button>
-        <button
-          onClick={() => {
-            close()
-            onDelete?.()
-          }}
-          className="flex w-16 items-center justify-center bg-red-600 text-xs font-medium text-white active:bg-red-700"
-        >
-          Delete
-        </button>
+        {acts.map((a, i) => (
+          <button
+            key={i}
+            onClick={() => {
+              close()
+              a.onClick?.()
+            }}
+            className={`flex w-16 items-center justify-center text-xs font-medium text-white ${
+              a.className || 'bg-slate-700 active:bg-slate-600'
+            }`}
+          >
+            {a.label}
+          </button>
+        ))}
       </div>
       <div
         ref={el}
