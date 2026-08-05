@@ -382,6 +382,26 @@ export default function AddFood({
     )
   }
 
+  // Edit a saved (frequent) food. Checked BEFORE the saved-list view so opening
+  // the editor from that list actually swaps to it (the list no longer wins).
+  if (editingSaved) {
+    return (
+      <FrequentEditor
+        food={editingSaved}
+        busy={busy}
+        onSave={(patch) => {
+          onUpdateSaved?.(editingSaved.id, patch)
+          setEditingSaved(null)
+        }}
+        onDelete={() => {
+          onDeleteSaved?.(editingSaved)
+          setEditingSaved(null)
+        }}
+        onCancel={() => setEditingSaved(null)}
+      />
+    )
+  }
+
   // Saved (frequent) foods list.
   if (view === 'saved') {
     const list = matchLocal(savedFoods)
@@ -430,25 +450,6 @@ export default function AddFood({
           </div>
         )}
       </div>
-    )
-  }
-
-  // Edit a saved (frequent) food.
-  if (editingSaved) {
-    return (
-      <FrequentEditor
-        food={editingSaved}
-        busy={busy}
-        onSave={(patch) => {
-          onUpdateSaved?.(editingSaved.id, patch)
-          setEditingSaved(null)
-        }}
-        onDelete={() => {
-          onDeleteSaved?.(editingSaved)
-          setEditingSaved(null)
-        }}
-        onCancel={() => setEditingSaved(null)}
-      />
     )
   }
 
