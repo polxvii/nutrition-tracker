@@ -181,6 +181,14 @@ export default function Weight() {
     loadGoalHistory().then(setGoalHist)
   }, [])
 
+  // Prefill the weight field with whatever is saved for the chosen date, so
+  // tapping a history row (which sets the date) loads it for editing — same
+  // pattern as Body measurements.
+  useEffect(() => {
+    const existing = weightLogs.find((l) => l.logged_date === date)
+    setWeight(existing ? String(Number(existing.weight_kg)) : '')
+  }, [date, weightLogs])
+
   async function save(e) {
     e.preventDefault()
     const w = Number(weight)
@@ -194,8 +202,7 @@ export default function Weight() {
       alert(error.message)
       return
     }
-    setWeight('')
-    await load()
+    await load() // the prefill effect re-syncs the field from the saved value
   }
 
   async function deleteLog(l) {
@@ -755,8 +762,25 @@ export default function Weight() {
         </Card>
       )}
 
-      {/* Log weight */}
-      <Card>
+      {/* Weight — log / edit, trend, projection, history in one section */}
+      <Collapsible
+        title="⚖️ Weight"
+        right={
+          curWeight != null ? (
+            <span className="text-xs text-slate-400">
+              {curWeight}kg
+              {delta != null && (
+                <span className={delta < 0 ? 'text-green-400' : delta > 0 ? 'text-amber-400' : ''}>
+                  {' '}
+                  ({delta > 0 ? '+' : ''}
+                  {delta}kg)
+                </span>
+              )}
+            </span>
+          ) : null
+        }
+      >
+        {/* log / edit a weigh-in (the form prefills the selected date) */}
         <form onSubmit={save} className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
             <Field label="Date">
@@ -779,26 +803,7 @@ export default function Weight() {
             {busy ? '…' : 'Save'}
           </Button>
         </form>
-      </Card>
 
-      {/* Weight trend + moving average */}
-      <Collapsible
-        title="⚖️ Weight trend"
-        right={
-          curWeight != null ? (
-            <span className="text-xs text-slate-400">
-              {curWeight}kg
-              {delta != null && (
-                <span className={delta < 0 ? 'text-green-400' : delta > 0 ? 'text-amber-400' : ''}>
-                  {' '}
-                  ({delta > 0 ? '+' : ''}
-                  {delta}kg)
-                </span>
-              )}
-            </span>
-          ) : null
-        }
-      >
         {weightData.length >= 2 ? (
           <>
           <div className="h-48">
@@ -855,79 +860,79 @@ export default function Weight() {
         ) : (
           <p className="text-center text-sm text-slate-500">Log at least 2 weigh-ins to see your trend.</p>
         )}
-      </Collapsible>
 
-      {/* Goal projection (target is set in Settings → Targets) */}
-      <Card className="space-y-2">
-        <h2 className="text-sm font-medium text-slate-300">Goal projection</h2>
-        {projection?.reached && <p className="text-sm text-green-400">🎉 You're at your goal weight!</p>}
-        {projection?.stalled && (
-          <p className="text-sm text-amber-400">
-            Not trending toward {projection.targetW}kg right now ({projection.remaining > 0 ? '+' : ''}
-            {projection.remaining}kg to go) — adjust intake to move.
-          </p>
-        )}
-        {projection && !projection.reached && !projection.stalled && (
-          <p className="text-sm text-slate-300">
-            At <b className="text-white">{projection.rateWk > 0 ? '+' : ''}{projection.rateWk}</b> kg/wk →{' '}
-            <b className="text-white">{projection.targetW}kg</b> around{' '}
-            <b className="text-white">
-              {projection.date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </b>{' '}
-            <span className="text-slate-500">(~{Math.abs(projection.weeks)} wk)</span>
-          </p>
-        )}
-        {!projection && (
-          <p className="text-xs text-slate-500">
-            {goalWkg == null
-              ? 'Set a goal weight in Settings → Targets, then log a couple of weigh-ins to see your projected date.'
-              : 'Log a couple of weigh-ins to see your projected date.'}
-          </p>
-        )}
-      </Card>
+        {/* projection (target set in Settings → Targets) */}
+        <div className="space-y-1 border-t border-slate-800 pt-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Goal projection
+          </div>
+          {projection?.reached && <p className="text-sm text-green-400">🎉 You're at your goal weight!</p>}
+          {projection?.stalled && (
+            <p className="text-sm text-amber-400">
+              Not trending toward {projection.targetW}kg right now ({projection.remaining > 0 ? '+' : ''}
+              {projection.remaining}kg to go) — adjust intake to move.
+            </p>
+          )}
+          {projection && !projection.reached && !projection.stalled && (
+            <p className="text-sm text-slate-300">
+              At <b className="text-white">{projection.rateWk > 0 ? '+' : ''}{projection.rateWk}</b> kg/wk →{' '}
+              <b className="text-white">{projection.targetW}kg</b> around{' '}
+              <b className="text-white">
+                {projection.date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </b>{' '}
+              <span className="text-slate-500">(~{Math.abs(projection.weeks)} wk)</span>
+            </p>
+          )}
+          {!projection && (
+            <p className="text-xs text-slate-500">
+              {goalWkg == null
+                ? 'Set a goal weight in Settings → Targets, then log a couple of weigh-ins to see your projected date.'
+                : 'Log a couple of weigh-ins to see your projected date.'}
+            </p>
+          )}
+        </div>
 
-      {/* Body measurements */}
-      <BodyMeasurements fromDate={fromDate} toDate={toDate} />
-
-      {/* Weigh-in history (within the selected period) */}
-      <Collapsible
-        title="🗓 Weigh-in history"
-        right={
-          weightLogs.filter((l) => inPeriod(l.logged_date)).length > 0 ? (
-            <span className="text-xs text-slate-500">
-              {weightLogs.filter((l) => inPeriod(l.logged_date)).length}
-            </span>
-          ) : null
-        }
-      >
-        {weightLogs.filter((l) => inPeriod(l.logged_date)).length === 0 ? (
-          <p className="text-center text-sm text-slate-500">No weigh-ins in this period</p>
-        ) : (
-          <div className="max-h-80 space-y-2 overflow-y-auto pr-0.5">
-            {weightLogs
-              .filter((l) => inPeriod(l.logged_date))
-              .reverse()
-              .map((l) => (
-              <div
-                key={l.id}
-                className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2.5"
-              >
-                <span className="text-sm text-slate-300">{l.logged_date}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-white">{Number(l.weight_kg).toFixed(1)} kg</span>
-                  <button
-                    onClick={() => deleteLog(l)}
-                    className="text-slate-500 hover:text-red-400"
-                    aria-label="Delete"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* history · tap a row to load it into the form for editing */}
+        {weightLogs.filter((l) => inPeriod(l.logged_date)).length > 0 && (
+          <div className="space-y-1 border-t border-slate-800 pt-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              History · tap to edit
+            </div>
+            <div className="max-h-72 space-y-1 overflow-y-auto pr-0.5">
+              {weightLogs
+                .filter((l) => inPeriod(l.logged_date))
+                .slice()
+                .reverse()
+                .map((l) => (
+                  <div key={l.id} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
+                    <button
+                      onClick={() => setDate(l.logged_date)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="text-sm text-slate-300">{l.logged_date}</span>
+                      {date === l.logged_date && (
+                        <span className="text-xs text-green-400"> · editing</span>
+                      )}
+                    </button>
+                    <span className="text-sm font-medium text-white">
+                      {Number(l.weight_kg).toFixed(1)} kg
+                    </span>
+                    <button
+                      onClick={() => deleteLog(l)}
+                      className="px-1 text-slate-500 hover:text-red-400"
+                      aria-label="Delete"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+            </div>
           </div>
         )}
       </Collapsible>
+
+      {/* Body measurements */}
+      <BodyMeasurements fromDate={fromDate} toDate={toDate} />
     </div>
   )
 }
