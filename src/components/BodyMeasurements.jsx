@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -35,6 +35,13 @@ export default function BodyMeasurements({ fromDate, toDate }) {
   const [form, setForm] = useState({})
   const [busy, setBusy] = useState(false)
   const [site, setSite] = useState('waist')
+  const formRef = useRef(null)
+
+  // Tapping a history row loads that day into the form and scrolls to it.
+  const editEntry = (d) => {
+    setDate(d)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -121,7 +128,7 @@ export default function BodyMeasurements({ fromDate, toDate }) {
 
   return (
     <Collapsible title="📏 Body measurements (cm)">
-      <form onSubmit={save} className="space-y-2">
+      <form ref={formRef} onSubmit={save} className="space-y-2">
         <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
         <div className="grid grid-cols-3 gap-2">
           {SITES.map((s) => (
@@ -140,7 +147,7 @@ export default function BodyMeasurements({ fromDate, toDate }) {
           ))}
           <div className="flex items-end">
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? '…' : 'Save'}
+              {busy ? '…' : logs.some((l) => l.logged_date === date) ? 'Update' : 'Save'}
             </Button>
           </div>
         </div>
@@ -237,10 +244,10 @@ export default function BodyMeasurements({ fromDate, toDate }) {
                   .join(' · ')
                 return (
                   <div key={l.id} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
-                    <button onClick={() => setDate(l.logged_date)} className="min-w-0 flex-1 text-left">
+                    <button onClick={() => editEntry(l.logged_date)} className="min-w-0 flex-1 text-left">
                       <div className="text-sm text-white">
                         {l.logged_date}
-                        {date === l.logged_date && <span className="text-green-400"> · editing</span>}
+                        {date === l.logged_date && <span className="text-green-400"> · editing ↑</span>}
                       </div>
                       <div className="truncate text-xs text-slate-500">{summary || '—'}</div>
                     </button>

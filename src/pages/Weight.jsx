@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -127,6 +127,14 @@ export default function Weight() {
   const [weight, setWeight] = useState('')
   const [busy, setBusy] = useState(false)
   const [applying, setApplying] = useState(false)
+  const formRef = useRef(null)
+
+  // Tapping a history row loads that day into the form and scrolls to it, so
+  // the edit target is obvious (the form sits above the list).
+  const editWeighIn = (d) => {
+    setDate(d)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   const load = useCallback(async () => {
     // Fetch far enough back to cover the chosen period AND the 30-day window the
@@ -781,7 +789,7 @@ export default function Weight() {
         }
       >
         {/* log / edit a weigh-in (the form prefills the selected date) */}
-        <form onSubmit={save} className="flex items-end gap-2">
+        <form ref={formRef} onSubmit={save} className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
             <Field label="Date">
               <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
@@ -800,7 +808,7 @@ export default function Weight() {
             </Field>
           </div>
           <Button type="submit" className="shrink-0" disabled={busy}>
-            {busy ? '…' : 'Save'}
+            {busy ? '…' : weightLogs.some((l) => l.logged_date === date) ? 'Update' : 'Save'}
           </Button>
         </form>
 
@@ -906,12 +914,12 @@ export default function Weight() {
                 .map((l) => (
                   <div key={l.id} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
                     <button
-                      onClick={() => setDate(l.logged_date)}
+                      onClick={() => editWeighIn(l.logged_date)}
                       className="min-w-0 flex-1 text-left"
                     >
                       <span className="text-sm text-slate-300">{l.logged_date}</span>
                       {date === l.logged_date && (
-                        <span className="text-xs text-green-400"> · editing</span>
+                        <span className="text-xs text-green-400"> · editing ↑</span>
                       )}
                     </button>
                     <span className="text-sm font-medium text-white">
