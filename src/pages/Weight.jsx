@@ -24,6 +24,13 @@ const RANGES = [
   { days: 30, label: '30d' },
   { days: 90, label: '90d' },
 ]
+const MEAL_SLOTS = [
+  ['breakfast', 'Breakfast'],
+  ['lunch', 'Lunch'],
+  ['dinner', 'Dinner'],
+  ['night', 'Night'],
+  ['snack', 'Snack'],
+]
 const KCAL_PER_KG = 7700
 // Daily kcal offset from measured maintenance, per goal + rate.
 const RATE_KCAL = {
@@ -134,7 +141,7 @@ export default function Weight() {
         .order('logged_date', { ascending: true }),
       supabase
         .from('food_logs')
-        .select('logged_at,calories,protein_g,carbs_g,fat_g,source')
+        .select('logged_at,calories,protein_g,carbs_g,fat_g,source,meal_type')
         .gte('logged_at', start + 'T00:00:00')
         .order('logged_at', { ascending: true }),
     ])
@@ -146,14 +153,17 @@ export default function Weight() {
     const map = {}
     for (const l of fRes.data ?? []) {
       const day = todayISODate(new Date(l.logged_at)) // local day (matches Calendar)
-      const b = map[day] || (map[day] = { date: day, eaten: 0, burned: 0, protein: 0, carbs: 0, fat: 0 })
+      const b =
+        map[day] || (map[day] = { date: day, eaten: 0, burned: 0, protein: 0, carbs: 0, fat: 0, meals: {} })
       if (l.source === 'exercise') {
         b.burned += Number(l.calories) || 0
       } else {
-        b.eaten += Number(l.calories) || 0
+        const kcal = Number(l.calories) || 0
+        b.eaten += kcal
         b.protein += Number(l.protein_g) || 0
         b.carbs += Number(l.carbs_g) || 0
         b.fat += Number(l.fat_g) || 0
+        if (l.meal_type) b.meals[l.meal_type] = (b.meals[l.meal_type] || 0) + kcal
       }
     }
     const rows = Object.values(map)
@@ -257,6 +267,22 @@ export default function Weight() {
     { key: 'c', label: 'Carbs', avg: avgCarbs, goal: profile?.goal_carbs_g ?? 0 },
     { key: 'f', label: 'Fat', avg: avgFat, goal: profile?.goal_fat_g ?? 0 },
   ]
+
+  // Average kcal each meal slot contributes on a logged day (gross intake, not
+  // net — exercise isn't a meal). Sum per slot over the period ÷ days logged.
+  const mealAvg = useMemo(() => {
+    if (!daysLogged) return []
+    const totals = {}
+    for (const d of foodData) {
+      for (const [k, v] of Object.entries(d.meals || {})) totals[k] = (totals[k] || 0) + v
+    }
+    return MEAL_SLOTS.map(([key, label]) => ({
+      key,
+      label,
+      avg: Math.round((totals[key] || 0) / daysLogged),
+    })).filter((m) => m.avg > 0)
+  }, [foodData, daysLogged])
+  const mealMax = Math.max(1, ...mealAvg.map((m) => m.avg))
 
   // Adaptive check-in: estimate real maintenance (TDEE) from intake + weight
   // change over the last ~30 days, then suggest a goal for the user's plan.
@@ -691,6 +717,34 @@ export default function Weight() {
               <span className="text-red-400">red</span> over maintenance
             </p>
           )}
+        </Card>
+      )}
+
+      {/* Calories by meal — where the day's intake comes from */}
+      {mealAvg.length > 0 && (
+        <Card className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-slate-300">Calories by meal</h2>
+            <span className="text-xs text-slate-500">avg / logged day</span>
+          </div>
+          <div className="space-y-2">
+            {mealAvg.map((m) => (
+              <div key={m.key} className="space-y-1">
+                <div className="flex items-baseline justify-between text-xs">
+                  <span className="text-slate-400">{m.label}</span>
+                  <span className="tabular-nums text-slate-200">
+                    <b className="text-sm font-semibold text-white">{m.avg}</b> kcal
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-green-500"
+                    style={{ width: `${(m.avg / mealMax) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
 
