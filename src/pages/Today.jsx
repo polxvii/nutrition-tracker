@@ -816,7 +816,15 @@ export default function Today() {
           >
             <EntryEditor
               dupMode
-              entry={copyingEntry}
+              entry={{
+                ...copyingEntry,
+                // A copy defaults to now: today's date + the current meal slot.
+                logged_at: new Date().toISOString(),
+                meal_type:
+                  copyingEntry.source === 'exercise'
+                    ? null
+                    : mealForNow(profile?.meal_windows),
+              }}
               onDuplicate={async (patch) => {
                 await duplicateEntry(patch)
                 setCopyingEntry(null)
