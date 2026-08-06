@@ -15,7 +15,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
-import { Button, Card, Field, Input } from '../components/ui'
+import { Button, Card, Collapsible, Field, Input } from '../components/ui'
 import BodyMeasurements from '../components/BodyMeasurements'
 import { loadGoalHistory, goalForDate, recordGoalHistory } from '../lib/goalHistory'
 
@@ -782,10 +782,10 @@ export default function Weight() {
       </Card>
 
       {/* Weight trend + moving average */}
-      {weightData.length >= 2 ? (
-        <Card>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-slate-300">Weight trend</h2>
+      <Collapsible
+        title="⚖️ Weight trend"
+        right={
+          curWeight != null ? (
             <span className="text-xs text-slate-400">
               {curWeight}kg
               {delta != null && (
@@ -796,7 +796,11 @@ export default function Weight() {
                 </span>
               )}
             </span>
-          </div>
+          ) : null
+        }
+      >
+        {weightData.length >= 2 ? (
+          <>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={weightData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
@@ -847,12 +851,11 @@ export default function Weight() {
               </>
             )}
           </p>
-        </Card>
-      ) : (
-        <Card>
+          </>
+        ) : (
           <p className="text-center text-sm text-slate-500">Log at least 2 weigh-ins to see your trend.</p>
-        </Card>
-      )}
+        )}
+      </Collapsible>
 
       {/* Goal projection (target is set in Settings → Targets) */}
       <Card className="space-y-2">
@@ -887,19 +890,18 @@ export default function Weight() {
       <BodyMeasurements fromDate={fromDate} toDate={toDate} />
 
       {/* Weigh-in history (within the selected period) */}
-      <div className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium text-slate-300">Weigh-in history</h2>
-          {weightLogs.filter((l) => inPeriod(l.logged_date)).length > 0 && (
+      <Collapsible
+        title="🗓 Weigh-in history"
+        right={
+          weightLogs.filter((l) => inPeriod(l.logged_date)).length > 0 ? (
             <span className="text-xs text-slate-500">
               {weightLogs.filter((l) => inPeriod(l.logged_date)).length}
             </span>
-          )}
-        </div>
+          ) : null
+        }
+      >
         {weightLogs.filter((l) => inPeriod(l.logged_date)).length === 0 ? (
-          <Card>
-            <p className="text-center text-sm text-slate-500">No weigh-ins in this period</p>
-          </Card>
+          <p className="text-center text-sm text-slate-500">No weigh-ins in this period</p>
         ) : (
           <div className="max-h-80 space-y-2 overflow-y-auto pr-0.5">
             {weightLogs
@@ -925,7 +927,7 @@ export default function Weight() {
             ))}
           </div>
         )}
-      </div>
+      </Collapsible>
     </div>
   )
 }

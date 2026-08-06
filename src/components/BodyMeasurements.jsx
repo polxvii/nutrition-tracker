@@ -11,7 +11,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
-import { Button, Card, Input } from './ui'
+import { Button, Collapsible, Input } from './ui'
 
 const SITES = [
   { key: 'waist', label: 'Waist' },
@@ -79,6 +79,16 @@ export default function BodyMeasurements({ fromDate, toDate }) {
     await load()
   }
 
+  async function deleteEntry(l) {
+    if (!window.confirm(`Delete measurements for ${l.logged_date}?`)) return
+    setBusy(true)
+    await supabase.from('body_measurements').delete().eq('id', l.id)
+    setBusy(false)
+    // If the deleted day was loaded in the form, clear it.
+    if (date === l.logged_date) setForm(Object.fromEntries(SITES.map((s) => [s.key, ''])))
+    await load()
+  }
+
   const inRange = (d) => d >= fromDate && d <= toDate
 
   // Per-site: current (latest in range) + change vs first in range.
@@ -107,10 +117,10 @@ export default function BodyMeasurements({ fromDate, toDate }) {
 
   const hasAny = stats.some((s) => s.cur != null)
 
-  return (
-    <Card className="space-y-3">
-      <h2 className="text-sm font-medium text-slate-300">Body measurements (cm)</h2>
+  const history = logs.filter((l) => inRange(l.logged_date))
 
+  return (
+    <Collapsible title="📏 Body measurements (cm)">
       <form onSubmit={save} className="space-y-2">
         <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
         <div className="grid grid-cols-3 gap-2">
@@ -211,6 +221,42 @@ export default function BodyMeasurements({ fromDate, toDate }) {
           )}
         </>
       )}
-    </Card>
+
+      {history.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            History · tap to edit
+          </div>
+          <div className="max-h-56 space-y-1 overflow-y-auto">
+            {history
+              .slice()
+              .reverse()
+              .map((l) => {
+                const summary = SITES.filter((s) => Number(l.measurements?.[s.key]) > 0)
+                  .map((s) => `${s.label[0]} ${r1(Number(l.measurements[s.key]))}`)
+                  .join(' · ')
+                return (
+                  <div key={l.id} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2">
+                    <button onClick={() => setDate(l.logged_date)} className="min-w-0 flex-1 text-left">
+                      <div className="text-sm text-white">
+                        {l.logged_date}
+                        {date === l.logged_date && <span className="text-green-400"> · editing</span>}
+                      </div>
+                      <div className="truncate text-xs text-slate-500">{summary || '—'}</div>
+                    </button>
+                    <button
+                      onClick={() => deleteEntry(l)}
+                      className="px-1 text-slate-500 hover:text-red-400"
+                      aria-label="Delete"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
+              })}
+          </div>
+        </div>
+      )}
+    </Collapsible>
   )
 }
