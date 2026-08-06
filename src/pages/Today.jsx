@@ -59,6 +59,7 @@ export default function Today() {
   const [mealPicker, setMealPicker] = useState(null) // { groupKey }
   const [mealSel, setMealSel] = useState(() => new Set()) // selected log ids
   const [goalHist, setGoalHist] = useState([]) // goal snapshots (ascending by date)
+  const [copyingEntry, setCopyingEntry] = useState(null) // Copy-swipe confirm sheet
   const [mealName, setMealName] = useState('')
   const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
   const [busy, setBusy] = useState(false)
@@ -462,20 +463,6 @@ export default function Today() {
     await supabase.from('food_logs').delete().eq('id', id)
   }
 
-  // Duplicate a logged entry into the currently selected day.
-  async function duplicateLog(l) {
-    const { id, created_at, logged_at, ...rest } = l
-    setBusy(true)
-    const { error } = await supabase
-      .from('food_logs')
-      .insert({ ...rest, logged_at: timestampFor(selectedDate) })
-    setBusy(false)
-    if (error) {
-      alert(error.message)
-      return
-    }
-    await load()
-  }
 
   async function saveEntry(patch) {
     const { date, ...fields } = patch
@@ -746,7 +733,7 @@ export default function Today() {
                     {g.map((l) => (
                       <SwipeRow
                         key={l.id}
-                        onDuplicate={() => duplicateLog(l)}
+                        onDuplicate={() => setCopyingEntry(l)}
                         onDelete={() => deleteLog(l.id)}
                       >
                       <div className="flex items-center justify-between bg-slate-900 px-3 py-2.5">
@@ -812,6 +799,33 @@ export default function Today() {
               saved={frequents}
               meals={savedMeals}
               onSaveFrequent={upsertFrequent}
+            />
+          </div>
+        </div>
+      )}
+
+      {copyingEntry && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 p-3"
+          onClick={() => setCopyingEntry(null)}
+        >
+          <div
+            className="mb-2 w-full max-w-md overflow-y-auto overflow-x-hidden rounded-2xl bg-slate-900 p-4"
+            style={{ maxHeight: '85vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <EntryEditor
+              dupMode
+              entry={copyingEntry}
+              onDuplicate={async (patch) => {
+                await duplicateEntry(patch)
+                setCopyingEntry(null)
+              }}
+              onClose={() => setCopyingEntry(null)}
+              busy={busy}
+              recent={recent}
+              saved={frequents}
+              meals={savedMeals}
             />
           </div>
         </div>

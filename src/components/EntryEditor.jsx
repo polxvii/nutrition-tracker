@@ -28,6 +28,7 @@ export default function EntryEditor({
   saved = [],
   meals = [],
   onSaveFrequent,
+  dupMode = false, // "copy" flow: confirm date / meal / details, then add a copy
 }) {
   const isEx = entry.source === 'exercise'
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
@@ -299,8 +300,13 @@ export default function EntryEditor({
   return (
     <div className="space-y-3">
       <div className="text-sm font-medium text-slate-200">
-        {isEx ? 'Edit exercise' : hasComps ? 'Edit dish' : 'Edit entry'}
+        {dupMode ? 'Copy entry' : isEx ? 'Edit exercise' : hasComps ? 'Edit dish' : 'Edit entry'}
       </div>
+      {dupMode && (
+        <p className="text-xs text-slate-500">
+          Adjust the date / meal / details, then add a copy. The original stays as is.
+        </p>
+      )}
 
       <Field label={isEx ? 'Exercise' : hasComps ? 'Dish name' : 'Food name'}>
         <Input value={f.food_name} onChange={set('food_name')} />
@@ -465,6 +471,7 @@ export default function EntryEditor({
       )}
 
       {!isEx &&
+        !dupMode &&
         onSaveFrequent &&
         (savedFreq ? (
           <p className="text-center text-sm text-green-400">⭐ Saved to your foods</p>
@@ -482,20 +489,31 @@ export default function EntryEditor({
           </Button>
         ))}
 
-      <div className="flex flex-wrap gap-2">
-        <Button className="flex-1" disabled={busy} onClick={() => onSave(build())}>
-          {busy ? 'Saving…' : 'Save'}
-        </Button>
-        <Button variant="ghost" disabled={busy} onClick={() => onDuplicate(build())}>
-          Duplicate
-        </Button>
-        <Button variant="danger" disabled={busy} onClick={() => onDelete(entry.id)}>
-          Delete
-        </Button>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
+      {dupMode ? (
+        <div className="flex gap-2">
+          <Button className="flex-1" disabled={busy} onClick={() => onDuplicate(build())}>
+            {busy ? 'Adding…' : 'Add copy'}
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button className="flex-1" disabled={busy} onClick={() => onSave(build())}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => onDuplicate(build())}>
+            Duplicate
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => onDelete(entry.id)}>
+            Delete
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
