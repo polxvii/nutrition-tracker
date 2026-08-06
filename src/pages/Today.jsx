@@ -601,7 +601,7 @@ export default function Today() {
               label: 'Fat',
               val: totals.fat,
               goal: goalFat,
-              color: goalFat > 0 && totals.fat > goalFat ? '#ef4444' : '#94a3b8',
+              color: goalFat > 0 && totals.fat > goalFat ? '#ef4444' : '#FEC6DF',
             },
           ].map((m) => {
             const pct = m.goal > 0 ? Math.min((m.val / m.goal) * 100, 100) : 0

@@ -530,114 +530,6 @@ export default function Weight() {
         </Card>
       )}
 
-      {/* Weekly check-in — measured TDEE + adaptive goal suggestion */}
-      {checkIn.ready ? (
-        <Card className="space-y-2">
-          <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
-          <p className="text-xs text-slate-500">
-            Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} and{' '}
-            {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days.
-            {checkIn.excluded > 0 &&
-              ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} skipped)`}
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">{checkIn.tdee}</div>
-              <div className="text-xs text-slate-500">est. maintenance</div>
-            </div>
-            <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">{goalCal || '—'}</div>
-              <div className="text-xs text-slate-500">current goal</div>
-            </div>
-          </div>
-
-          {/* Show the basis so the number isn't a black box. */}
-          <p className="text-xs text-slate-400">
-            From <b className="text-slate-200">{checkIn.avgIntake}</b> kcal avg intake (net of
-            exercise) and weight{' '}
-            <b className="text-slate-200">
-              {checkIn.rateWk > 0 ? '+' : ''}
-              {r1(checkIn.rateWk)}
-            </b>{' '}
-            kg/wk over the span.
-          </p>
-          {(() => {
-            // Confidence needs BOTH complete food logging AND frequent weigh-ins
-            // (the trend drives the estimate).
-            const cov = checkIn.spanDays ? checkIn.logged / checkIn.spanDays : 0
-            const wk = checkIn.weighPerWk || 0
-            const [label, cls] =
-              cov >= 0.8 && wk >= 4
-                ? ['High confidence', 'text-green-400']
-                : cov >= 0.6 && wk >= 2.5
-                  ? ['Medium confidence', 'text-amber-400']
-                  : ['Low confidence — weigh in more often', 'text-slate-400']
-            return <p className={`text-[11px] ${cls}`}>● {label}</p>
-          })()}
-          {profile?.tdee > 0 && Math.abs(checkIn.tdee - profile.tdee) >= 150 && (
-            <p className="text-[11px] text-slate-500">
-              Your profile estimate was {profile.tdee}. The measured number is{' '}
-              {checkIn.tdee < profile.tdee ? 'lower' : 'higher'} — usually because the activity
-              setting over/under-shot, or some food/drinks aren't logged. The measured trend beats
-              the formula only if your logging is complete.
-            </p>
-          )}
-
-          {goalCal > 0 && Math.abs(checkIn.suggested - goalCal) <= 30 ? (
-            <p className="text-sm text-green-400">
-              ✅ Your goal matches the data — no change needed.
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-slate-300">
-                Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
-                {goalCal > 0 && (
-                  <span className="text-slate-500">
-                    {' '}
-                    ({checkIn.suggested > goalCal ? '+' : ''}
-                    {checkIn.suggested - goalCal})
-                  </span>
-                )}
-              </p>
-              <Button className="w-full" disabled={applying} onClick={() => applyGoal(checkIn.suggested)}>
-                {applying ? 'Applying…' : `Apply ${checkIn.suggested} kcal`}
-              </Button>
-              <p className="text-[11px] text-slate-500">Protein &amp; fat kept; carbs adjusted to fit.</p>
-            </>
-          )}
-        </Card>
-      ) : (
-        <Card>
-          <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
-          {checkIn.sparseWeights ? (
-            <p className="text-xs text-slate-500">
-              Only {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days — too few to read a
-              reliable trend (a rate from a couple of points is mostly water weight). Weigh in more
-              often — a few times a week, ideally most mornings — and it'll unlock a maintenance
-              estimate you can trust.
-            </p>
-          ) : checkIn.unreliable ? (
-            <p className="text-xs text-slate-500">
-              Your logged data gives an unrealistic maintenance estimate (below your BMR) — usually
-              missing food logs or short-term water-weight swings. Keep logging food + weight
-              consistently and it'll settle.
-            </p>
-          ) : checkIn.lowLog ? (
-            <p className="text-xs text-slate-500">
-              Only {checkIn.logged} of {checkIn.spanDays} days between your weigh-ins have food
-              logged — too many gaps to trust the estimate (the missing days get guessed from the
-              logged ones). Log food on more days and it'll unlock.
-            </p>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Unlocks with regular weigh-ins (a few times a week over ≥7 days) and food logged on
-              ≥half the days between them. It reads your weight trend + intake to estimate your real
-              maintenance calories.
-            </p>
-          )}
-        </Card>
-      )}
-
       {/* Energy balance over the selected period + predicted weight impact */}
       {periodRecap.ready && (
         <Card className="space-y-1">
@@ -797,6 +689,114 @@ export default function Weight() {
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* Weekly check-in — measured TDEE + adaptive goal suggestion */}
+      {checkIn.ready ? (
+        <Card className="space-y-2">
+          <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
+          <p className="text-xs text-slate-500">
+            Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} and{' '}
+            {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days.
+            {checkIn.excluded > 0 &&
+              ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} skipped)`}
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-slate-800 py-2">
+              <div className="text-lg font-bold text-white">{checkIn.tdee}</div>
+              <div className="text-xs text-slate-500">est. maintenance</div>
+            </div>
+            <div className="rounded-lg bg-slate-800 py-2">
+              <div className="text-lg font-bold text-white">{goalCal || '—'}</div>
+              <div className="text-xs text-slate-500">current goal</div>
+            </div>
+          </div>
+
+          {/* Show the basis so the number isn't a black box. */}
+          <p className="text-xs text-slate-400">
+            From <b className="text-slate-200">{checkIn.avgIntake}</b> kcal avg intake (net of
+            exercise) and weight{' '}
+            <b className="text-slate-200">
+              {checkIn.rateWk > 0 ? '+' : ''}
+              {r1(checkIn.rateWk)}
+            </b>{' '}
+            kg/wk over the span.
+          </p>
+          {(() => {
+            // Confidence needs BOTH complete food logging AND frequent weigh-ins
+            // (the trend drives the estimate).
+            const cov = checkIn.spanDays ? checkIn.logged / checkIn.spanDays : 0
+            const wk = checkIn.weighPerWk || 0
+            const [label, cls] =
+              cov >= 0.8 && wk >= 4
+                ? ['High confidence', 'text-green-400']
+                : cov >= 0.6 && wk >= 2.5
+                  ? ['Medium confidence', 'text-amber-400']
+                  : ['Low confidence — weigh in more often', 'text-slate-400']
+            return <p className={`text-[11px] ${cls}`}>● {label}</p>
+          })()}
+          {profile?.tdee > 0 && Math.abs(checkIn.tdee - profile.tdee) >= 150 && (
+            <p className="text-[11px] text-slate-500">
+              Your profile estimate was {profile.tdee}. The measured number is{' '}
+              {checkIn.tdee < profile.tdee ? 'lower' : 'higher'} — usually because the activity
+              setting over/under-shot, or some food/drinks aren't logged. The measured trend beats
+              the formula only if your logging is complete.
+            </p>
+          )}
+
+          {goalCal > 0 && Math.abs(checkIn.suggested - goalCal) <= 30 ? (
+            <p className="text-sm text-green-400">
+              ✅ Your goal matches the data — no change needed.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-300">
+                Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
+                {goalCal > 0 && (
+                  <span className="text-slate-500">
+                    {' '}
+                    ({checkIn.suggested > goalCal ? '+' : ''}
+                    {checkIn.suggested - goalCal})
+                  </span>
+                )}
+              </p>
+              <Button className="w-full" disabled={applying} onClick={() => applyGoal(checkIn.suggested)}>
+                {applying ? 'Applying…' : `Apply ${checkIn.suggested} kcal`}
+              </Button>
+              <p className="text-[11px] text-slate-500">Protein &amp; fat kept; carbs adjusted to fit.</p>
+            </>
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
+          {checkIn.sparseWeights ? (
+            <p className="text-xs text-slate-500">
+              Only {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days — too few to read a
+              reliable trend (a rate from a couple of points is mostly water weight). Weigh in more
+              often — a few times a week, ideally most mornings — and it'll unlock a maintenance
+              estimate you can trust.
+            </p>
+          ) : checkIn.unreliable ? (
+            <p className="text-xs text-slate-500">
+              Your logged data gives an unrealistic maintenance estimate (below your BMR) — usually
+              missing food logs or short-term water-weight swings. Keep logging food + weight
+              consistently and it'll settle.
+            </p>
+          ) : checkIn.lowLog ? (
+            <p className="text-xs text-slate-500">
+              Only {checkIn.logged} of {checkIn.spanDays} days between your weigh-ins have food
+              logged — too many gaps to trust the estimate (the missing days get guessed from the
+              logged ones). Log food on more days and it'll unlock.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Unlocks with regular weigh-ins (a few times a week over ≥7 days) and food logged on
+              ≥half the days between them. It reads your weight trend + intake to estimate your real
+              maintenance calories.
+            </p>
+          )}
         </Card>
       )}
 
