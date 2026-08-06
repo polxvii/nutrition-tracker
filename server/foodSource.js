@@ -23,10 +23,22 @@ const numOr = (v, d = 0) => {
   return Number.isFinite(n) ? n : d
 }
 
-function kcalOf(n) {
+// Per-100(g/ml) value: prefer the _100g field, but many OFF products only
+// carry per-serving nutriments — derive per-100 from serving_quantity so those
+// still resolve (they used to normalise to 0 and look "not found").
+function per100Of(n, key100, keyServ, servG) {
+  if (n[key100] != null && Number.isFinite(Number(n[key100]))) return numOr(n[key100])
+  if (servG > 0 && n[keyServ] != null) return (numOr(n[keyServ]) / servG) * 100
+  return 0
+}
+function kcalOf(n, servG) {
   if (n['energy-kcal_100g'] != null) return numOr(n['energy-kcal_100g'])
-  if (n['energy-kcal'] != null) return numOr(n['energy-kcal'])
   if (n['energy_100g'] != null) return numOr(n['energy_100g']) / 4.184
+  if (servG > 0) {
+    if (n['energy-kcal_serving'] != null) return (numOr(n['energy-kcal_serving']) / servG) * 100
+    if (n['energy_serving'] != null) return ((numOr(n['energy_serving']) / 4.184) / servG) * 100
+  }
+  if (n['energy-kcal'] != null) return numOr(n['energy-kcal'])
   return 0
 }
 
@@ -36,11 +48,12 @@ function normalize(p) {
   const name = String(p.product_name || p.product_name_en || '').trim()
   if (!name) return null
   const n = p.nutriments || {}
+  const servG = numOr(p.serving_quantity)
   const per100 = {
-    calories: Math.round(kcalOf(n)),
-    protein_g: Math.round(numOr(n.proteins_100g) * 10) / 10,
-    carbs_g: Math.round(numOr(n.carbohydrates_100g) * 10) / 10,
-    fat_g: Math.round(numOr(n.fat_100g) * 10) / 10,
+    calories: Math.round(kcalOf(n, servG)),
+    protein_g: Math.round(per100Of(n, 'proteins_100g', 'proteins_serving', servG) * 10) / 10,
+    carbs_g: Math.round(per100Of(n, 'carbohydrates_100g', 'carbohydrates_serving', servG) * 10) / 10,
+    fat_g: Math.round(per100Of(n, 'fat_100g', 'fat_serving', servG) * 10) / 10,
   }
   if (!per100.calories && !per100.protein_g && !per100.carbs_g && !per100.fat_g) return null
   // `brands` may be a string ("A,B") or an array (Search-a-licious) — handle both.
