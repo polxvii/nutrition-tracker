@@ -9,7 +9,7 @@ const tabs = [
 
 export default function BottomNav() {
   return (
-    <nav className="shrink-0 border-t border-white/[0.06] bg-slate-950 safe-bottom">
+    <nav className="shrink-0 border-t border-white/[0.06] bg-slate-950">
       <div className="grid grid-cols-4">
         {tabs.map((t) => (
           <NavLink
