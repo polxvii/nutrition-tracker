@@ -798,7 +798,10 @@ export default function Today() {
               recent={recent}
               saved={frequents}
               meals={savedMeals}
-              onSaveFrequent={upsertFrequent}
+              onSaveFrequent={async (f) => {
+                await upsertFrequent(f)
+                await load() // refresh the Saved foods list so it shows up
+              }}
             />
           </div>
         </div>
