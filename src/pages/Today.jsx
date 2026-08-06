@@ -205,37 +205,33 @@ export default function Today() {
 
   // ---- actions ----
   async function upsertFrequent(entry) {
+    const name = (entry.food_name || '').trim()
+    if (!name) return
     const { data: existing } = await supabase
       .from('frequent_foods')
       .select('id, times_used')
-      .eq('food_name', entry.food_name)
+      .eq('food_name', name)
       .maybeSingle()
-    if (existing) {
-      await supabase
-        .from('frequent_foods')
-        .update({
-          times_used: existing.times_used + 1,
-          default_grams: entry.grams,
-          unit: entry.unit ?? 'g',
-          calories: entry.calories,
-          protein_g: entry.protein_g,
-          carbs_g: entry.carbs_g,
-          fat_g: entry.fat_g,
-        })
-        .eq('id', existing.id)
-    } else {
-      await supabase.from('frequent_foods').insert({
-        user_id: user.id,
-        food_name: entry.food_name,
-        default_grams: entry.grams,
-        unit: entry.unit ?? 'g',
-        calories: entry.calories,
-        protein_g: entry.protein_g,
-        carbs_g: entry.carbs_g,
-        fat_g: entry.fat_g,
-        times_used: 1,
-      })
+    // An explicitly-saved food is a real Saved food — clear any barcode so it
+    // isn't hidden by the Saved-foods list (which filters out scan-cache rows).
+    const row = {
+      default_grams: entry.grams ?? null,
+      unit: entry.unit ?? 'g',
+      calories: Math.round(Number(entry.calories) || 0),
+      protein_g: Number(entry.protein_g) || 0,
+      carbs_g: Number(entry.carbs_g) || 0,
+      fat_g: Number(entry.fat_g) || 0,
+      barcode: null,
     }
+    const { error } = existing
+      ? await supabase
+          .from('frequent_foods')
+          .update({ ...row, times_used: existing.times_used + 1 })
+          .eq('id', existing.id)
+      : await supabase
+          .from('frequent_foods')
+          .insert({ user_id: user.id, food_name: name, times_used: 1, ...row })
+    if (error) alert('Could not save to Saved foods: ' + error.message)
   }
 
   // Cache a resolved barcode → product (stored per-100 basis) so the next scan
