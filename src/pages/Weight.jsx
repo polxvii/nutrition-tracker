@@ -373,29 +373,6 @@ export default function Weight() {
           ? 'text-amber-400'
           : 'text-green-400'
 
-  // ---- Goal weight + projection ----
-  const [goalW, setGoalW] = useState('')
-  const [savingGoalW, setSavingGoalW] = useState(false)
-  useEffect(() => {
-    setGoalW(profile?.goal_weight_kg != null ? String(profile.goal_weight_kg) : '')
-  }, [profile?.goal_weight_kg])
-
-  async function saveGoalWeight(e) {
-    e.preventDefault()
-    const w = Number(goalW)
-    setSavingGoalW(true)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ goal_weight_kg: w > 0 ? w : null })
-      .eq('id', user.id)
-    setSavingGoalW(false)
-    if (error) {
-      alert(error.message)
-      return
-    }
-    await refreshProfile()
-  }
-
   // Project the target-weight date from the steadiest rate we have.
   const projection = useMemo(() => {
     const targetW = profile?.goal_weight_kg != null ? Number(profile.goal_weight_kg) : null
@@ -539,6 +516,36 @@ export default function Weight() {
               <div className="text-xs text-slate-500">current goal</div>
             </div>
           </div>
+
+          {/* Show the basis so the number isn't a black box. */}
+          <p className="text-xs text-slate-400">
+            From <b className="text-slate-200">{checkIn.avgIntake}</b> kcal avg intake (net of
+            exercise) and weight{' '}
+            <b className="text-slate-200">
+              {checkIn.rateWk > 0 ? '+' : ''}
+              {r1(checkIn.rateWk)}
+            </b>{' '}
+            kg/wk over the span.
+          </p>
+          {(() => {
+            const cov = checkIn.spanDays ? checkIn.logged / checkIn.spanDays : 0
+            const [label, cls] =
+              checkIn.logged >= 14 && cov >= 0.8
+                ? ['High confidence', 'text-green-400']
+                : checkIn.logged >= 10 && cov >= 0.6
+                  ? ['Medium confidence', 'text-amber-400']
+                  : ['Low confidence — keep logging daily', 'text-slate-400']
+            return <p className={`text-[11px] ${cls}`}>● {label}</p>
+          })()}
+          {profile?.tdee > 0 && Math.abs(checkIn.tdee - profile.tdee) >= 150 && (
+            <p className="text-[11px] text-slate-500">
+              Your profile estimate was {profile.tdee}. The measured number is{' '}
+              {checkIn.tdee < profile.tdee ? 'lower' : 'higher'} — usually because the activity
+              setting over/under-shot, or some food/drinks aren't logged. The measured trend beats
+              the formula only if your logging is complete.
+            </p>
+          )}
+
           {goalCal > 0 && Math.abs(checkIn.suggested - goalCal) <= 30 ? (
             <p className="text-sm text-green-400">
               ✅ Your goal matches the data — no change needed.
@@ -847,24 +854,9 @@ export default function Weight() {
         </Card>
       )}
 
-      {/* Goal weight + projection */}
+      {/* Goal projection (target is set in Settings → Targets) */}
       <Card className="space-y-2">
-        <h2 className="text-sm font-medium text-slate-300">Goal weight</h2>
-        <form onSubmit={saveGoalWeight} className="flex items-end gap-2">
-          <Field label="Target (kg)">
-            <Input
-              type="number"
-              inputMode="decimal"
-              step="0.1"
-              value={goalW}
-              onChange={(e) => setGoalW(e.target.value)}
-              placeholder="70"
-            />
-          </Field>
-          <Button type="submit" variant="ghost" disabled={savingGoalW}>
-            {savingGoalW ? '…' : 'Save'}
-          </Button>
-        </form>
+        <h2 className="text-sm font-medium text-slate-300">Goal projection</h2>
         {projection?.reached && <p className="text-sm text-green-400">🎉 You're at your goal weight!</p>}
         {projection?.stalled && (
           <p className="text-sm text-amber-400">
@@ -884,7 +876,9 @@ export default function Weight() {
         )}
         {!projection && (
           <p className="text-xs text-slate-500">
-            Set a target and log a couple of weigh-ins to see your projected date.
+            {goalWkg == null
+              ? 'Set a goal weight in Settings → Targets, then log a couple of weigh-ins to see your projected date.'
+              : 'Log a couple of weigh-ins to see your projected date.'}
           </p>
         )}
       </Card>

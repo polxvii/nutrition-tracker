@@ -14,7 +14,7 @@ import TargetsEditor from '../components/TargetsEditor'
 import ApiKeyManager from '../components/ApiKeyManager'
 import MealWindowsCard from '../components/MealWindowsCard'
 import GoalHistoryCard from '../components/GoalHistoryCard'
-import { Button, Collapsible } from '../components/ui'
+import { Button, Collapsible, Field, Input } from '../components/ui'
 import { recordGoalHistory } from '../lib/goalHistory'
 
 export default function Settings() {
@@ -32,6 +32,9 @@ export default function Settings() {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(null)
+  const [goalWeight, setGoalWeight] = useState(
+    profile?.goal_weight_kg != null ? String(profile.goal_weight_kg) : ''
+  )
 
   const valid = isFormValid(values)
   const calc = useMemo(() => (valid ? targetsFromForm(values) : null), [values, valid])
@@ -49,7 +52,11 @@ export default function Settings() {
     setSaved(false)
     setError(null)
     const merged = { bmr: calc.bmr, tdee: calc.tdee, ...targets }
-    const payload = buildProfilePayload(user.id, user.email, values, merged)
+    const gw = Number(goalWeight)
+    const payload = {
+      ...buildProfilePayload(user.id, user.email, values, merged),
+      goal_weight_kg: gw > 0 ? gw : null,
+    }
     const { error } = await supabase.from('profiles').upsert(payload)
     if (error) {
       setError(error.message)
@@ -93,6 +100,20 @@ export default function Settings() {
           }}
           onReset={() => setDirty(false)}
         />
+
+        <Field label="Goal weight (kg)" hint="Target used for the projection on Progress.">
+          <Input
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            value={goalWeight}
+            onChange={(e) => {
+              setGoalWeight(e.target.value)
+              setSaved(false)
+            }}
+            placeholder="e.g. 70"
+          />
+        </Field>
 
         {targets && !macroSplitOk(targets) && (
           <p className="text-sm text-red-400">
