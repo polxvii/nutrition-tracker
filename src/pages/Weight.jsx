@@ -319,6 +319,14 @@ export default function Weight() {
     const spanDays = Math.round((new Date(spanEnd) - new Date(spanStart)) / 86400000)
     const rateWk = weeklyRate(wpts)
     if (spanDays < 7 || rateWk == null) return { ready: false }
+    // The estimate lives or dies by the weight trend. A rate from just a couple
+    // of weigh-ins is mostly water-weight noise — a trustworthy number needs
+    // regular weigh-ins (a regression over many points cancels the daily swings).
+    const weighIns = wpts.length
+    const weighPerWk = weighIns / Math.max(spanDays / 7, 1)
+    if (weighIns < 4 || weighPerWk < 1.5) {
+      return { ready: false, sparseWeights: true, weighIns, spanDays }
+    }
     const allDays = foodByDay.filter((d) => d.date >= spanStart && d.date <= spanEnd)
     const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
     const excluded = allDays.length - fdays.length
@@ -342,7 +350,18 @@ export default function Weight() {
     const gr = profile?.goal_rate || 'medium'
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
     const suggested = Math.max(bmr, Math.round((tdee + offset) / 10) * 10)
-    return { ready: true, tdee, avgIntake, rateWk, suggested, spanDays, logged: fdays.length, excluded }
+    return {
+      ready: true,
+      tdee,
+      avgIntake,
+      rateWk,
+      suggested,
+      spanDays,
+      logged: fdays.length,
+      excluded,
+      weighIns,
+      weighPerWk,
+    }
   }, [weightLogs, foodByDay, profile, intakeFloor])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
@@ -516,8 +535,8 @@ export default function Weight() {
         <Card className="space-y-2">
           <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
           <p className="text-xs text-slate-500">
-            Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} over{' '}
-            {checkIn.spanDays} days between weigh-ins.
+            Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} and{' '}
+            {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days.
             {checkIn.excluded > 0 &&
               ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} skipped)`}
           </p>
@@ -543,13 +562,16 @@ export default function Weight() {
             kg/wk over the span.
           </p>
           {(() => {
+            // Confidence needs BOTH complete food logging AND frequent weigh-ins
+            // (the trend drives the estimate).
             const cov = checkIn.spanDays ? checkIn.logged / checkIn.spanDays : 0
+            const wk = checkIn.weighPerWk || 0
             const [label, cls] =
-              checkIn.logged >= 14 && cov >= 0.8
+              cov >= 0.8 && wk >= 4
                 ? ['High confidence', 'text-green-400']
-                : checkIn.logged >= 10 && cov >= 0.6
+                : cov >= 0.6 && wk >= 2.5
                   ? ['Medium confidence', 'text-amber-400']
-                  : ['Low confidence — keep logging daily', 'text-slate-400']
+                  : ['Low confidence — weigh in more often', 'text-slate-400']
             return <p className={`text-[11px] ${cls}`}>● {label}</p>
           })()}
           {profile?.tdee > 0 && Math.abs(checkIn.tdee - profile.tdee) >= 150 && (
@@ -587,7 +609,14 @@ export default function Weight() {
       ) : (
         <Card>
           <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
-          {checkIn.unreliable ? (
+          {checkIn.sparseWeights ? (
+            <p className="text-xs text-slate-500">
+              Only {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days — too few to read a
+              reliable trend (a rate from a couple of points is mostly water weight). Weigh in more
+              often — a few times a week, ideally most mornings — and it'll unlock a maintenance
+              estimate you can trust.
+            </p>
+          ) : checkIn.unreliable ? (
             <p className="text-xs text-slate-500">
               Your logged data gives an unrealistic maintenance estimate (below your BMR) — usually
               missing food logs or short-term water-weight swings. Keep logging food + weight
@@ -601,8 +630,9 @@ export default function Weight() {
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Unlocks with ≥2 weigh-ins over ≥7 days (within the last 30) and food logged on ≥half
-              the days between them. It estimates your real maintenance calories and suggests a goal.
+              Unlocks with regular weigh-ins (a few times a week over ≥7 days) and food logged on
+              ≥half the days between them. It reads your weight trend + intake to estimate your real
+              maintenance calories.
             </p>
           )}
         </Card>
