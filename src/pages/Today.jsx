@@ -640,27 +640,41 @@ export default function Today() {
       </div>
 
       {showAdd && (
-        <Card>
-          <AddFood
-            defaultMeal={mealForNow(profile?.meal_windows)}
-            recent={recent}
-            saved={frequents}
-            meals={savedMeals}
-            onLog={handleLog}
-            onLogMany={handlePhotoLog}
-            onLogMeal={handleLogMeal}
-            onDeleteSaved={(f) => deleteFrequent(f.id)}
-            onDeleteMeal={(m) => deleteMeal(m.id)}
-            onUpdateMeal={updateMeal}
-            onUpdateSaved={updateFrequent}
-            onSaveFrequent={async (f) => {
-              await upsertFrequent(f)
-              await load()
-            }}
-            onCancel={() => setShowAdd(false)}
-            busy={busy}
-          />
-        </Card>
+        <div className="fixed inset-0 z-40 flex flex-col bg-slate-950">
+          <div className="mx-auto flex h-full w-full max-w-md flex-col">
+            <div className="safe-top flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+              <span className="text-base font-semibold text-white">Add food</span>
+              <button
+                onClick={() => setShowAdd(false)}
+                className="p-1 text-xl leading-none text-slate-400 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4">
+              <AddFood
+                defaultMeal={mealForNow(profile?.meal_windows)}
+                recent={recent}
+                saved={frequents}
+                meals={savedMeals}
+                onLog={handleLog}
+                onLogMany={handlePhotoLog}
+                onLogMeal={handleLogMeal}
+                onDeleteSaved={(f) => deleteFrequent(f.id)}
+                onDeleteMeal={(m) => deleteMeal(m.id)}
+                onUpdateMeal={updateMeal}
+                onUpdateSaved={updateFrequent}
+                onSaveFrequent={async (f) => {
+                  await upsertFrequent(f)
+                  await load()
+                }}
+                onCancel={() => setShowAdd(false)}
+                busy={busy}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {showExercise && (
