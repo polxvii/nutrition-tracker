@@ -623,7 +623,7 @@ export default function AddFood({
             {savedFoods.length === 0 ? 'No saved foods yet.' : 'No match.'}
           </p>
         ) : (
-          <div className="max-h-80 space-y-1 overflow-y-auto">
+          <div className="space-y-1">
             {list.map((f) => (
               <SwipeRow
                 key={f.id}
@@ -688,7 +688,7 @@ export default function AddFood({
         ) : (
           <>
           <p className="text-[11px] text-slate-500">Tap to add · swipe a row left to edit / delete</p>
-          <div className="max-h-80 space-y-1 overflow-y-auto">
+          <div className="space-y-1">
             {meals.map((m) => {
               const kcal = (m.items || []).reduce((s, it) => s + (Number(it.calories) || 0), 0)
               return (
@@ -815,7 +815,7 @@ export default function AddFood({
                 No database match. Try the AI button for Thai dishes.
               </p>
             ) : (
-              <div className="max-h-72 space-y-1 overflow-y-auto">
+              <div className="space-y-1">
                 {results.map((f, i) => (
                   <button
                     key={f.code || i}
@@ -844,7 +844,7 @@ export default function AddFood({
             <p className="text-[11px] text-slate-500">
               Tap a name to set servings · ＋ adds 1{onSaveFrequent ? ' · swipe to ⭐ save' : ''}
             </p>
-            <div className="max-h-80 space-y-1 overflow-y-auto">
+            <div className="space-y-1">
               {recent.map((f, i) => {
                 const row = <FoodRow item={f} onAdd={quickAdd} onOpen={openSavedPick} />
                 return onSaveFrequent ? (
