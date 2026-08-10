@@ -640,7 +640,7 @@ export default function Today() {
       </div>
 
       {showAdd && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-slate-950">
+        <div className="fixed inset-0 z-20 flex flex-col bg-slate-950">
           <div className="mx-auto flex h-full w-full max-w-md flex-col">
             <div className="safe-top flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
               <span className="text-base font-semibold text-white">Add food</span>
@@ -652,7 +652,7 @@ export default function Today() {
                 ✕
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4">
+            <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
               <AddFood
                 defaultMeal={mealForNow(profile?.meal_windows)}
                 recent={recent}
@@ -787,7 +787,7 @@ export default function Today() {
 
       {editingEntry && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 p-3"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-3"
           onClick={() => setEditingEntry(null)}
         >
           <div
@@ -819,7 +819,7 @@ export default function Today() {
 
       {copyingEntry && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 p-3"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-3"
           onClick={() => setCopyingEntry(null)}
         >
           <div
@@ -854,7 +854,7 @@ export default function Today() {
 
       {mealPicker && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 p-3"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-3"
           onClick={() => setMealPicker(null)}
         >
           <div
