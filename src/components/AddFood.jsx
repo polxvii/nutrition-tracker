@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { searchFoods, lookupBarcode, scaleFood, unitsFor } from '../lib/foodSearch'
+import { supabase } from '../lib/supabase'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
 import AddFoodForm from './AddFoodForm'
@@ -93,6 +94,7 @@ export default function AddFood({
   const [savedServText, setSavedServText] = useState('1')
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
+  const [historyHits, setHistoryHits] = useState([]) // matches across ALL your logs
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState(null)
 
@@ -140,6 +142,7 @@ export default function AddFood({
     const query = q.trim()
     if (query.length < 2) {
       setResults([])
+      setHistoryHits([])
       setSearching(false)
       return
     }
@@ -147,6 +150,27 @@ export default function AddFood({
     setError(null)
     const ctrl = new AbortController()
     const t = setTimeout(async () => {
+      // Search your ENTIRE logged history by name (not just the recent 25),
+      // de-duped by name — so anything you've ever logged is findable.
+      supabase
+        .from('food_logs')
+        .select('id,food_name,calories,protein_g,carbs_g,fat_g,grams,unit,components')
+        .neq('source', 'exercise')
+        .ilike('food_name', `%${query}%`)
+        .order('created_at', { ascending: false })
+        .limit(60)
+        .then(({ data }) => {
+          const seen = new Set()
+          const out = []
+          for (const l of data || []) {
+            const k = (l.food_name || '').toLowerCase()
+            if (!k || seen.has(k)) continue
+            seen.add(k)
+            out.push(l)
+            if (out.length >= 15) break
+          }
+          setHistoryHits(out)
+        })
       try {
         setResults(await searchFoods(query, { signal: ctrl.signal }))
       } catch (e) {
@@ -703,7 +727,10 @@ export default function AddFood({
   }
 
   // ---- home ------------------------------------------------------------
-  const localHits = ql ? [...matchLocal(savedFoods), ...matchLocal(recent)] : []
+  // Your foods = saved + recent (in-memory) + full-history matches (server).
+  const localHits = ql
+    ? [...matchLocal(savedFoods), ...matchLocal(recent), ...historyHits]
+    : []
   // De-dupe local hits by name (saved wins).
   const seen = new Set()
   const localUnique = localHits.filter((f) => {
