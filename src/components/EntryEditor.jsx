@@ -3,6 +3,7 @@ import { Button, Field, Input, Select } from './ui'
 import { MEALS, UNITS } from './AddFoodForm'
 import { todayISODate } from '../lib/dateHelpers'
 import AddFood from './AddFood'
+import SwipeRow from './SwipeRow'
 
 const num = (v) => {
   const n = Number(v)
@@ -434,63 +435,49 @@ export default function EntryEditor({
             </div>
           </div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Breakdown — edit any part
+            Breakdown — edit · swipe a row for ⭐ / copy / delete
           </div>
           {comps.map((it, i) => (
-            <div key={i} className="space-y-2 rounded-xl bg-slate-800 p-2">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={it.name}
-                  onChange={(e) => updateComp(i, 'name', e.target.value)}
-                  className="min-w-0 flex-1"
-                />
-                <button
-                  onClick={() => removeComp(i)}
-                  className="px-1 text-slate-500 hover:text-red-400"
-                  aria-label="Remove item"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="grid grid-cols-5 gap-1 text-center text-[10px] text-slate-500">
-                <span>grams</span>
-                <span>kcal</span>
-                <span>P</span>
-                <span>C</span>
-                <span>F</span>
-              </div>
-              <div className="grid grid-cols-5 gap-1">
-                {MACRO_KEYS.map((k) => (
+            <SwipeRow
+              key={i}
+              actions={[
+                ...(onSaveFrequent
+                  ? [{ label: '⭐ Save', onClick: () => saveComp(i), className: 'bg-green-700 active:bg-green-600' }]
+                  : []),
+                { label: 'Copy', onClick: () => duplicateComp(i), className: 'bg-slate-600 active:bg-slate-500' },
+                { label: 'Delete', onClick: () => removeComp(i), className: 'bg-red-600 active:bg-red-700' },
+              ]}
+            >
+              <div className="space-y-2 bg-slate-800 p-2">
+                <div className="flex items-center gap-2">
                   <Input
-                    key={k}
-                    type="number"
-                    inputMode="decimal"
-                    value={it[k]}
-                    onChange={(e) => updateComp(i, k, e.target.value)}
-                    className="min-w-0 px-1 text-center"
+                    value={it.name}
+                    onChange={(e) => updateComp(i, 'name', e.target.value)}
+                    className="min-w-0 flex-1"
                   />
-                ))}
-              </div>
-              <div className="flex justify-end gap-3 text-[11px]">
-                <button
-                  onClick={() => duplicateComp(i)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  ⎘ Duplicate
-                </button>
-                {onSaveFrequent &&
-                  (savedComps.has(i) ? (
-                    <span className="text-green-400">⭐ Saved</span>
-                  ) : (
-                    <button
-                      onClick={() => saveComp(i)}
-                      className="text-slate-400 hover:text-green-400"
-                    >
-                      ⭐ Save food
-                    </button>
+                  {savedComps.has(i) && <span className="shrink-0 text-xs text-green-400">⭐ saved</span>}
+                </div>
+                <div className="grid grid-cols-5 gap-1 text-center text-[10px] text-slate-500">
+                  <span>grams</span>
+                  <span>kcal</span>
+                  <span>P</span>
+                  <span>C</span>
+                  <span>F</span>
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {MACRO_KEYS.map((k) => (
+                    <Input
+                      key={k}
+                      type="number"
+                      inputMode="decimal"
+                      value={it[k]}
+                      onChange={(e) => updateComp(i, k, e.target.value)}
+                      className="min-w-0 px-1 text-center"
+                    />
                   ))}
+                </div>
               </div>
-            </div>
+            </SwipeRow>
           ))}
           <button
             onClick={() => setAddingItem(true)}
