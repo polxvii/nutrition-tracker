@@ -28,12 +28,15 @@ export default function EntryEditor({
   saved = [],
   meals = [],
   onSaveFrequent,
+  onSaveMeal,
   dupMode = false, // "copy" flow: confirm date / meal / details, then add a copy
 }) {
   const isEx = entry.source === 'exercise'
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
+  const [savedComps, setSavedComps] = useState(() => new Set()) // components saved to foods
+  const [mealSaved, setMealSaved] = useState(false)
   // Dish serving multiplier. Restored from the saved entry so the stepper stays
   // anchored on re-open (was resetting to ×1 while the stored components already
   // held the scaled amounts, which made further steps compound wrongly).
@@ -104,7 +107,47 @@ export default function EntryEditor({
       })
     )
   }
-  const removeComp = (i) => setComps((prev) => prev.filter((_, idx) => idx !== i))
+  const removeComp = (i) => {
+    setSavedComps(new Set())
+    setComps((prev) => prev.filter((_, idx) => idx !== i))
+  }
+  // Duplicate a sub-item within the dish (insert a copy right after it).
+  const duplicateComp = (i) => {
+    setSavedComps(new Set())
+    setComps((prev) => {
+      const c = prev[i]
+      const copy = { ...c, _base: { ...(c._base || c) } }
+      return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)]
+    })
+  }
+  // Save a sub-item as its own Saved food.
+  async function saveComp(i) {
+    const c = comps[i]
+    await onSaveFrequent?.({
+      food_name: (c.name || '').trim() || 'Item',
+      grams: num(c.grams) || null,
+      unit: 'g',
+      calories: num(c.calories),
+      protein_g: num(c.protein_g),
+      carbs_g: num(c.carbs_g),
+      fat_g: num(c.fat_g),
+    })
+    setSavedComps((prev) => new Set(prev).add(i))
+  }
+  // Save this whole dish as a reusable meal (combo) from its components.
+  function saveAsMeal() {
+    const items = comps.map((c) => ({
+      food_name: (c.name || '').trim() || 'Item',
+      grams: num(c.grams) || null,
+      unit: 'g',
+      calories: num(c.calories),
+      protein_g: num(c.protein_g),
+      carbs_g: num(c.carbs_g),
+      fat_g: num(c.fat_g),
+    }))
+    onSaveMeal?.({ name: (f.food_name || '').trim() || 'Meal', items })
+    setMealSaved(true)
+  }
 
   // Serving control at the dish level: scale every component (its current value
   // AND its grams-scaling base) so one control resizes the whole dish instead of
@@ -428,6 +471,25 @@ export default function EntryEditor({
                   />
                 ))}
               </div>
+              <div className="flex justify-end gap-3 text-[11px]">
+                <button
+                  onClick={() => duplicateComp(i)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ⎘ Duplicate
+                </button>
+                {onSaveFrequent &&
+                  (savedComps.has(i) ? (
+                    <span className="text-green-400">⭐ Saved</span>
+                  ) : (
+                    <button
+                      onClick={() => saveComp(i)}
+                      className="text-slate-400 hover:text-green-400"
+                    >
+                      ⭐ Save food
+                    </button>
+                  ))}
+              </div>
             </div>
           ))}
           <button
@@ -441,6 +503,14 @@ export default function EntryEditor({
             {Math.round(compTotals.protein_g)}P · {Math.round(compTotals.carbs_g)}C ·{' '}
             {Math.round(compTotals.fat_g)}F
           </div>
+          {onSaveMeal &&
+            (mealSaved ? (
+              <p className="text-center text-sm text-green-400">🍱 Saved as a meal</p>
+            ) : (
+              <Button variant="ghost" className="w-full text-sm" onClick={saveAsMeal}>
+                🍱 Save as meal
+              </Button>
+            ))}
         </div>
       ) : (
         <div className="grid grid-cols-4 gap-2">

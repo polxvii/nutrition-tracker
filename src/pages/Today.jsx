@@ -414,6 +414,21 @@ export default function Today() {
     await load()
   }
 
+  // Save a dish (from the entry editor) as a reusable meal combo.
+  async function saveMealFromEntry({ name, items }) {
+    if (!items?.length) return
+    setBusy(true)
+    const { error } = await supabase
+      .from('saved_meals')
+      .insert({ user_id: user.id, name: name || 'Meal', items })
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await load()
+  }
+
   async function handleAddExercise({ name, calories }) {
     setBusy(true)
     const { error } = await supabase.from('food_logs').insert({
@@ -812,6 +827,7 @@ export default function Today() {
                 await upsertFrequent(f)
                 await load() // refresh the Saved foods list so it shows up
               }}
+              onSaveMeal={saveMealFromEntry}
             />
           </div>
         </div>
