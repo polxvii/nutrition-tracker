@@ -31,6 +31,8 @@ export default function PhotoLogger({
   const [asFrequent, setAsFrequent] = useState(false)
   const [dish, setDish] = useState('') // combined dish name (editable)
   const [combine, setCombine] = useState(true) // log as one dish vs N items
+  const [serv, setServ] = useState(1) // serving multiplier — scales all items at once
+  const [servText, setServText] = useState('1')
 
   const MAX_IMAGES = 6
 
@@ -76,6 +78,8 @@ export default function PhotoLogger({
         })
       )
       setConfidence(res.confidence)
+      setServ(1) // fresh estimate starts at ×1
+      setServText('1')
       // Seed the combined-dish name: AI's dish name → the note → joined items.
       const joined = (res.items || []).slice(0, 2).map((it) => it.name).filter(Boolean).join(' + ')
       setDish((res.dish || '').trim() || note.trim() || joined)
@@ -134,6 +138,49 @@ export default function PhotoLogger({
   }
 
   const removeItem = (i) => setItems((prev) => prev.filter((_, idx) => idx !== i))
+
+  // Serving multiplier for the whole estimate: scale every item (and its
+  // grams-scaling base) by a ratio, so you resize the meal once instead of
+  // editing each item. Applied per commit (button or typed value on blur).
+  function applyServ(next) {
+    if (!(next > 0)) return
+    const r = next / serv
+    if (r !== 1) {
+      const s = (n) => Math.round(num(n) * r)
+      setItems((prev) =>
+        (prev || []).map((it) => {
+          const base = it._base || it
+          return {
+            ...it,
+            grams: s(it.grams),
+            calories: s(it.calories),
+            protein_g: s(it.protein_g),
+            carbs_g: s(it.carbs_g),
+            fat_g: s(it.fat_g),
+            _base: {
+              ...base,
+              grams: s(base.grams),
+              calories: s(base.calories),
+              protein_g: s(base.protein_g),
+              carbs_g: s(base.carbs_g),
+              fat_g: s(base.fat_g),
+            },
+          }
+        })
+      )
+    }
+    setServ(next)
+    setServText(String(next))
+  }
+  const stepServ = (d) => {
+    const n = Math.round((serv + d) * 10) / 10
+    if (n >= 0.5) applyServ(n)
+  }
+  const commitServ = () => {
+    const n = Number(servText)
+    if (n > 0) applyServ(Math.round(n * 100) / 100)
+    else setServText(String(serv))
+  }
 
   const totals = (items ?? []).reduce(
     (a, it) => ({
@@ -356,6 +403,47 @@ export default function PhotoLogger({
               </div>
             ))}
           </div>
+
+          {items.length > 0 && (
+            <div className="flex items-center justify-between rounded-xl bg-slate-800 p-2">
+              <div>
+                <div className="text-sm font-medium text-slate-200">Servings</div>
+                <div className="text-[11px] text-slate-500">scales all items at once</div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => stepServ(-0.5)}
+                  disabled={serv <= 0.5}
+                  className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
+                  aria-label="Fewer servings"
+                >
+                  −
+                </button>
+                <div className="flex items-center">
+                  <span className="text-slate-400">×</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={servText}
+                    onChange={(e) => setServText(e.target.value)}
+                    onBlur={commitServ}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                    }}
+                    className="w-14 px-1 text-center text-base font-bold tabular-nums"
+                    aria-label="Servings"
+                  />
+                </div>
+                <button
+                  onClick={() => stepServ(0.5)}
+                  className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
+                  aria-label="More servings"
+                >
+                  ＋
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="text-center text-sm text-slate-300">
             Total: <b className="text-white">{Math.round(totals.calories)}</b> kcal ·{' '}
