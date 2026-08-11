@@ -119,7 +119,9 @@ export default function Calendar() {
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
 
   // net calories for a day = eaten − exercise burned.
-  const netOf = (b) => b.cal - b.burned
+  // Gross model: colour by food eaten only (goal/maintenance already include
+  // activity). Exercise is shown as info (🔥), not subtracted.
+  const netOf = (b) => b.cal
   // Month summary over days with food logged.
   const logged = Object.values(byDate).filter((b) => b.cal > 0)
   const nLogged = logged.length
@@ -281,7 +283,7 @@ export default function Calendar() {
       </div>
 
       <p className="text-center text-[11px] text-slate-500">
-        net kcal (food − 🔥exercise) · P·C·F (g) — tap a day to view / log
+        kcal eaten · P·C·F (g) · 🔥 = exercise (info) — tap a day to view / log
       </p>
       <div className="flex justify-center gap-3 text-[10px] text-slate-500">
         <span className="flex items-center gap-1">

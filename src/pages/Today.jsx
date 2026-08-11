@@ -190,11 +190,12 @@ export default function Today() {
   const goalProtein = dayTargets?.goal_protein_g ?? profile?.goal_protein_g ?? 0
   const goalCarbs = dayTargets?.goal_carbs_g ?? profile?.goal_carbs_g ?? 0
   const goalFat = dayTargets?.goal_fat_g ?? profile?.goal_fat_g ?? 0
-  // Remaining = goal − eaten + burned (exercise gives calories back).
-  const remaining = Math.round(goalCal - totals.calories + totals.burned)
-  // Net kcal tiered like Progress/Calendar (green ≤ goal · amber over goal ·
-  // red over maintenance) — colours the calorie ring and the "over" number.
-  const netCal = totals.calories - totals.burned
+  // Gross model: goal/maintenance already include your activity, so exercise is
+  // NOT subtracted (it's shown as separate info). Remaining = goal − eaten.
+  const remaining = Math.round(goalCal - totals.calories)
+  // Intake tiered like Progress/Calendar (green ≤ goal · amber over goal · red
+  // over maintenance) — colours the ring and the "over" number. Uses gross eaten.
+  const netCal = totals.calories
   const maint = dayTargets?.tdee ?? profile?.tdee ?? 0
   const calColor =
     maint > 0 && netCal > maint
@@ -576,7 +577,7 @@ export default function Today() {
 
         {maint > 0 && (
           <div className="flex items-baseline justify-between border-t border-white/5 pt-3">
-            <span className="text-sm text-slate-400">Net today</span>
+            <span className="text-sm text-slate-400">vs maintenance</span>
             <span className="text-sm font-semibold tabular-nums text-slate-200">
               {Math.round(netCal)}
               <span className="font-normal text-slate-500"> kcal</span>

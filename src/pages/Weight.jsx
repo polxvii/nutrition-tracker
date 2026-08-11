@@ -154,10 +154,9 @@ export default function Weight() {
         .order('logged_at', { ascending: true }),
     ])
     setWeightLogs(wRes.data ?? [])
-    // Per-day totals. `kcal` is NET of exercise (eaten − burned), matching the
-    // Today page ("calories back") and the Calendar month summary, so adherence
-    // and predicted-impact line up across pages. `eaten` keeps the gross intake
-    // for the incomplete-day floor. A day counts as "logged" only if it has food.
+    // Per-day totals. Gross model: `kcal` is GROSS food intake (exercise is NOT
+    // subtracted — goal/maintenance already include activity). `burned` is kept
+    // for reference only. A day counts as "logged" only if it has food.
     const map = {}
     for (const l of fRes.data ?? []) {
       const day = todayISODate(new Date(l.logged_at)) // local day (matches Calendar)
@@ -176,7 +175,7 @@ export default function Weight() {
     }
     const rows = Object.values(map)
       .filter((b) => b.eaten > 0)
-      .map((b) => ({ ...b, kcal: b.eaten - b.burned }))
+      .map((b) => ({ ...b, kcal: b.eaten }))
       .sort((a, b) => (a.date < b.date ? -1 : 1))
     setFoodByDay(rows)
   }, [fromDate])
@@ -222,20 +221,25 @@ export default function Weight() {
   const inPeriod = (d) => d >= fromDate && d <= toDate
   const periodDays = Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1)
 
-  // Weight points in range + a 7-point trailing moving average (smooths noise).
+  // Weight points in range + an EWMA trend (alpha 0.1) that smooths daily
+  // water-weight noise far better than raw weigh-ins. `ma` = the trend line.
   const weightData = useMemo(() => {
     const pts = weightLogs
       .filter((l) => inPeriod(l.logged_date))
       .map((l) => ({ fullDate: l.logged_date, date: l.logged_date.slice(5), weight: Number(l.weight_kg) }))
-    return pts.map((p, i, arr) => {
-      const win = arr.slice(Math.max(0, i - 6), i + 1)
-      return { ...p, ma: r1(win.reduce((s, x) => s + x.weight, 0) / win.length) }
+    let ema = null
+    return pts.map((p) => {
+      ema = ema == null ? p.weight : 0.1 * p.weight + 0.9 * ema
+      return { ...p, ma: r1(ema) }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weightLogs, fromDate, toDate])
 
-  // Need ≥5 days of span before stating a weekly rate (avoids noisy extrapolation).
-  const rate = useMemo(() => weeklyRate(weightData, 5), [weightData])
+  // Rate from the EWMA trend (not raw weight) — ≥5 days span to avoid noise.
+  const rate = useMemo(
+    () => weeklyRate(weightData.map((p) => ({ fullDate: p.fullDate, weight: p.ma })), 5),
+    [weightData]
+  )
   const verdict = trendVerdict(rate, profile?.goal_type)
   const curWeight = weightData.length ? weightData[weightData.length - 1].weight : null
   const delta = weightData.length >= 2 ? r1(curWeight - weightData[0].weight) : null
@@ -317,7 +321,13 @@ export default function Weight() {
     const spanStart = wpts[0].fullDate
     const spanEnd = wpts[wpts.length - 1].fullDate
     const spanDays = Math.round((new Date(spanEnd) - new Date(spanStart)) / 86400000)
-    const rateWk = weeklyRate(wpts)
+    // Rate from the EWMA trend (alpha 0.1) — cancels day-to-day water swings.
+    let ema = null
+    const smoothed = wpts.map((p) => {
+      ema = ema == null ? p.weight : 0.1 * p.weight + 0.9 * ema
+      return { fullDate: p.fullDate, weight: ema }
+    })
+    const rateWk = weeklyRate(smoothed)
     if (spanDays < 7 || rateWk == null) return { ready: false }
     // The estimate lives or dies by the weight trend. A rate from just a couple
     // of weigh-ins is mostly water-weight noise — a trustworthy number needs
@@ -535,7 +545,7 @@ export default function Weight() {
         <Card className="space-y-1">
           <h2 className="text-sm font-medium text-slate-300">Energy balance</h2>
           <p className="text-xs text-slate-500">
-            Net of exercise over {periodRecap.n} logged day{periodRecap.n > 1 ? 's' : ''} · {rangeText}.
+            Gross intake over {periodRecap.n} logged day{periodRecap.n > 1 ? 's' : ''} · {rangeText}.
           </p>
           {periodRecap.vsGoal != null && (
             <p className="text-sm text-slate-300">
@@ -656,7 +666,7 @@ export default function Weight() {
           </div>
           {goalCal > 0 && (
             <p className="mt-1 text-center text-[11px] text-slate-500">
-              Daily net kcal · <span className="text-green-400">green</span> ≤ goal ·{' '}
+              Daily kcal eaten · <span className="text-green-400">green</span> ≤ goal ·{' '}
               <span className="text-amber-400">amber</span> over goal ·{' '}
               <span className="text-red-400">red</span> over maintenance
             </p>
@@ -715,14 +725,24 @@ export default function Weight() {
 
           {/* Show the basis so the number isn't a black box. */}
           <p className="text-xs text-slate-400">
-            From <b className="text-slate-200">{checkIn.avgIntake}</b> kcal avg intake (net of
-            exercise) and weight{' '}
+            From <b className="text-slate-200">{checkIn.avgIntake}</b> kcal avg gross intake and
+            weight{' '}
             <b className="text-slate-200">
               {checkIn.rateWk > 0 ? '+' : ''}
               {r1(checkIn.rateWk)}
             </b>{' '}
-            kg/wk over the span.
+            kg/wk over the span. This is your total maintenance (activity included).
           </p>
+          {(() => {
+            // Logging coverage — always shown; a low % biases the estimate low.
+            const covPct = checkIn.spanDays ? Math.round((checkIn.logged / checkIn.spanDays) * 100) : 0
+            return (
+              <p className={`text-[11px] ${covPct < 80 ? 'text-amber-400' : 'text-slate-500'}`}>
+                Logging coverage {covPct}% ({checkIn.logged}/{checkIn.spanDays} days)
+                {covPct < 80 ? ' — under-logged days bias this LOW; trust it less.' : ''}
+              </p>
+            )
+          })()}
           {(() => {
             // Confidence needs BOTH complete food logging AND frequent weigh-ins
             // (the trend drives the estimate).
@@ -886,7 +906,7 @@ export default function Weight() {
             </ResponsiveContainer>
           </div>
           <p className="mt-1 text-center text-[11px] text-slate-500">
-            Grey = daily · <span className="text-green-400">green</span> = 7-point average
+            Grey = daily · <span className="text-green-400">green</span> = trend (EWMA)
             {goalWkg != null && (
               <>
                 {' '}
