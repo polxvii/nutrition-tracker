@@ -144,12 +144,19 @@ export default function Calendar() {
       ? loggedEntries.filter(([k, b]) => goalOn(k) > 0 && netOf(b) <= goalOn(k)).length
       : null
 
-  // Predicted weight impact: (net eaten − maintenance TDEE) / 7700 kcal-per-kg.
   const tdee = profile?.tdee ?? 0
+  // Aggregate the day-specific goal / maintenance (from goal history) so the
+  // month summary is history-aware too — not just the current goal.
+  const totMaintOn = loggedEntries.reduce((s, [k]) => s + maintOn(k), 0)
+  const avgGoalOn = nLogged
+    ? Math.round(loggedEntries.reduce((s, [k]) => s + goalOn(k), 0) / nLogged)
+    : goalCal
+  const avgMaintOn = nLogged ? Math.round(totMaintOn / nLogged) : tdee
   const totalNet = logged.reduce((s, b) => s + netOf(b), 0)
+  // Predicted weight impact: (eaten − per-day maintenance) / 7700 kcal-per-kg.
   const predictedKg =
-    tdee > 0 && nLogged > 0
-      ? Math.round(((totalNet - tdee * nLogged) / 7700) * 100) / 100
+    totMaintOn > 0 && nLogged > 0
+      ? Math.round(((totalNet - totMaintOn) / 7700) * 100) / 100
       : null
 
   // Net-kcal colour tier, matching the Progress adherence chart:
@@ -158,8 +165,6 @@ export default function Calendar() {
   // green ≤ goal · amber over goal · red over maintenance.
   const tierText = (v, g, m) =>
     m > 0 && v > m ? 'text-red-400' : g > 0 && v > g ? 'text-amber-400' : 'text-green-400'
-  // Aggregate helper (month tile) uses the current goal.
-  const kcalTier = (v) => tierText(v, goalCal, tdee)
 
   // Heatmap tint for a day cell — same 3-tier scale as the text colour, but as a
   // faint background so the whole month reads at a glance. Each day is judged
@@ -309,21 +314,21 @@ export default function Calendar() {
           {avg && (
             <>
               <div className="text-center text-[10px] uppercase tracking-wide text-slate-500">
-                avg / logged day (net)
+                avg / logged day
               </div>
               <div className="grid grid-cols-4 gap-2 text-center">
                 {[
-                  { label: 'kcal', value: avg.cal, unit: '', goal: profile?.goal_calories },
+                  { label: 'kcal', value: avg.cal, unit: '', goal: avgGoalOn },
                   { label: 'P', value: avg.p, unit: 'g', goal: profile?.goal_protein_g },
                   { label: 'C', value: avg.c, unit: 'g', goal: profile?.goal_carbs_g },
                   { label: 'F', value: avg.f, unit: 'g', goal: profile?.goal_fat_g },
                 ].map((s) => {
-                  // kcal uses the 3-tier scale (green ≤ goal · amber over goal ·
-                  // red over maintenance), matching the Progress chart. Macros
-                  // colour vs their goal (protein: higher is good; carbs/fat: lower).
+                  // kcal uses the day-specific goal/maintenance averaged over the
+                  // month (history-aware). Macros colour vs their goal (protein:
+                  // higher is good; carbs/fat: lower).
                   const cls =
                     s.label === 'kcal'
-                      ? kcalTier(s.value)
+                      ? tierText(s.value, avgGoalOn, avgMaintOn)
                       : s.goal > 0
                         ? (s.label === 'P' ? s.value >= s.goal * 0.9 : s.value <= s.goal)
                           ? 'text-green-400'
