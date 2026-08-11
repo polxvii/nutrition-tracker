@@ -527,6 +527,8 @@ export default function AddFood({
   // Serving picker for a saved food (before the list, so it swaps in on tap).
   if (savedPick) {
     const N = savedServ
+    const baseG = Number(savedPick.default_grams ?? savedPick.grams) || 0
+    const pickUnit = savedPick.unit || 'g'
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -538,7 +540,7 @@ export default function AddFood({
         <div className="text-xs text-slate-500">
           per serving: {r(savedPick.calories)} kcal · {r(savedPick.protein_g)}P {r(savedPick.carbs_g)}C{' '}
           {r(savedPick.fat_g)}F
-          {savedPick.default_grams ? ` · ${r(savedPick.default_grams)}${savedPick.unit || 'g'}` : ''}
+          {baseG ? ` · ${r(baseG)}${pickUnit}` : ''}
         </div>
 
         <Field label="Meal">
@@ -590,6 +592,7 @@ export default function AddFood({
           <b className="text-white">{Math.round(Number(savedPick.calories || 0) * N)}</b> kcal ·{' '}
           {r1(Number(savedPick.protein_g || 0) * N)}P · {r1(Number(savedPick.carbs_g || 0) * N)}C ·{' '}
           {r1(Number(savedPick.fat_g || 0) * N)}F
+          {baseG ? ` · ${Math.round(baseG * N)}${pickUnit}` : ''}
         </div>
 
         <div className="flex gap-2">
