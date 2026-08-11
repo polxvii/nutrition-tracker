@@ -95,6 +95,7 @@ export default function AddFood({
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [historyHits, setHistoryHits] = useState([]) // matches across ALL your logs
+  const [subItemHits, setSubItemHits] = useState([]) // matches inside dish components
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState(null)
 
@@ -143,6 +144,7 @@ export default function AddFood({
     if (query.length < 2) {
       setResults([])
       setHistoryHits([])
+      setSubItemHits([])
       setSearching(false)
       return
     }
@@ -170,6 +172,38 @@ export default function AddFood({
             if (out.length >= 15) break
           }
           setHistoryHits(out)
+        })
+      // Also match names INSIDE dish breakdowns, surfacing the sub-item itself
+      // as a loggable food (so searching "egg" finds the egg inside a past dish).
+      const ql2 = query.toLowerCase()
+      supabase
+        .from('food_logs')
+        .select('components')
+        .not('components', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(150)
+        .then(({ data }) => {
+          const seen = new Set()
+          const out = []
+          for (const row of data || []) {
+            for (const c of row.components || []) {
+              const nm = (c.name || '').toLowerCase()
+              if (!nm || !nm.includes(ql2) || seen.has(nm)) continue
+              seen.add(nm)
+              out.push({
+                food_name: c.name,
+                grams: c.grams ?? null,
+                unit: 'g',
+                calories: c.calories,
+                protein_g: c.protein_g,
+                carbs_g: c.carbs_g,
+                fat_g: c.fat_g,
+              })
+              if (out.length >= 15) break
+            }
+            if (out.length >= 15) break
+          }
+          setSubItemHits(out)
         })
       try {
         setResults(await searchFoods(query, { signal: ctrl.signal }))
@@ -727,9 +761,9 @@ export default function AddFood({
   }
 
   // ---- home ------------------------------------------------------------
-  // Your foods = saved + recent (in-memory) + full-history matches (server).
+  // Your foods = saved + recent (in-memory) + full-history + sub-item matches.
   const localHits = ql
-    ? [...matchLocal(savedFoods), ...matchLocal(recent), ...historyHits]
+    ? [...matchLocal(savedFoods), ...matchLocal(recent), ...historyHits, ...subItemHits]
     : []
   // De-dupe local hits by name (saved wins).
   const seen = new Set()
