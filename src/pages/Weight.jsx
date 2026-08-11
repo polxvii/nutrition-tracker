@@ -65,6 +65,47 @@ function weeklyRate(points, minSpanDays = 0) {
   return ((n * sxy - sx * sy) / denom) * 7
 }
 
+// 95% two-tailed t critical value by degrees of freedom (small table).
+function tCrit(df) {
+  const table = [
+    [1, 12.71], [2, 4.3], [3, 3.18], [4, 2.78], [5, 2.57], [6, 2.45], [7, 2.36],
+    [8, 2.31], [9, 2.26], [10, 2.23], [12, 2.18], [15, 2.13], [20, 2.09], [30, 2.04], [60, 2.0],
+  ]
+  if (df <= 0) return 12.71
+  let v = 1.96
+  for (const [k, t] of table) if (df >= k) v = t
+  return v
+}
+
+// OLS slope (kg/week) with a 95% CI, from dated weight points. x = days, so
+// irregular spacing is handled naturally (no need to weigh in daily). Returns
+// null with < 3 points. If the CI straddles 0 the trend direction is unclear.
+function weeklyTrend(points) {
+  const n = points.length
+  if (n < 3) return null
+  const t0 = new Date(points[0].fullDate).getTime()
+  const xs = points.map((p) => (new Date(p.fullDate).getTime() - t0) / 86400000)
+  const ys = points.map((p) => p.weight)
+  const xbar = xs.reduce((a, b) => a + b, 0) / n
+  const ybar = ys.reduce((a, b) => a + b, 0) / n
+  let sxx = 0
+  let sxy = 0
+  for (let i = 0; i < n; i++) {
+    sxx += (xs[i] - xbar) ** 2
+    sxy += (xs[i] - xbar) * (ys[i] - ybar)
+  }
+  if (sxx === 0) return null
+  const bDay = sxy / sxx
+  const aDay = ybar - bDay * xbar
+  let sse = 0
+  for (let i = 0; i < n; i++) sse += (ys[i] - (aDay + bDay * xs[i])) ** 2
+  const seDay = Math.sqrt(sse / (n - 2) / sxx)
+  const t = tCrit(n - 2)
+  const rateWk = bDay * 7
+  const marginWk = t * seDay * 7
+  return { rateWk, ciLoWk: rateWk - marginWk, ciHiWk: rateWk + marginWk, n }
+}
+
 // Recomp-aware read on the weight trend for the current goal.
 function trendVerdict(rate, goalType) {
   if (rate == null) return null
@@ -222,15 +263,23 @@ export default function Weight() {
   const inPeriod = (d) => d >= fromDate && d <= toDate
   const periodDays = Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1)
 
-  // Weight points in range + an EWMA trend (alpha 0.1) that smooths daily
-  // water-weight noise far better than raw weigh-ins. `ma` = the trend line.
+  // Weight points in range + a TIME-weighted EWMA trend (τ ≈ 10 days) that
+  // smooths daily water-weight noise. Decay uses the real day gap between
+  // weigh-ins (not point index), so irregular spacing is handled correctly.
   const weightData = useMemo(() => {
     const pts = weightLogs
       .filter((l) => inPeriod(l.logged_date))
       .map((l) => ({ fullDate: l.logged_date, date: l.logged_date.slice(5), weight: Number(l.weight_kg) }))
     let ema = null
+    let prevT = null
     return pts.map((p) => {
-      ema = ema == null ? p.weight : 0.1 * p.weight + 0.9 * ema
+      const t = new Date(p.fullDate).getTime() / 86400000
+      if (ema == null) ema = p.weight
+      else {
+        const a = 1 - Math.exp(-Math.max(t - prevT, 0) / 10)
+        ema = a * p.weight + (1 - a) * ema
+      }
+      prevT = t
       return { ...p, ma: r1(ema) }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,54 +353,43 @@ export default function Weight() {
   }, [foodData, daysLogged])
   const mealMax = Math.max(1, ...mealAvg.map((m) => m.avg))
 
-  // Adaptive check-in: estimate real maintenance (TDEE) from intake + weight
-  // change over the last ~30 days, then suggest a goal for the user's plan.
-  // actual TDEE = avg intake − (kg/day change × 7700). Intake is averaged over
-  // the SAME span as the weight change (first↔last weigh-in) so the two describe
-  // the same window. Days logging under half the goal are likely incomplete
-  // (forgotten entries) and would skew the estimate — exclude them.
+  // Adaptive check-in: measure GROSS maintenance from intake + the weight TREND
+  // (OLS slope with a 95% CI) over ≥28 days / ≥8 weigh-ins. If the slope's CI
+  // straddles 0 the direction is unclear → "keep collecting". Days logging under
+  // half the goal are likely incomplete and excluded.
   const intakeFloor = goalCal > 0 ? goalCal * 0.5 : 500
 
   const checkIn = useMemo(() => {
-    const winCut = isoDaysAgo(30)
+    const winCut = isoDaysAgo(60) // wide enough to hold a ≥28-day span
     const wpts = weightLogs
       .filter((l) => l.logged_date >= winCut)
       .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
     if (wpts.length < 2) return { ready: false }
-    // Weight change + intake over the same span (first↔last weigh-in).
     const spanStart = wpts[0].fullDate
     const spanEnd = wpts[wpts.length - 1].fullDate
     const spanDays = Math.round((new Date(spanEnd) - new Date(spanStart)) / 86400000)
-    // Rate from the EWMA trend (alpha 0.1) — cancels day-to-day water swings.
-    let ema = null
-    const smoothed = wpts.map((p) => {
-      ema = ema == null ? p.weight : 0.1 * p.weight + 0.9 * ema
-      return { fullDate: p.fullDate, weight: ema }
-    })
-    const rateWk = weeklyRate(smoothed)
-    if (spanDays < 7 || rateWk == null) return { ready: false }
-    // The estimate lives or dies by the weight trend. A rate from just a couple
-    // of weigh-ins is mostly water-weight noise — a trustworthy number needs
-    // regular weigh-ins (a regression over many points cancels the daily swings).
     const weighIns = wpts.length
-    const weighPerWk = weighIns / Math.max(spanDays / 7, 1)
-    if (weighIns < 4 || weighPerWk < 1.5) {
-      return { ready: false, sparseWeights: true, weighIns, spanDays }
+    // Needs enough data: ≥8 weigh-ins over ≥28 days (a full cycle smooths noise).
+    if (weighIns < 8 || spanDays < 28) {
+      return { ready: false, needMore: true, weighIns, spanDays }
     }
+    const trend = weeklyTrend(wpts) // OLS on raw points (x = days → time-correct)
+    if (!trend) return { ready: false, needMore: true, weighIns, spanDays }
+    const { rateWk, ciLoWk, ciHiWk } = trend
     const allDays = foodByDay.filter((d) => d.date >= spanStart && d.date <= spanEnd)
     const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
     const excluded = allDays.length - fdays.length
-    // Unlogged days in the span are approximated by the logged-day average, so a
-    // sparse span skews the estimate — require ≥5 logged days AND ≥half the span.
-    if (fdays.length < 5 || fdays.length < Math.ceil(spanDays * 0.5)) {
-      return { ready: false, lowLog: true, logged: fdays.length, spanDays }
+    const covPct = spanDays ? Math.round((fdays.length / spanDays) * 100) : 0
+    if (fdays.length < 8) {
+      return { ready: false, lowLog: true, logged: fdays.length, spanDays, covPct }
     }
-    const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length)
+    const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length) // gross
+    // If the slope's 95% CI straddles 0, we can't tell gaining from losing.
+    if (ciLoWk < 0 && ciHiWk > 0) {
+      return { ready: false, inconclusive: true, rateWk, ciLoWk, ciHiWk, weighIns, spanDays, covPct, logged: fdays.length }
+    }
     const tdee = Math.round(avgIntake - (rateWk / 7) * KCAL_PER_KG)
-    // Sanity: a measured maintenance below BMR is physiologically impossible, and
-    // one wildly off the profile estimate means the data is too noisy/incomplete
-    // (missing food logs, water-weight swings, too few weigh-ins) to trust — so
-    // don't show a garbage number or suggest a goal from it.
+    // Sanity: below BMR is impossible; wildly off the profile estimate = too noisy.
     const bmr = profile?.bmr || 1200
     const est = profile?.tdee || 0
     if (tdee < bmr || (est > 0 && (tdee < est * 0.6 || tdee > est * 1.6))) {
@@ -361,18 +399,7 @@ export default function Weight() {
     const gr = profile?.goal_rate || 'medium'
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
     const suggested = Math.max(bmr, Math.round((tdee + offset) / 10) * 10)
-    return {
-      ready: true,
-      tdee,
-      avgIntake,
-      rateWk,
-      suggested,
-      spanDays,
-      logged: fdays.length,
-      excluded,
-      weighIns,
-      weighPerWk,
-    }
+    return { ready: true, tdee, avgIntake, rateWk, ciLoWk, ciHiWk, suggested, spanDays, logged: fdays.length, excluded, weighIns, covPct }
   }, [weightLogs, foodByDay, profile, intakeFloor])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
@@ -752,29 +779,18 @@ export default function Weight() {
             </b>{' '}
             kg/wk over the span. This is your total maintenance (activity included).
           </p>
-          {(() => {
-            // Logging coverage — always shown; a low % biases the estimate low.
-            const covPct = checkIn.spanDays ? Math.round((checkIn.logged / checkIn.spanDays) * 100) : 0
-            return (
-              <p className={`text-[11px] ${covPct < 80 ? 'text-amber-400' : 'text-slate-500'}`}>
-                Logging coverage {covPct}% ({checkIn.logged}/{checkIn.spanDays} days)
-                {covPct < 80 ? ' — under-logged days bias this LOW; trust it less.' : ''}
-              </p>
-            )
-          })()}
-          {(() => {
-            // Confidence needs BOTH complete food logging AND frequent weigh-ins
-            // (the trend drives the estimate).
-            const cov = checkIn.spanDays ? checkIn.logged / checkIn.spanDays : 0
-            const wk = checkIn.weighPerWk || 0
-            const [label, cls] =
-              cov >= 0.8 && wk >= 4
-                ? ['High confidence', 'text-green-400']
-                : cov >= 0.6 && wk >= 2.5
-                  ? ['Medium confidence', 'text-amber-400']
-                  : ['Low confidence — weigh in more often', 'text-slate-400']
-            return <p className={`text-[11px] ${cls}`}>● {label}</p>
-          })()}
+          <p className="text-[11px] text-slate-400">
+            Trend{' '}
+            <b className="text-slate-200">
+              {checkIn.rateWk > 0 ? '+' : ''}
+              {r1(checkIn.rateWk)}
+            </b>{' '}
+            kg/wk (95% CI {r1(checkIn.ciLoWk)} … {r1(checkIn.ciHiWk)})
+          </p>
+          <p className={`text-[11px] ${checkIn.covPct < 80 ? 'text-amber-400' : 'text-slate-500'}`}>
+            Logging coverage {checkIn.covPct}% ({checkIn.logged}/{checkIn.spanDays} days)
+            {checkIn.covPct < 80 ? ' — under-logged days bias this LOW; trust it less.' : ''}
+          </p>
           {profile?.tdee > 0 && Math.abs(checkIn.tdee - profile.tdee) >= 150 && (
             <p className="text-[11px] text-slate-500">
               Your profile estimate was {profile.tdee}. The measured number is{' '}
@@ -810,30 +826,37 @@ export default function Weight() {
       ) : (
         <Card>
           <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
-          {checkIn.sparseWeights ? (
+          {checkIn.needMore ? (
             <p className="text-xs text-slate-500">
-              Only {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days — too few to read a
-              reliable trend (a rate from a couple of points is mostly water weight). Weigh in more
-              often — a few times a week, ideally most mornings — and it'll unlock a maintenance
-              estimate you can trust.
+              Needs ≥ 8 weigh-ins over ≥ 28 days for a reliable trend (a full cycle smooths water
+              weight). You have {checkIn.weighIns} weigh-in{checkIn.weighIns === 1 ? '' : 's'} over{' '}
+              {checkIn.spanDays} day{checkIn.spanDays === 1 ? '' : 's'} — keep weighing in (any
+              spacing is fine).
+            </p>
+          ) : checkIn.inconclusive ? (
+            <p className="text-xs text-amber-400">
+              Not conclusive yet — the trend is {checkIn.rateWk > 0 ? '+' : ''}
+              {r1(checkIn.rateWk)} kg/wk but its 95% CI ({r1(checkIn.ciLoWk)} … {r1(checkIn.ciHiWk)})
+              still straddles 0, so we can't tell gaining from losing. Keep logging — the interval
+              will narrow.
             </p>
           ) : checkIn.unreliable ? (
             <p className="text-xs text-slate-500">
-              Your logged data gives an unrealistic maintenance estimate (below your BMR) — usually
-              missing food logs or short-term water-weight swings. Keep logging food + weight
-              consistently and it'll settle.
+              The measured maintenance comes out unrealistically low (below your BMR) — usually
+              missing food logs or a short-term water swing. Keep logging food + weight and it'll
+              settle.
             </p>
           ) : checkIn.lowLog ? (
             <p className="text-xs text-slate-500">
-              Only {checkIn.logged} of {checkIn.spanDays} days between your weigh-ins have food
-              logged — too many gaps to trust the estimate (the missing days get guessed from the
-              logged ones). Log food on more days and it'll unlock.
+              Only {checkIn.logged} days in the span have food logged
+              {checkIn.covPct != null ? ` (${checkIn.covPct}% coverage)` : ''} — too many gaps to
+              trust the estimate. Log food on more days and it'll unlock.
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Unlocks with regular weigh-ins (a few times a week over ≥7 days) and food logged on
-              ≥half the days between them. It reads your weight trend + intake to estimate your real
-              maintenance calories.
+              Unlocks with ≥ 8 weigh-ins over ≥ 28 days and food logged on most of those days. It
+              reads your weight trend (OLS slope + 95% CI) + gross intake to measure your real
+              maintenance.
             </p>
           )}
         </Card>
