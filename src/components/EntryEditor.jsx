@@ -30,6 +30,7 @@ export default function EntryEditor({
   meals = [],
   onSaveFrequent,
   onSaveMeal,
+  onCopyComponent,
   dupMode = false, // "copy" flow: confirm date / meal / details, then add a copy
 }) {
   const isEx = entry.source === 'exercise'
@@ -37,6 +38,7 @@ export default function EntryEditor({
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
   const [savedComps, setSavedComps] = useState(() => new Set()) // components saved to foods
+  const [copiedComps, setCopiedComps] = useState(() => new Set()) // components logged solo
   const [mealSaved, setMealSaved] = useState(false)
   // Dish serving multiplier. Restored from the saved entry so the stepper stays
   // anchored on re-open (was resetting to ×1 while the stored components already
@@ -112,14 +114,23 @@ export default function EntryEditor({
     setSavedComps(new Set())
     setComps((prev) => prev.filter((_, idx) => idx !== i))
   }
-  // Duplicate a sub-item within the dish (insert a copy right after it).
-  const duplicateComp = (i) => {
-    setSavedComps(new Set())
-    setComps((prev) => {
-      const c = prev[i]
-      const copy = { ...c, _base: { ...(c._base || c) } }
-      return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)]
+  // Log a sub-item as its OWN separate diary entry (same day + meal as the
+  // dish). The component stays in the dish; this just adds a standalone log.
+  async function copyComp(i) {
+    const c = comps[i]
+    await onCopyComponent?.({
+      food_name: (c.name || '').trim() || 'Item',
+      meal_type: f.meal_type,
+      date: f.date,
+      source: 'manual',
+      grams: num(c.grams) || null,
+      unit: 'g',
+      calories: num(c.calories),
+      protein_g: num(c.protein_g),
+      carbs_g: num(c.carbs_g),
+      fat_g: num(c.fat_g),
     })
+    setCopiedComps((prev) => new Set(prev).add(i))
   }
   // Save a sub-item as its own Saved food.
   async function saveComp(i) {
@@ -435,7 +446,7 @@ export default function EntryEditor({
             </div>
           </div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Breakdown — edit · swipe a row for ⭐ / copy / delete
+            Breakdown — edit · swipe a row for ⭐ / log solo / delete
           </div>
           {comps.map((it, i) => (
             <SwipeRow
@@ -444,7 +455,9 @@ export default function EntryEditor({
                 ...(onSaveFrequent
                   ? [{ label: '⭐ Save', onClick: () => saveComp(i), className: 'bg-green-700 active:bg-green-600' }]
                   : []),
-                { label: 'Copy', onClick: () => duplicateComp(i), className: 'bg-slate-600 active:bg-slate-500' },
+                ...(onCopyComponent
+                  ? [{ label: 'Log solo', onClick: () => copyComp(i), className: 'bg-slate-600 active:bg-slate-500' }]
+                  : []),
                 { label: 'Delete', onClick: () => removeComp(i), className: 'bg-red-600 active:bg-red-700' },
               ]}
             >
@@ -456,6 +469,7 @@ export default function EntryEditor({
                     className="min-w-0 flex-1"
                   />
                   {savedComps.has(i) && <span className="shrink-0 text-xs text-green-400">⭐ saved</span>}
+                  {copiedComps.has(i) && <span className="shrink-0 text-xs text-sky-400">✓ logged</span>}
                 </div>
                 <div className="grid grid-cols-5 gap-1 text-center text-[10px] text-slate-500">
                   <span>grams</span>
