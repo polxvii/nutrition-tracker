@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { searchFoods, lookupBarcode, scaleFood, unitsFor } from '../lib/foodSearch'
 import { supabase } from '../lib/supabase'
 import { Button, Field, Input, Select } from './ui'
@@ -16,6 +16,11 @@ const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 
 const r = (n) => Math.round(Number(n) || 0)
 const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+
+// Web Speech API (voice input). Present on Android Chrome / desktop Chrome/Edge;
+// absent on iOS Safari/PWA — we feature-detect and hide the mic there.
+const SpeechRec =
+  typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
 
 // Grams/amount label for a stored template (recent log or saved food).
 const amtOf = (t) => {
@@ -93,6 +98,9 @@ export default function AddFood({
   const [savedServ, setSavedServ] = useState(1)
   const [savedServText, setSavedServText] = useState('1')
   const [q, setQ] = useState('')
+  const [listening, setListening] = useState(false)
+  const [speechLang, setSpeechLang] = useState('th-TH') // TH default; toggle to EN
+  const recRef = useRef(null)
   const [results, setResults] = useState([])
   const [historyHits, setHistoryHits] = useState([]) // matches across ALL your logs
   const [subItemHits, setSubItemHits] = useState([]) // matches inside dish components
@@ -137,6 +145,37 @@ export default function AddFood({
       },
     }
   }
+
+  // Voice search (Web Speech API). Tap to start/stop; transcript fills the box.
+  function toggleVoice() {
+    if (!SpeechRec) return
+    if (listening) {
+      recRef.current?.stop()
+      return
+    }
+    const rec = new SpeechRec()
+    rec.lang = speechLang
+    rec.interimResults = true
+    rec.maxAlternatives = 1
+    rec.onresult = (e) => {
+      const text = Array.from(e.results)
+        .map((res) => res[0]?.transcript || '')
+        .join(' ')
+        .trim()
+      if (text) setQ(text)
+    }
+    rec.onend = () => setListening(false)
+    rec.onerror = () => setListening(false)
+    recRef.current = rec
+    setListening(true)
+    try {
+      rec.start()
+    } catch {
+      setListening(false)
+    }
+  }
+  // Stop listening if the search view unmounts.
+  useEffect(() => () => recRef.current?.stop?.(), [])
 
   // Debounced Open Food Facts search.
   useEffect(() => {
@@ -789,11 +828,49 @@ export default function AddFood({
         </Select>
       </Field>
 
-      <Input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search foods…"
-      />
+      <div className="space-y-1">
+        <div className="flex gap-2">
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search foods…"
+            className="min-w-0 flex-1"
+          />
+          {SpeechRec && (
+            <button
+              onClick={toggleVoice}
+              aria-label="Voice search"
+              className={`shrink-0 rounded-lg px-3 text-lg ${
+                listening
+                  ? 'animate-pulse bg-red-600 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              🎤
+            </button>
+          )}
+        </div>
+        {SpeechRec && (
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <span>Voice</span>
+            {[
+              ['th-TH', 'TH'],
+              ['en-US', 'EN'],
+            ].map(([lng, label]) => (
+              <button
+                key={lng}
+                onClick={() => setSpeechLang(lng)}
+                className={`rounded px-1.5 ${
+                  speechLang === lng ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            {listening && <span className="text-red-400">● listening…</span>}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" className="text-sm" onClick={() => setView('saved')}>
