@@ -142,10 +142,11 @@ export default function Weight() {
     const win30 = isoDaysAgo(30)
     const start = fromDate < win30 ? fromDate : win30
     const [wRes, fRes] = await Promise.all([
+      // Weigh-ins are few (one per day) — load ALL so history + editing aren't
+      // limited to the selected period. Trend/check-in still scope client-side.
       supabase
         .from('weight_logs')
         .select('*')
-        .gte('logged_date', start)
         .order('logged_date', { ascending: true }),
       supabase
         .from('food_logs')
@@ -950,15 +951,14 @@ export default function Weight() {
           )}
         </div>
 
-        {/* history · tap a row to load it into the form for editing */}
-        {weightLogs.filter((l) => inPeriod(l.logged_date)).length > 0 && (
+        {/* history · ALL weigh-ins (not just the period), tap a row to edit */}
+        {weightLogs.length > 0 && (
           <div className="space-y-1 border-t border-slate-800 pt-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              History · tap to edit
+              History · tap to edit · all dates
             </div>
             <div className="max-h-72 space-y-1 overflow-y-auto pr-0.5">
               {weightLogs
-                .filter((l) => inPeriod(l.logged_date))
                 .slice()
                 .reverse()
                 .map((l) => (
