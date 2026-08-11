@@ -38,7 +38,6 @@ export default function EntryEditor({
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
   const [savedComps, setSavedComps] = useState(() => new Set()) // components saved to foods
-  const [copiedComps, setCopiedComps] = useState(() => new Set()) // components logged solo
   const [mealSaved, setMealSaved] = useState(false)
   // Dish serving multiplier. Restored from the saved entry so the stepper stays
   // anchored on re-open (was resetting to ×1 while the stored components already
@@ -114,15 +113,15 @@ export default function EntryEditor({
     setSavedComps(new Set())
     setComps((prev) => prev.filter((_, idx) => idx !== i))
   }
-  // Log a sub-item as its OWN separate diary entry (same day + meal as the
-  // dish). The component stays in the dish; this just adds a standalone log.
-  async function copyComp(i) {
+  // Log a sub-item as its OWN separate diary entry: opens the copy confirm
+  // sheet (like the diary Copy) prefilled with this component, so you can tweak
+  // date / meal / amount before adding. The component stays in the dish.
+  function copyComp(i) {
     const c = comps[i]
-    await onCopyComponent?.({
+    onCopyComponent?.({
+      source: 'manual',
       food_name: (c.name || '').trim() || 'Item',
       meal_type: f.meal_type,
-      date: f.date,
-      source: 'manual',
       grams: num(c.grams) || null,
       unit: 'g',
       calories: num(c.calories),
@@ -130,7 +129,6 @@ export default function EntryEditor({
       carbs_g: num(c.carbs_g),
       fat_g: num(c.fat_g),
     })
-    setCopiedComps((prev) => new Set(prev).add(i))
   }
   // Save a sub-item as its own Saved food.
   async function saveComp(i) {
@@ -469,7 +467,6 @@ export default function EntryEditor({
                     className="min-w-0 flex-1"
                   />
                   {savedComps.has(i) && <span className="shrink-0 text-xs text-green-400">⭐ saved</span>}
-                  {copiedComps.has(i) && <span className="shrink-0 text-xs text-sky-400">✓ logged</span>}
                 </div>
                 <div className="grid grid-cols-5 gap-1 text-center text-[10px] text-slate-500">
                   <span>grams</span>

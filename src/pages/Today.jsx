@@ -429,21 +429,6 @@ export default function Today() {
     await load()
   }
 
-  // Log a dish sub-item as its own separate diary entry (editor stays open).
-  async function copyComponent(patch) {
-    const { date, ...fields } = patch
-    setBusy(true)
-    const { error } = await supabase
-      .from('food_logs')
-      .insert({ user_id: user.id, logged_at: timestampFor(date), ...fields })
-    setBusy(false)
-    if (error) {
-      alert(error.message)
-      return
-    }
-    await load()
-  }
-
   async function handleAddExercise({ name, calories }) {
     setBusy(true)
     const { error } = await supabase.from('food_logs').insert({
@@ -843,7 +828,7 @@ export default function Today() {
                 await load() // refresh the Saved foods list so it shows up
               }}
               onSaveMeal={saveMealFromEntry}
-              onCopyComponent={copyComponent}
+              onCopyComponent={(componentEntry) => setCopyingEntry(componentEntry)}
             />
           </div>
         </div>
