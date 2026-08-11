@@ -38,6 +38,7 @@ export default function Settings() {
   const [goalWeight, setGoalWeight] = useState(
     profile?.goal_weight_kg != null ? String(profile.goal_weight_kg) : ''
   )
+  const [goalHistKey, setGoalHistKey] = useState(0) // bump to refresh Goal history
 
   const valid = isFormValid(values)
   const calc = useMemo(() => (valid ? targetsFromForm(values) : null), [values, valid])
@@ -72,6 +73,7 @@ export default function Settings() {
       return
     }
     await recordGoalHistory(user.id, payload) // snapshot today's goal for history
+    setGoalHistKey((k) => k + 1) // refresh the Goal history list so it shows
     await refreshProfile()
     setBusy(false)
     setSaved(true)
@@ -142,7 +144,7 @@ export default function Settings() {
         </Button>
       </Collapsible>
 
-      <GoalHistoryCard />
+      <GoalHistoryCard refreshKey={goalHistKey} />
 
       <MealWindowsCard />
 

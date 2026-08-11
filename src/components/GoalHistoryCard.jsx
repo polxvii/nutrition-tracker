@@ -29,7 +29,7 @@ const EMPTY = {
 // Manage the goal timeline: each row is a goal that takes effect on its date and
 // runs until the next one. Add / backdate / edit / delete periods so days are
 // coloured against the goal that really applied then.
-export default function GoalHistoryCard() {
+export default function GoalHistoryCard({ refreshKey = 0 }) {
   const { user } = useAuth()
   const [rows, setRows] = useState([]) // ascending by date
   const [draft, setDraft] = useState(null) // editing/adding row, or null
@@ -39,9 +39,11 @@ export default function GoalHistoryCard() {
   async function refresh() {
     setRows(await loadGoalHistory())
   }
+  // Reload on mount and whenever the parent bumps refreshKey (e.g. after a
+  // target save records a new snapshot).
   useEffect(() => {
     refresh()
-  }, [])
+  }, [refreshKey])
 
   function startAdd() {
     setError(null)
