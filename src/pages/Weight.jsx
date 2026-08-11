@@ -407,14 +407,24 @@ export default function Weight() {
   // maintenance from one that's a real surplus.
   const maint = profile?.tdee || 0
 
-  // Tier colour for the avg-kcal tile, matching the chart + Calendar + Log:
-  // green ≤ goal · amber over goal · red over maintenance (neutral with no goal).
+  // Per-day (history-aware) averages so the summary matches the per-day bars,
+  // and a flag for when the goal changed inside the range.
+  const periodGoal = daysLogged
+    ? Math.round(foodData.reduce((s, d) => s + (d.dayGoal || goalCal), 0) / daysLogged)
+    : goalCal
+  const periodMaint = daysLogged
+    ? Math.round(foodData.reduce((s, d) => s + (d.dayMaint || maint), 0) / daysLogged)
+    : maint
+  const goalChangedInRange = new Set(foodData.map((d) => d.dayGoal || goalCal)).size > 1
+
+  // Tier colour for the avg-kcal tile — against the day-specific goal averaged
+  // over the range (green ≤ goal · amber over goal · red over maintenance).
   const avgKcalCls =
-    goalCal <= 0
+    periodGoal <= 0
       ? 'text-white'
-      : maint > 0 && avgKcal > maint
+      : periodMaint > 0 && avgKcal > periodMaint
         ? 'text-red-400'
-        : avgKcal > goalCal
+        : avgKcal > periodGoal
           ? 'text-amber-400'
           : 'text-green-400'
 
@@ -588,7 +598,9 @@ export default function Weight() {
           <div className="mb-2 grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-slate-800 py-2">
               <div className={`text-lg font-bold ${avgKcalCls}`}>{avgKcal}</div>
-              <div className="text-xs text-slate-500">avg kcal / day{goalCal ? ` · goal ${goalCal}` : ''}</div>
+              <div className="text-xs text-slate-500">
+                avg kcal / day{periodGoal ? ` · goal ${periodGoal}${goalChangedInRange ? ' (avg)' : ''}` : ''}
+              </div>
             </div>
             <div className="rounded-lg bg-slate-800 py-2">
               <div className="text-lg font-bold text-white">
@@ -670,6 +682,12 @@ export default function Weight() {
               Daily kcal eaten · <span className="text-green-400">green</span> ≤ goal ·{' '}
               <span className="text-amber-400">amber</span> over goal ·{' '}
               <span className="text-red-400">red</span> over maintenance
+            </p>
+          )}
+          {goalChangedInRange && (
+            <p className="text-center text-[11px] text-amber-400/80">
+              Your goal changed during this range — each bar is coloured against the goal that
+              applied on its own day.
             </p>
           )}
         </Card>
