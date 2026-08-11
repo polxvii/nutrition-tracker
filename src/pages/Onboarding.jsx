@@ -39,7 +39,11 @@ export default function Onboarding() {
     if (!canSave) return
     setBusy(true)
     setError(null)
-    const merged = { bmr: calc.bmr, tdee: calc.tdee, ...targets }
+    const merged = {
+      ...targets,
+      bmr: Number(targets.bmr) || calc.bmr,
+      tdee: Number(targets.tdee) || calc.tdee,
+    }
     const payload = buildProfilePayload(user.id, user.email, values, merged)
     const { error } = await supabase.from('profiles').upsert(payload)
     if (error) {

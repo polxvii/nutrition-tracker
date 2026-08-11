@@ -200,6 +200,8 @@ export function buildProfilePayload(userId, email, v, targets) {
 // Just the editable target fields from a computed/profile object.
 export function pickEditableTargets(t) {
   return {
+    bmr: t.bmr,
+    tdee: t.tdee,
     goal_calories: t.goal_calories,
     protein_g: t.protein_g,
     carbs_g: t.carbs_g,

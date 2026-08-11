@@ -85,16 +85,29 @@ export default function TargetsEditor({ targets, onChange, onReset, calc, bare =
         </div>
       )}
 
-      {calc && (
-        <div className="flex gap-4 rounded-lg bg-slate-800 px-3 py-2 text-xs text-slate-400">
-          <span>
-            BMR <b className="text-slate-200">{calc.bmr}</b>
-          </span>
-          <span>
-            TDEE <b className="text-slate-200">{calc.tdee}</b> kcal
-          </span>
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="BMR (kcal)">
+          <Input
+            type="number"
+            inputMode="numeric"
+            value={targets.bmr ?? ''}
+            onChange={(e) => onChange({ ...targets, bmr: e.target.value })}
+          />
+        </Field>
+        <Field label="Maintenance / TDEE">
+          <Input
+            type="number"
+            inputMode="numeric"
+            value={targets.tdee ?? ''}
+            onChange={(e) => onChange({ ...targets, tdee: e.target.value })}
+          />
+        </Field>
+      </div>
+      <p className="text-[11px] text-slate-500">
+        Auto-calculated from your body info — override if a device (smart scale
+        etc.) gives you different numbers. Maintenance drives the red “over
+        maintenance” tier.
+      </p>
 
       <Field label="Calorie goal (kcal)">
         <Input

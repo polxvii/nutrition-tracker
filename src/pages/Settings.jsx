@@ -14,6 +14,7 @@ import TargetsEditor from '../components/TargetsEditor'
 import ApiKeyManager from '../components/ApiKeyManager'
 import MealWindowsCard from '../components/MealWindowsCard'
 import GoalHistoryCard from '../components/GoalHistoryCard'
+import ExportCard from '../components/ExportCard'
 import { Button, Collapsible, Field, Input } from '../components/ui'
 import { recordGoalHistory } from '../lib/goalHistory'
 
@@ -23,6 +24,8 @@ export default function Settings() {
   // Start from the SAVED targets (dirty=true keeps body edits from clobbering
   // them; "Reset to calculated" recomputes from the body fields).
   const [targets, setTargets] = useState({
+    bmr: profile?.bmr ?? '',
+    tdee: profile?.tdee ?? '',
     goal_calories: profile?.goal_calories ?? '',
     protein_g: profile?.goal_protein_g ?? '',
     carbs_g: profile?.goal_carbs_g ?? '',
@@ -51,7 +54,12 @@ export default function Settings() {
     setBusy(true)
     setSaved(false)
     setError(null)
-    const merged = { bmr: calc.bmr, tdee: calc.tdee, ...targets }
+    // Use the edited BMR/TDEE if set, else fall back to the calculated values.
+    const merged = {
+      ...targets,
+      bmr: Number(targets.bmr) || calc.bmr,
+      tdee: Number(targets.tdee) || calc.tdee,
+    }
     const gw = Number(goalWeight)
     const payload = {
       ...buildProfilePayload(user.id, user.email, values, merged),
@@ -131,6 +139,8 @@ export default function Settings() {
       <GoalHistoryCard />
 
       <MealWindowsCard />
+
+      <ExportCard />
 
       <ApiKeyManager />
     </div>
