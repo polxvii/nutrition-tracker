@@ -68,8 +68,15 @@ export default function ExportCard() {
       setResult({ empty: true })
       return
     }
+    // Stamp the file with when it was exported (local date + time).
+    const now = new Date()
+    const p2 = (n) => String(n).padStart(2, '0')
+    const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}`
+    const rangeLabel = f ? `${f} to ${t || today}` : 'All time'
     const header = ['date', 'time', 'meal', 'food', 'grams', 'unit', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'source']
-    const lines = [header.join(',')]
+    // Range + export time go at the TOP of the file (not the filename), then a
+    // blank line, then the table.
+    const lines = [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, '', header.join(',')]
     for (const l of rows) {
       const d = new Date(l.logged_at)
       lines.push(
@@ -90,11 +97,7 @@ export default function ExportCard() {
           .join(',')
       )
     }
-    // Stamp the file with when it was exported (local date + time).
-    const now = new Date()
-    const p2 = (n) => String(n).padStart(2, '0')
-    const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}`
-    const filename = `nutrition-log_${f || 'start'}_to_${t || today}_exported-${stamp}.csv`
+    const filename = `nutrition-log_exported-${stamp}.csv`
     // BOM so Excel opens UTF-8 (Thai names) correctly.
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)

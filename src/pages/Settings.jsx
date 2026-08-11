@@ -94,6 +94,12 @@ export default function Settings() {
           Edit your body info, then “Reset to calculated” in Targets to recompute.
         </p>
         <ProfileFields values={values} onChange={setValues} />
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        {saved && <p className="text-sm text-green-400">Saved ✓</p>}
+        <Button className="w-full" disabled={!canSave || busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
+        <p className="text-[11px] text-slate-500">Saves your whole profile (body info + targets).</p>
       </Collapsible>
 
       <Collapsible title="🎯 Targets" subtitle="Calorie goal & macro split">
