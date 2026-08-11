@@ -90,7 +90,11 @@ export default function ExportCard() {
           .join(',')
       )
     }
-    const filename = `nutrition-log-${f || 'start'}_to_${t || today}.csv`
+    // Stamp the file with when it was exported (local date + time).
+    const now = new Date()
+    const p2 = (n) => String(n).padStart(2, '0')
+    const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}`
+    const filename = `nutrition-log_${f || 'start'}_to_${t || today}_exported-${stamp}.csv`
     // BOM so Excel opens UTF-8 (Thai names) correctly.
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
