@@ -363,7 +363,7 @@ export default function Calendar() {
                     {predictedKg > 0 ? '+' : ''}
                     {predictedKg} kg
                   </b>
-                  <span className="text-slate-500"> · vs ~{tdee} maintenance</span>
+                  <span className="text-slate-500"> · vs ~{avgMaintOn} maintenance</span>
                 </p>
               )}
             </>

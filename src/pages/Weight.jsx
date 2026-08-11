@@ -455,12 +455,35 @@ export default function Weight() {
           ? 'text-amber-400'
           : 'text-green-400'
 
+  // The projection uses ALL weigh-ins, not just the selected period, so it still
+  // works when your data is in another month. Latest weigh-in overall + an EWMA
+  // rate over every point (weightLogs is ascending by date).
+  const projCurWeight = weightLogs.length
+    ? Number(weightLogs[weightLogs.length - 1].weight_kg)
+    : null
+  const allRateWk = useMemo(() => {
+    let ema = null
+    let prevT = null
+    const sm = weightLogs.map((l) => {
+      const t = new Date(l.logged_date).getTime() / 86400000
+      const w = Number(l.weight_kg)
+      if (ema == null) ema = w
+      else {
+        const a = 1 - Math.exp(-Math.max(t - prevT, 0) / 10)
+        ema = a * w + (1 - a) * ema
+      }
+      prevT = t
+      return { fullDate: l.logged_date, weight: ema }
+    })
+    return weeklyRate(sm, 5)
+  }, [weightLogs])
+
   // Project the target-weight date from the steadiest rate we have.
   const projection = useMemo(() => {
     const targetW = profile?.goal_weight_kg != null ? Number(profile.goal_weight_kg) : null
-    const rateWk = checkIn.ready ? checkIn.rateWk : rate
-    if (targetW == null || curWeight == null || rateWk == null) return null
-    const remaining = targetW - curWeight // <0 need to lose, >0 need to gain
+    const rateWk = checkIn.ready ? checkIn.rateWk : rate ?? allRateWk
+    if (targetW == null || projCurWeight == null || rateWk == null) return null
+    const remaining = targetW - projCurWeight // <0 need to lose, >0 need to gain
     if (Math.abs(remaining) < 0.15) return { targetW, reached: true }
     const toward = remaining < 0 ? rateWk < -0.02 : rateWk > 0.02
     if (!toward) return { targetW, remaining: r1(remaining), stalled: true }
@@ -468,7 +491,7 @@ export default function Weight() {
     const dt = new Date()
     dt.setDate(dt.getDate() + Math.round(weeks * 7))
     return { targetW, remaining: r1(remaining), rateWk: r1(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
-  }, [profile?.goal_weight_kg, curWeight, checkIn, rate])
+  }, [profile?.goal_weight_kg, projCurWeight, checkIn, rate, allRateWk])
 
   async function applyGoal(newCal) {
     const protein = profile?.goal_protein_g || 0
