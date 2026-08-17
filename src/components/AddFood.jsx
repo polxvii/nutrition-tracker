@@ -271,6 +271,12 @@ export default function AddFood({
   }
 
   const scaled = picked ? scaleFood(picked, unit, grams) : null
+  // Real gram weight of the chosen amount — a "serving" is converted to grams
+  // (1 serving × 50 g = 50 g). Shown live below, and what we store.
+  const pickedGrams =
+    picked && unit === 'serving' && picked.serving_g
+      ? Math.round(Number(grams) * picked.serving_g)
+      : Number(grams) || 0
 
   function addPicked() {
     const name = picked.brand ? `${picked.name} — ${picked.brand}` : picked.name
@@ -278,8 +284,11 @@ export default function AddFood({
       {
         food_name: name,
         meal_type: meal,
-        grams: Number(grams) || null,
-        unit,
+        // Store the actual grams + base unit, never the serving *count* — so a
+        // "1 serving = 50 g" item logs as 50 g and stays editable in grams
+        // later (not a stray "1 g").
+        grams: pickedGrams || null,
+        unit: unit === 'serving' ? picked.unit || 'g' : unit,
         source: picked.code ? 'barcode' : 'search',
         ...scaled,
       },
@@ -500,6 +509,9 @@ export default function AddFood({
         <div className="text-center text-sm text-slate-300">
           <b className="text-white">{r(scaled.calories)}</b> kcal · {r(scaled.protein_g)}P ·{' '}
           {r(scaled.carbs_g)}C · {r(scaled.fat_g)}F
+          {unit === 'serving' && pickedGrams > 0 && (
+            <span className="text-slate-500"> · {pickedGrams}{picked.unit}</span>
+          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-300">
