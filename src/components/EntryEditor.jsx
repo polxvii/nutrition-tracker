@@ -38,6 +38,11 @@ export default function EntryEditor({
 }) {
   const isEx = entry.source === 'exercise'
   const hasComps = Array.isArray(entry.components) && entry.components.length > 0
+  // Serving-based food (barcode/search with a declared serving size): grams per
+  // 1 serving, so the edit screen can offer synced servings ⇄ grams. 0 = plain.
+  const servingG = !isEx && !hasComps ? num(entry.serving_g) : 0
+  const origServ =
+    servingG > 0 ? num(entry.servings) || num(entry.grams) / servingG || 1 : 1
   const [addingItem, setAddingItem] = useState(false)
   const [savedFreq, setSavedFreq] = useState(false)
   const [savedComps, setSavedComps] = useState(() => new Set()) // components saved to foods
@@ -47,11 +52,12 @@ export default function EntryEditor({
   // held the scaled amounts, which made further steps compound wrongly).
   const [serv, setServ] = useState(() => num(entry.servings) || 1)
   const [servText, setServText] = useState(() => String(num(entry.servings) || 1))
-  // Servings multiplier for a simple (non-breakdown) food, so quantity is
-  // always adjustable even when the entry carries no grams to scale from.
-  // Resets to ×1 each open (save stores the scaled values, not the multiplier).
-  const [qty, setQty] = useState(1)
-  const [qtyText, setQtyText] = useState('1')
+  // Quantity control for a simple (non-breakdown) food. For a serving-based
+  // food this is the real servings COUNT (1 serving = servingG grams); for a
+  // plain food it's an abstract ×multiplier from the entry's current amount.
+  const initQty = servingG > 0 ? Math.round(origServ * 100) / 100 : 1
+  const [qty, setQty] = useState(initQty)
+  const [qtyText, setQtyText] = useState(String(initQty))
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -269,8 +275,9 @@ export default function EntryEditor({
         carbs_g: round1(num(entry.carbs_g) * r),
         fat_g: round1(num(entry.fat_g) * r),
       })
-      // keep the ×servings stepper in step with a grams edit
-      const q = Math.round(r * 100) / 100
+      // Keep the servings field in step with a grams edit. For a serving-based
+      // food that's the real count (grams ÷ serving size); otherwise the ratio.
+      const q = servingG > 0 ? Math.round((newG / servingG) * 100) / 100 : Math.round(r * 100) / 100
       setQty(q)
       setQtyText(String(q))
     } else {
@@ -278,20 +285,27 @@ export default function EntryEditor({
     }
   }
 
-  // Servings multiplier for a simple food: scales kcal + macros (and grams, if
-  // any) from the ORIGINAL entry by an absolute factor, so it's stable however
-  // the number is typed. Always available — the one quantity control that works
-  // even for saved foods logged without a gram amount.
+  // Quantity control for a simple food. `next` is a servings COUNT when the
+  // food is serving-based (grams = servingG × count), else an abstract
+  // ×multiplier of the entry's amount. Either way kcal + macros scale from the
+  // ORIGINAL entry so it's stable however the number is typed. Always available
+  // — the one control that works even for a food logged without a gram amount.
   function applyQty(next) {
     if (!(next > 0)) return
     const baseG = num(entry.grams)
+    const m = servingG > 0 ? next / origServ : next // multiplier vs the original
     setF((prev) => ({
       ...prev,
-      calories: Math.round(num(entry.calories) * next),
-      protein_g: round1(num(entry.protein_g) * next),
-      carbs_g: round1(num(entry.carbs_g) * next),
-      fat_g: round1(num(entry.fat_g) * next),
-      grams: baseG > 0 ? String(Math.round(baseG * next)) : prev.grams,
+      calories: Math.round(num(entry.calories) * m),
+      protein_g: round1(num(entry.protein_g) * m),
+      carbs_g: round1(num(entry.carbs_g) * m),
+      fat_g: round1(num(entry.fat_g) * m),
+      grams:
+        servingG > 0
+          ? String(Math.round(servingG * next))
+          : baseG > 0
+            ? String(Math.round(baseG * next))
+            : prev.grams,
     }))
     setQty(next)
     setQtyText(String(next))
@@ -346,6 +360,8 @@ export default function EntryEditor({
       protein_g: num(f.protein_g),
       carbs_g: num(f.carbs_g),
       fat_g: num(f.fat_g),
+      // Preserve the serving size + count so the serving view survives an edit.
+      ...(servingG > 0 ? { serving_g: servingG, servings: Math.round(num(qtyText) * 100) / 100 || origServ } : {}),
     }
   }
 
@@ -407,7 +423,7 @@ export default function EntryEditor({
       </Field>
 
       {!isEx && (
-        <div className={hasComps ? '' : 'grid grid-cols-[auto_1fr] gap-3'}>
+        <div className={hasComps || servingG > 0 ? '' : 'grid grid-cols-[auto_1fr] gap-3'}>
           <Field label="Meal">
             <Select value={f.meal_type} onChange={set('meal_type')}>
               {MEALS.map((m) => (
@@ -417,7 +433,9 @@ export default function EntryEditor({
               ))}
             </Select>
           </Field>
-          {!hasComps && (
+          {/* Serving-based foods edit grams in the synced pair below, so no
+              standalone Amount field here. */}
+          {!hasComps && servingG === 0 && (
             <Field label="Amount">
               <div className="grid grid-cols-[1fr_auto] gap-1">
                 <Input
@@ -553,22 +571,11 @@ export default function EntryEditor({
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between rounded-xl bg-slate-800 p-2">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Servings</div>
-              <div className="text-[11px] text-slate-500">scales kcal + macros</div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => stepQty(-0.5)}
-                disabled={qty <= 0.5}
-                className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
-                aria-label="Fewer servings"
-              >
-                −
-              </button>
-              <div className="flex items-center">
-                <span className="text-slate-400">×</span>
+          {servingG > 0 ? (
+            // Serving-based food: servings + grams, both editable and synced
+            // (1 serving = {servingG} {unit}). Edit either; the other follows.
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Servings">
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -578,19 +585,55 @@ export default function EntryEditor({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') e.currentTarget.blur()
                   }}
-                  className="w-14 px-1 text-center text-base font-bold tabular-nums"
-                  aria-label="Servings"
                 />
-              </div>
-              <button
-                onClick={() => stepQty(0.5)}
-                className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
-                aria-label="More servings"
-              >
-                ＋
-              </button>
+              </Field>
+              <Field label={`Amount (${f.unit})`}>
+                <Input type="number" inputMode="decimal" value={f.grams} onChange={setGrams} />
+              </Field>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-xl bg-slate-800 p-2">
+              <div>
+                <div className="text-sm font-medium text-slate-200">Servings</div>
+                <div className="text-[11px] text-slate-500">scales kcal + macros</div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => stepQty(-0.5)}
+                  disabled={qty <= 0.5}
+                  className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
+                  aria-label="Fewer servings"
+                >
+                  −
+                </button>
+                <div className="flex items-center">
+                  <span className="text-slate-400">×</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={qtyText}
+                    onChange={(e) => setQtyText(e.target.value)}
+                    onBlur={commitQty}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                    }}
+                    className="w-14 px-1 text-center text-base font-bold tabular-nums"
+                    aria-label="Servings"
+                  />
+                </div>
+                <button
+                  onClick={() => stepQty(0.5)}
+                  className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
+                  aria-label="More servings"
+                >
+                  ＋
+                </button>
+              </div>
+            </div>
+          )}
+          {servingG > 0 && (
+            <p className="text-[11px] text-slate-500">1 serving = {round1(servingG)}{f.unit}</p>
+          )}
           <div className="grid grid-cols-4 gap-2">
             <Field label="kcal">
               <Input type="number" value={f.calories} onChange={set('calories')} className="px-1 text-center" />

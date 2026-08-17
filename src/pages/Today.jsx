@@ -19,6 +19,16 @@ const num = (v) => {
   return Number.isNaN(n) ? 0 : n
 }
 
+// Amount suffix for a diary row: serving-based foods read "1 serving · 50g";
+// everything else just "50g". Empty when there's no amount.
+const amountLabel = (l) => {
+  if (num(l.serving_g) > 0) {
+    const s = Math.round((num(l.servings) || num(l.grams) / num(l.serving_g)) * 100) / 100
+    return ` · ${s} serving${s === 1 ? '' : 's'} · ${Math.round(num(l.grams))}${l.unit || 'g'}`
+  }
+  return l.grams ? ` · ${Math.round(num(l.grams))}${l.unit || 'g'}` : ''
+}
+
 // Log sections in display order. 'other' catches food with no meal set;
 // 'exercise' holds burned-calorie entries (source === 'exercise').
 const GROUP_ORDER = ['breakfast', 'lunch', 'dinner', 'night', 'snack', 'other', 'exercise']
@@ -775,7 +785,7 @@ export default function Today() {
                             <div className="text-xs text-slate-500">
                               {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C ·{' '}
                               {Math.round(num(l.fat_g))}F
-                              {l.grams ? ` · ${Math.round(num(l.grams))}${l.unit || 'g'}` : ''}
+                              {amountLabel(l)}
                               {l.components?.length ? ` · 🍱 ${l.components.length} items` : ''}
                             </div>
                           )}

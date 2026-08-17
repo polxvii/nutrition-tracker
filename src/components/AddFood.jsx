@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { searchFoods, lookupBarcode, scaleFood, unitsFor } from '../lib/foodSearch'
+import { searchFoods, lookupBarcode, scaleFood } from '../lib/foodSearch'
 import { supabase } from '../lib/supabase'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
@@ -100,8 +100,8 @@ export default function AddFood({
   const [error, setError] = useState(null)
 
   const [picked, setPicked] = useState(null)
-  const [grams, setGrams] = useState('')
-  const [unit, setUnit] = useState('g')
+  const [grams, setGrams] = useState('') // real grams/ml (canonical amount)
+  const [servText, setServText] = useState('') // servings count, synced to grams
   const [asFrequent, setAsFrequent] = useState(false)
   const [aiNote, setAiNote] = useState('') // pre-fills the AI view's description
   const [aiHint, setAiHint] = useState('') // amber note shown atop the AI view
@@ -156,7 +156,7 @@ export default function AddFood({
       // de-duped by name — so anything you've ever logged is findable.
       supabase
         .from('food_logs')
-        .select('id,food_name,calories,protein_g,carbs_g,fat_g,grams,unit,components')
+        .select('id,food_name,calories,protein_g,carbs_g,fat_g,grams,unit,components,serving_g,servings')
         .neq('source', 'exercise')
         .ilike('food_name', `%${query}%`)
         .order('created_at', { ascending: false })
@@ -229,16 +229,23 @@ export default function AddFood({
   function pick(food) {
     setPicked(food)
     if (food.serving_g) {
-      setUnit('serving')
-      setGrams('1')
+      // Default to 1 serving, but hold the amount in real grams so both the
+      // servings and grams fields stay meaningful and in sync.
+      setGrams(String(Math.round(food.serving_g)))
+      setServText('1')
     } else {
-      setUnit(food.unit || 'g')
       setGrams('100')
+      setServText('')
     }
   }
-  function changeUnit(u) {
-    setUnit(u)
-    setGrams(u === 'serving' ? '1' : String(picked.serving_g ? Math.round(picked.serving_g) : 100))
+  // Servings ⇄ grams: editing one keeps the other in step via serving_g.
+  const onGramsChange = (v) => {
+    setGrams(v)
+    if (picked?.serving_g) setServText(String(Math.round((Number(v) / picked.serving_g) * 100) / 100))
+  }
+  const onServChange = (v) => {
+    setServText(v)
+    if (picked?.serving_g && Number(v) > 0) setGrams(String(Math.round(picked.serving_g * Number(v))))
   }
 
   async function onScan(code) {
@@ -270,26 +277,26 @@ export default function AddFood({
     }
   }
 
-  const scaled = picked ? scaleFood(picked, unit, grams) : null
-  // Real gram weight of the chosen amount — a "serving" is converted to grams
-  // (1 serving × 50 g = 50 g). Shown live below, and what we store.
-  const pickedGrams =
-    picked && unit === 'serving' && picked.serving_g
-      ? Math.round(Number(grams) * picked.serving_g)
-      : Number(grams) || 0
+  // grams always holds the real amount in the base unit now, so scale by grams.
+  const scaled = picked ? scaleFood(picked, picked.unit || 'g', grams) : null
 
   function addPicked() {
     const name = picked.brand ? `${picked.name} — ${picked.brand}` : picked.name
+    const g = Number(grams) || 0
+    const servingG = picked.serving_g || null
     onLog(
       {
         food_name: name,
         meal_type: meal,
-        // Store the actual grams + base unit, never the serving *count* — so a
-        // "1 serving = 50 g" item logs as 50 g and stays editable in grams
-        // later (not a stray "1 g").
-        grams: pickedGrams || null,
-        unit: unit === 'serving' ? picked.unit || 'g' : unit,
+        // Always the real grams + base unit. serving_g (+ servings count) is
+        // only attached for serving-based foods so the diary can show
+        // "1 serving" and the edit screen can offer synced servings ⇄ grams —
+        // plain gram/ml foods send no serving fields, so nothing changes for
+        // them (and they still log fine before the serving_g column exists).
+        grams: g || null,
+        unit: picked.unit || 'g',
         source: picked.code ? 'barcode' : 'search',
+        ...(servingG ? { serving_g: servingG, servings: Math.round((g / servingG) * 100) / 100 } : {}),
         ...scaled,
       },
       {
@@ -355,6 +362,8 @@ export default function AddFood({
         // Re-adding a logged dish carries its breakdown along, so you can still
         // drill in and edit the parts.
         ...(t.components?.length ? { components: t.components } : {}),
+        // Carry serving info so a re-added serving-food keeps its serving view.
+        ...(t.serving_g ? { serving_g: t.serving_g, servings: t.servings ?? null } : {}),
       },
       { asFrequent: false }
     )
@@ -477,41 +486,50 @@ export default function AddFood({
           )}
         </div>
 
-        <div className="grid grid-cols-[auto_1fr] gap-3">
-          <Field label="Meal">
-            <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
-              {MEALS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Amount">
-            <div className="grid grid-cols-[1fr_auto] gap-1">
+        <Field label="Meal">
+          <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
+            {MEALS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        {picked.serving_g ? (
+          // Serving-based product: servings + grams, both editable and synced.
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Servings">
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={servText}
+                onChange={(e) => onServChange(e.target.value)}
+              />
+            </Field>
+            <Field label={`Amount (${picked.unit})`}>
               <Input
                 type="number"
                 inputMode="decimal"
                 value={grams}
-                onChange={(e) => setGrams(e.target.value)}
+                onChange={(e) => onGramsChange(e.target.value)}
               />
-              <Select value={unit} onChange={(e) => changeUnit(e.target.value)}>
-                {unitsFor(picked).map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            </Field>
+          </div>
+        ) : (
+          <Field label={`Amount (${picked.unit})`}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={grams}
+              onChange={(e) => setGrams(e.target.value)}
+            />
           </Field>
-        </div>
+        )}
 
         <div className="text-center text-sm text-slate-300">
           <b className="text-white">{r(scaled.calories)}</b> kcal · {r(scaled.protein_g)}P ·{' '}
           {r(scaled.carbs_g)}C · {r(scaled.fat_g)}F
-          {unit === 'serving' && pickedGrams > 0 && (
-            <span className="text-slate-500"> · {pickedGrams}{picked.unit}</span>
-          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-300">
