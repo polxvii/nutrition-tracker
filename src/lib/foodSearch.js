@@ -24,14 +24,16 @@ function gramsFor(food, unit, amount) {
 }
 
 // Scale a product to amount+unit using only the searched per-100 data,
-// returning a ready-to-log entry (calories + macros rounded).
+// returning a ready-to-log entry. kcal is whole; macros keep 1 decimal so
+// small amounts (e.g. 1.5 g fat) don't round up and bias the day's totals.
 export function scaleFood(food, unit, amount) {
   const f = gramsFor(food, unit, amount) / 100
+  const r1 = (n) => Math.round((Number(n) || 0) * f * 10) / 10
   return {
     calories: Math.round(food.per100.calories * f),
-    protein_g: Math.round(food.per100.protein_g * f),
-    carbs_g: Math.round(food.per100.carbs_g * f),
-    fat_g: Math.round(food.per100.fat_g * f),
+    protein_g: r1(food.per100.protein_g),
+    carbs_g: r1(food.per100.carbs_g),
+    fat_g: r1(food.per100.fat_g),
   }
 }
 

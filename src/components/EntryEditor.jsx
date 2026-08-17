@@ -9,6 +9,9 @@ const num = (v) => {
   const n = Number(v)
   return Number.isNaN(n) ? 0 : n
 }
+// Macros keep 1 decimal (F 1.5 stays 1.5, not rounded up to 2) so scaling and
+// day totals don't accumulate rounding bias. kcal + grams stay whole.
+const round1 = (v) => Math.round(num(v) * 10) / 10
 const MACRO_KEYS = ['grams', 'calories', 'protein_g', 'carbs_g', 'fat_g']
 
 // Edit / duplicate a single logged entry (food or exercise). Editing the
@@ -44,6 +47,11 @@ export default function EntryEditor({
   // held the scaled amounts, which made further steps compound wrongly).
   const [serv, setServ] = useState(() => num(entry.servings) || 1)
   const [servText, setServText] = useState(() => String(num(entry.servings) || 1))
+  // Servings multiplier for a simple (non-breakdown) food, so quantity is
+  // always adjustable even when the entry carries no grams to scale from.
+  // Resets to ×1 each open (save stores the scaled values, not the multiplier).
+  const [qty, setQty] = useState(1)
+  const [qtyText, setQtyText] = useState('1')
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -51,9 +59,9 @@ export default function EntryEditor({
     grams: entry.grams ?? '',
     unit: entry.unit ?? 'g',
     calories: Math.round(num(entry.calories)),
-    protein_g: Math.round(num(entry.protein_g)),
-    carbs_g: Math.round(num(entry.carbs_g)),
-    fat_g: Math.round(num(entry.fat_g)),
+    protein_g: round1(entry.protein_g),
+    carbs_g: round1(entry.carbs_g),
+    fat_g: round1(entry.fat_g),
     date: todayISODate(new Date(entry.logged_at)),
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -66,9 +74,9 @@ export default function EntryEditor({
             name: c.name ?? '',
             grams: Math.round(num(c.grams)),
             calories: Math.round(num(c.calories)),
-            protein_g: Math.round(num(c.protein_g)),
-            carbs_g: Math.round(num(c.carbs_g)),
-            fat_g: Math.round(num(c.fat_g)),
+            protein_g: round1(c.protein_g),
+            carbs_g: round1(c.carbs_g),
+            fat_g: round1(c.fat_g),
           }
           return { ...v, _base: v } // fixed base so grams edits scale correctly
         })
@@ -91,9 +99,9 @@ export default function EntryEditor({
               ...it,
               grams: value,
               calories: Math.round(num(base.calories) * r),
-              protein_g: Math.round(num(base.protein_g) * r),
-              carbs_g: Math.round(num(base.carbs_g) * r),
-              fat_g: Math.round(num(base.fat_g) * r),
+              protein_g: round1(num(base.protein_g) * r),
+              carbs_g: round1(num(base.carbs_g) * r),
+              fat_g: round1(num(base.fat_g) * r),
             }
           }
           return { ...it, grams: value }
@@ -168,7 +176,8 @@ export default function EntryEditor({
     if (!(next > 0)) return
     const r = next / serv
     if (r !== 1) {
-      const s = (n) => Math.round(num(n) * r)
+      const s = (n) => Math.round(num(n) * r) // grams / kcal → whole
+      const sm = (n) => round1(num(n) * r) // macros → 1 decimal
       setComps((prev) =>
         prev.map((it) => {
           const base = it._base || it
@@ -176,16 +185,16 @@ export default function EntryEditor({
             ...it,
             grams: s(it.grams),
             calories: s(it.calories),
-            protein_g: s(it.protein_g),
-            carbs_g: s(it.carbs_g),
-            fat_g: s(it.fat_g),
+            protein_g: sm(it.protein_g),
+            carbs_g: sm(it.carbs_g),
+            fat_g: sm(it.fat_g),
             _base: {
               ...base,
               grams: s(base.grams),
               calories: s(base.calories),
-              protein_g: s(base.protein_g),
-              carbs_g: s(base.carbs_g),
-              fat_g: s(base.fat_g),
+              protein_g: sm(base.protein_g),
+              carbs_g: sm(base.carbs_g),
+              fat_g: sm(base.fat_g),
             },
           }
         })
@@ -212,9 +221,9 @@ export default function EntryEditor({
         name: (e.food_name || '').trim() || 'Item',
         grams: Math.round(num(e.grams)),
         calories: Math.round(num(e.calories)),
-        protein_g: Math.round(num(e.protein_g)),
-        carbs_g: Math.round(num(e.carbs_g)),
-        fat_g: Math.round(num(e.fat_g)),
+        protein_g: round1(e.protein_g),
+        carbs_g: round1(e.carbs_g),
+        fat_g: round1(e.fat_g),
       }
       return { ...v, _base: v }
     })
@@ -256,13 +265,45 @@ export default function EntryEditor({
         ...f,
         grams: value,
         calories: Math.round(num(entry.calories) * r),
-        protein_g: Math.round(num(entry.protein_g) * r),
-        carbs_g: Math.round(num(entry.carbs_g) * r),
-        fat_g: Math.round(num(entry.fat_g) * r),
+        protein_g: round1(num(entry.protein_g) * r),
+        carbs_g: round1(num(entry.carbs_g) * r),
+        fat_g: round1(num(entry.fat_g) * r),
       })
+      // keep the ×servings stepper in step with a grams edit
+      const q = Math.round(r * 100) / 100
+      setQty(q)
+      setQtyText(String(q))
     } else {
       setF({ ...f, grams: value })
     }
+  }
+
+  // Servings multiplier for a simple food: scales kcal + macros (and grams, if
+  // any) from the ORIGINAL entry by an absolute factor, so it's stable however
+  // the number is typed. Always available — the one quantity control that works
+  // even for saved foods logged without a gram amount.
+  function applyQty(next) {
+    if (!(next > 0)) return
+    const baseG = num(entry.grams)
+    setF((prev) => ({
+      ...prev,
+      calories: Math.round(num(entry.calories) * next),
+      protein_g: round1(num(entry.protein_g) * next),
+      carbs_g: round1(num(entry.carbs_g) * next),
+      fat_g: round1(num(entry.fat_g) * next),
+      grams: baseG > 0 ? String(Math.round(baseG * next)) : prev.grams,
+    }))
+    setQty(next)
+    setQtyText(String(next))
+  }
+  const stepQty = (delta) => {
+    const next = Math.round((qty + delta) * 10) / 10
+    if (next >= 0.5) applyQty(next)
+  }
+  const commitQty = () => {
+    const n = num(qtyText)
+    if (n > 0) applyQty(Math.round(n * 100) / 100)
+    else setQtyText(String(qty))
   }
 
   function build() {
@@ -284,9 +325,9 @@ export default function EntryEditor({
         grams: Math.round(compTotals.grams) || null,
         unit: f.unit,
         calories: Math.round(compTotals.calories),
-        protein_g: Math.round(compTotals.protein_g),
-        carbs_g: Math.round(compTotals.carbs_g),
-        fat_g: Math.round(compTotals.fat_g),
+        protein_g: round1(compTotals.protein_g),
+        carbs_g: round1(compTotals.carbs_g),
+        fat_g: round1(compTotals.fat_g),
         components: comps.map((c) => ({
           name: (c.name || '').trim() || 'Item',
           grams: num(c.grams),
@@ -511,19 +552,59 @@ export default function EntryEditor({
             ))}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-2">
-          <Field label="kcal">
-            <Input type="number" value={f.calories} onChange={set('calories')} className="px-1 text-center" />
-          </Field>
-          <Field label="P">
-            <Input type="number" value={f.protein_g} onChange={setMacro('protein_g')} className="px-1 text-center" />
-          </Field>
-          <Field label="C">
-            <Input type="number" value={f.carbs_g} onChange={setMacro('carbs_g')} className="px-1 text-center" />
-          </Field>
-          <Field label="F">
-            <Input type="number" value={f.fat_g} onChange={setMacro('fat_g')} className="px-1 text-center" />
-          </Field>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between rounded-xl bg-slate-800 p-2">
+            <div>
+              <div className="text-sm font-medium text-slate-200">Servings</div>
+              <div className="text-[11px] text-slate-500">scales kcal + macros</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => stepQty(-0.5)}
+                disabled={qty <= 0.5}
+                className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95 disabled:opacity-40"
+                aria-label="Fewer servings"
+              >
+                −
+              </button>
+              <div className="flex items-center">
+                <span className="text-slate-400">×</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={qtyText}
+                  onChange={(e) => setQtyText(e.target.value)}
+                  onBlur={commitQty}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                  }}
+                  className="w-14 px-1 text-center text-base font-bold tabular-nums"
+                  aria-label="Servings"
+                />
+              </div>
+              <button
+                onClick={() => stepQty(0.5)}
+                className="h-8 w-8 shrink-0 rounded-lg bg-slate-700 text-xl leading-none text-white active:scale-95"
+                aria-label="More servings"
+              >
+                ＋
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <Field label="kcal">
+              <Input type="number" value={f.calories} onChange={set('calories')} className="px-1 text-center" />
+            </Field>
+            <Field label="P">
+              <Input type="number" value={f.protein_g} onChange={setMacro('protein_g')} className="px-1 text-center" />
+            </Field>
+            <Field label="C">
+              <Input type="number" value={f.carbs_g} onChange={setMacro('carbs_g')} className="px-1 text-center" />
+            </Field>
+            <Field label="F">
+              <Input type="number" value={f.fat_g} onChange={setMacro('fat_g')} className="px-1 text-center" />
+            </Field>
+          </div>
         </div>
       )}
 

@@ -8,6 +8,9 @@ const num = (v) => {
   const n = Number(v)
   return Number.isNaN(n) ? 0 : n
 }
+// Macros keep 1 decimal (F 1.5 stays 1.5) so scaling + day totals don't
+// accumulate rounding bias. kcal + grams stay whole.
+const round1 = (v) => Math.round(num(v) * 10) / 10
 const CONF_COLOR = { low: 'text-red-400', medium: 'text-amber-400', high: 'text-green-400' }
 const MACRO_KEYS = ['grams', 'calories', 'protein_g', 'carbs_g', 'fat_g']
 
@@ -69,9 +72,9 @@ export default function PhotoLogger({
           const v = {
             grams: Math.round(num(it.grams)),
             calories: Math.round(num(it.calories)),
-            protein_g: Math.round(num(it.protein_g)),
-            carbs_g: Math.round(num(it.carbs_g)),
-            fat_g: Math.round(num(it.fat_g)),
+            protein_g: round1(it.protein_g),
+            carbs_g: round1(it.carbs_g),
+            fat_g: round1(it.fat_g),
           }
           // Keep the estimate as a fixed base so amount edits scale from it.
           return { name: it.name ?? '', ...v, _base: v }
@@ -117,9 +120,9 @@ export default function PhotoLogger({
               ...it,
               grams: value,
               calories: Math.round(num(base.calories) * f),
-              protein_g: Math.round(num(base.protein_g) * f),
-              carbs_g: Math.round(num(base.carbs_g) * f),
-              fat_g: Math.round(num(base.fat_g) * f),
+              protein_g: round1(num(base.protein_g) * f),
+              carbs_g: round1(num(base.carbs_g) * f),
+              fat_g: round1(num(base.fat_g) * f),
             }
           }
           return { ...it, grams: value }
@@ -146,7 +149,8 @@ export default function PhotoLogger({
     if (!(next > 0)) return
     const r = next / serv
     if (r !== 1) {
-      const s = (n) => Math.round(num(n) * r)
+      const s = (n) => Math.round(num(n) * r) // grams / kcal → whole
+      const sm = (n) => round1(num(n) * r) // macros → 1 decimal
       setItems((prev) =>
         (prev || []).map((it) => {
           const base = it._base || it
@@ -154,16 +158,16 @@ export default function PhotoLogger({
             ...it,
             grams: s(it.grams),
             calories: s(it.calories),
-            protein_g: s(it.protein_g),
-            carbs_g: s(it.carbs_g),
-            fat_g: s(it.fat_g),
+            protein_g: sm(it.protein_g),
+            carbs_g: sm(it.carbs_g),
+            fat_g: sm(it.fat_g),
             _base: {
               ...base,
               grams: s(base.grams),
               calories: s(base.calories),
-              protein_g: s(base.protein_g),
-              carbs_g: s(base.carbs_g),
-              fat_g: s(base.fat_g),
+              protein_g: sm(base.protein_g),
+              carbs_g: sm(base.carbs_g),
+              fat_g: sm(base.fat_g),
             },
           }
         })
@@ -235,9 +239,9 @@ export default function PhotoLogger({
             meal_type: meal,
             grams: Math.round(totalG) || null,
             calories: Math.round(totals.calories),
-            protein_g: Math.round(totals.protein),
-            carbs_g: Math.round(totals.carbs),
-            fat_g: Math.round(totals.fat),
+            protein_g: round1(totals.protein),
+            carbs_g: round1(totals.carbs),
+            fat_g: round1(totals.fat),
             components,
           },
         ],

@@ -6,6 +6,8 @@ const num = (v) => {
   const n = Number(v)
   return Number.isNaN(n) ? 0 : n
 }
+// Macros keep 1 decimal so scaling doesn't round up and bias totals.
+const round1 = (v) => Math.round(num(v) * 10) / 10
 
 // Edit a saved (frequent) food: rename, change its default amount/unit, tweak
 // macros. Editing grams scales macros from the saved base; editing a macro
@@ -17,9 +19,9 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
       grams: food.default_grams != null ? Math.round(num(food.default_grams)) : '',
       unit: food.unit ?? 'g',
       calories: Math.round(num(food.calories)),
-      protein_g: Math.round(num(food.protein_g)),
-      carbs_g: Math.round(num(food.carbs_g)),
-      fat_g: Math.round(num(food.fat_g)),
+      protein_g: round1(food.protein_g),
+      carbs_g: round1(food.carbs_g),
+      fat_g: round1(food.fat_g),
     }
     return { ...v, _base: v } // fixed base so grams edits scale correctly
   })
@@ -38,9 +40,9 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
           ...p,
           grams: value,
           calories: Math.round(num(base.calories) * rt),
-          protein_g: Math.round(num(base.protein_g) * rt),
-          carbs_g: Math.round(num(base.carbs_g) * rt),
-          fat_g: Math.round(num(base.fat_g) * rt),
+          protein_g: round1(num(base.protein_g) * rt),
+          carbs_g: round1(num(base.carbs_g) * rt),
+          fat_g: round1(num(base.fat_g) * rt),
         }
       }
       return { ...p, grams: value }

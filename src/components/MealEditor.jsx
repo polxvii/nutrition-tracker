@@ -5,6 +5,8 @@ const num = (v) => {
   const n = Number(v)
   return Number.isNaN(n) ? 0 : n
 }
+// Macros keep 1 decimal so scaling doesn't round up and bias totals.
+const round1 = (v) => Math.round(num(v) * 10) / 10
 const MACRO_KEYS = ['grams', 'calories', 'protein_g', 'carbs_g', 'fat_g']
 
 // Edit a saved meal (combo): rename, tweak each item's amount/macros, add or
@@ -19,9 +21,9 @@ export default function MealEditor({ meal, onSave, onDelete, onCancel, busy }) {
         grams: Math.round(num(it.grams)),
         unit: it.unit ?? 'g',
         calories: Math.round(num(it.calories)),
-        protein_g: Math.round(num(it.protein_g)),
-        carbs_g: Math.round(num(it.carbs_g)),
-        fat_g: Math.round(num(it.fat_g)),
+        protein_g: round1(it.protein_g),
+        carbs_g: round1(it.carbs_g),
+        fat_g: round1(it.fat_g),
       }
       return { ...v, _base: v }
     })
@@ -41,9 +43,9 @@ export default function MealEditor({ meal, onSave, onDelete, onCancel, busy }) {
               ...it,
               grams: value,
               calories: Math.round(num(base.calories) * f),
-              protein_g: Math.round(num(base.protein_g) * f),
-              carbs_g: Math.round(num(base.carbs_g) * f),
-              fat_g: Math.round(num(base.fat_g) * f),
+              protein_g: round1(num(base.protein_g) * f),
+              carbs_g: round1(num(base.carbs_g) * f),
+              fat_g: round1(num(base.fat_g) * f),
             }
           }
           return { ...it, grams: value }
