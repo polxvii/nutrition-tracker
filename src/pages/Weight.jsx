@@ -39,9 +39,9 @@ const shortDate = (iso) =>
 
 // One bar in the weekday/weekend card. Colour tiers match the daily Adherence
 // chart: green on target, amber over goal (or low protein), red over
-// maintenance. The rightmost reference (maint for kcal, else goal) sits at a
-// fixed mark; the amber goal line and red maintenance line are drawn to scale.
-const WEEK_MARK = 75 // rightmost reference position, % of track width
+// maintenance. Every row scales to GOAL so the amber goal line lines up across
+// all four rows; the kcal row also draws a red maintenance line to its right.
+const WEEK_MARK = 70 // goal marker position, % of track width (same on every row)
 function weekTier(value, goal, maint, mode) {
   if (mode === 'protein') return goal > 0 && value < goal * 0.9 ? 'bg-amber-500' : 'bg-green-500'
   if (mode === 'kcal' && maint > 0 && value > maint) return 'bg-red-500'
@@ -54,20 +54,19 @@ function weekTierText(value, goal, maint, mode) {
   return value > goal ? 'text-amber-400' : 'text-green-400'
 }
 function WeekTrack({ label, value, goal, maint, mode }) {
-  const ref = mode === 'kcal' && maint > 0 ? maint : goal // scales to this
-  const scale = ref > 0 ? WEEK_MARK / ref : 0
+  const scale = goal > 0 ? WEEK_MARK / goal : 0 // scale to goal → goal line at the same mark everywhere
   const w = Math.max(2, Math.min(100, value * scale))
-  const goalLeft = ref > 0 ? Math.min(100, goal * scale) : 0
+  const maintLeft = mode === 'kcal' && maint > 0 ? Math.min(100, maint * scale) : 0
   return (
     <div className="flex items-center gap-1.5">
       <span className="w-4 shrink-0 text-[9px] font-semibold uppercase text-slate-500">{label}</span>
       <div className="relative h-[7px] flex-1 overflow-hidden rounded bg-slate-700/50">
         <div className={`h-full rounded ${weekTier(value, goal, maint, mode)}`} style={{ width: `${w}%` }} />
         {goal > 0 && (
-          <div className="absolute inset-y-0 w-0.5 bg-amber-300/80" style={{ left: `${goalLeft}%` }} />
+          <div className="absolute inset-y-0 w-0.5 bg-amber-300/80" style={{ left: `${WEEK_MARK}%` }} />
         )}
-        {mode === 'kcal' && maint > 0 && (
-          <div className="absolute inset-y-0 w-0.5 bg-red-400/80" style={{ left: `${WEEK_MARK}%` }} />
+        {maintLeft > 0 && (
+          <div className="absolute inset-y-0 w-0.5 bg-red-400/80" style={{ left: `${maintLeft}%` }} />
         )}
       </div>
     </div>
