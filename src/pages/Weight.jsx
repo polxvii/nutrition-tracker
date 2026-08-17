@@ -37,20 +37,39 @@ const KCAL_PER_KG = 7700
 const shortDate = (iso) =>
   iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : ''
 
-// One bar in the weekday/weekend card. The target sits at a fixed mark so bars
-// scale to it; over-budget bars (kcal/carbs/fat) turn red. `kind` picks the
-// base colour (weekday blue / weekend amber).
-const WEEK_MARK = 70 // target marker position, % of track width
-function WeekTrack({ value, target, kind, budget }) {
-  const over = budget && target > 0 && value > target
-  const w = target > 0 ? Math.max(2, Math.min(100, (value / target) * WEEK_MARK)) : 0
-  const fill = over ? 'bg-red-500' : kind === 'we' ? 'bg-amber-400' : 'bg-blue-500'
+// One bar in the weekday/weekend card. Colour tiers match the daily Adherence
+// chart: green on target, amber over goal (or low protein), red over
+// maintenance. The rightmost reference (maint for kcal, else goal) sits at a
+// fixed mark; the amber goal line and red maintenance line are drawn to scale.
+const WEEK_MARK = 75 // rightmost reference position, % of track width
+function weekTier(value, goal, maint, mode) {
+  if (mode === 'protein') return goal > 0 && value < goal * 0.9 ? 'bg-amber-500' : 'bg-green-500'
+  if (mode === 'kcal' && maint > 0 && value > maint) return 'bg-red-500'
+  return goal > 0 && value > goal ? 'bg-amber-500' : 'bg-green-500'
+}
+function weekTierText(value, goal, maint, mode) {
+  if (!(goal > 0)) return 'text-white'
+  if (mode === 'protein') return value < goal * 0.9 ? 'text-amber-400' : 'text-green-400'
+  if (mode === 'kcal' && maint > 0 && value > maint) return 'text-red-400'
+  return value > goal ? 'text-amber-400' : 'text-green-400'
+}
+function WeekTrack({ label, value, goal, maint, mode }) {
+  const ref = mode === 'kcal' && maint > 0 ? maint : goal // scales to this
+  const scale = ref > 0 ? WEEK_MARK / ref : 0
+  const w = Math.max(2, Math.min(100, value * scale))
+  const goalLeft = ref > 0 ? Math.min(100, goal * scale) : 0
   return (
-    <div className="relative h-[7px] overflow-hidden rounded bg-slate-700/50">
-      <div className={`h-full rounded ${fill}`} style={{ width: `${w}%` }} />
-      {target > 0 && (
-        <div className="absolute inset-y-0 w-0.5 bg-slate-200/70" style={{ left: `${WEEK_MARK}%` }} />
-      )}
+    <div className="flex items-center gap-1.5">
+      <span className="w-4 shrink-0 text-[9px] font-semibold uppercase text-slate-500">{label}</span>
+      <div className="relative h-[7px] flex-1 overflow-hidden rounded bg-slate-700/50">
+        <div className={`h-full rounded ${weekTier(value, goal, maint, mode)}`} style={{ width: `${w}%` }} />
+        {goal > 0 && (
+          <div className="absolute inset-y-0 w-0.5 bg-amber-300/80" style={{ left: `${goalLeft}%` }} />
+        )}
+        {mode === 'kcal' && maint > 0 && (
+          <div className="absolute inset-y-0 w-0.5 bg-red-400/80" style={{ left: `${WEEK_MARK}%` }} />
+        )}
+      </div>
     </div>
   )
 }
@@ -494,47 +513,51 @@ export default function Weight() {
         goalP: goalMean('goal_protein_g'),
         goalC: goalMean('goal_carbs_g'),
         goalF: goalMean('goal_fat_g'),
+        maint: goalMean('tdee'), // maintenance (per-day TDEE), for the kcal row
       }
     }
     return { weekday: agg(wd), weekend: agg(we), nWd: wd.length, nWe: we.length }
   }, [foodData, goalHist])
 
-  // Rows for the card: one per metric, with the shared target. `budget` = over
-  // target is bad (kcal/carbs/fat); protein instead warns when it's too LOW.
+  // Rows for the card. `mode` drives colour tiers, matching the daily Adherence
+  // chart: kcal → green ≤ goal · amber over goal · red over maintenance (two
+  // marker lines); carbs/fat → green ≤ goal · amber over; protein → amber when
+  // it runs LOW. Only kcal carries a maintenance line.
   const weekRows = useMemo(() => {
     const a = weekSplit.weekday
     const b = weekSplit.weekend
     if (!a || !b) return null
-    const mk = (key, label, gk, budget) => ({
+    const mk = (key, label, gk, mode) => ({
       key,
       label,
-      budget,
+      mode,
       wd: a[key],
       we: b[key],
-      target: (a[gk] + b[gk]) / 2,
+      goal: (a[gk] + b[gk]) / 2,
+      maint: mode === 'kcal' ? (a.maint + b.maint) / 2 : 0,
     })
     return [
-      mk('kcal', 'kcal', 'goalCal', true),
-      mk('protein', 'Protein', 'goalP', false),
-      mk('carbs', 'Carbs', 'goalC', true),
-      mk('fat', 'Fat', 'goalF', true),
+      mk('kcal', 'kcal', 'goalCal', 'kcal'),
+      mk('protein', 'Protein', 'goalP', 'protein'),
+      mk('carbs', 'Carbs', 'goalC', 'budget'),
+      mk('fat', 'Fat', 'goalF', 'budget'),
     ]
   }, [weekSplit])
 
   // Highlight line: the metric whose weekend value deviates most from weekdays,
-  // ranked relative to its own target so grams and kcal compare fairly.
+  // ranked relative to its own goal so grams and kcal compare fairly.
   const weekHighlight = useMemo(() => {
     if (!weekRows) return null
     let best = null
     for (const r of weekRows) {
-      if (!(r.target > 0)) continue
-      const rel = Math.abs(r.we - r.wd) / r.target
+      if (!(r.goal > 0)) continue
+      const rel = Math.abs(r.we - r.wd) / r.goal
       if (!best || rel > best.rel) best = { ...r, rel }
     }
     if (!best || best.rel < 0.05) return null
     const unit = best.key === 'kcal' ? '' : 'g'
     const gap = Math.round(best.we - best.wd)
-    const overTgt = Math.round(best.we - best.target)
+    const overTgt = Math.round(best.we - best.goal)
     return `Weekend ${best.label.toLowerCase()} runs ${Math.abs(gap)}${unit} ${
       gap >= 0 ? 'higher' : 'lower'
     } than weekdays — ${Math.abs(overTgt)}${unit} ${overTgt >= 0 ? 'over' : 'under'} target, the widest gap of any macro`
@@ -913,28 +936,14 @@ export default function Weight() {
                 >
                   <div className="text-xs font-semibold text-slate-400">{r.label}</div>
                   <div className="flex flex-col gap-1">
-                    <WeekTrack value={r.wd} target={r.target} kind="wd" budget={r.budget} />
-                    <WeekTrack value={r.we} target={r.target} kind="we" budget={r.budget} />
+                    <WeekTrack label="Wd" value={r.wd} goal={r.goal} maint={r.maint} mode={r.mode} />
+                    <WeekTrack label="We" value={r.we} goal={r.goal} maint={r.maint} mode={r.mode} />
                   </div>
-                  <div
-                    className={`text-right text-xs tabular-nums ${
-                      !r.budget && r.target > 0 && r.wd < r.target * 0.9
-                        ? 'text-amber-400'
-                        : 'text-slate-400'
-                    }`}
-                  >
+                  <div className={`text-right text-xs tabular-nums ${weekTierText(r.wd, r.goal, r.maint, r.mode)}`}>
                     {Math.round(r.wd)}
                   </div>
                   <div
-                    className={`text-right text-xs font-semibold tabular-nums ${
-                      r.budget
-                        ? r.target > 0 && r.we > r.target
-                          ? 'text-red-400'
-                          : 'text-white'
-                        : r.target > 0 && r.we < r.target * 0.9
-                          ? 'text-amber-400'
-                          : 'text-white'
-                    }`}
+                    className={`text-right text-xs font-semibold tabular-nums ${weekTierText(r.we, r.goal, r.maint, r.mode)}`}
                   >
                     {Math.round(r.we)}
                   </div>
@@ -942,20 +951,24 @@ export default function Weight() {
               ))}
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-slate-800 pt-3 text-[11px] text-slate-400">
                 <span className="flex items-center gap-1.5">
-                  <i className="inline-block h-2 w-2 rounded-sm bg-blue-500" />
-                  Weekday
+                  <i className="inline-block h-2 w-2 rounded-sm bg-green-500" />
+                  On target
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <i className="inline-block h-2 w-2 rounded-sm bg-amber-400" />
-                  Weekend
+                  <i className="inline-block h-2 w-2 rounded-sm bg-amber-500" />
+                  Over goal
                 </span>
                 <span className="flex items-center gap-1.5">
                   <i className="inline-block h-2 w-2 rounded-sm bg-red-500" />
-                  Over target
+                  Over maintenance
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <i className="inline-block h-2.5 w-0.5 rounded-sm bg-slate-200/80" />
-                  Target
+                  <i className="inline-block h-2.5 w-0.5 rounded-sm bg-amber-300/80" />
+                  Goal
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="inline-block h-2.5 w-0.5 rounded-sm bg-red-400/80" />
+                  Maintenance
                 </span>
               </div>
               {weekHighlight && (
