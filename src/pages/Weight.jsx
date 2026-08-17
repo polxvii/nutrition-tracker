@@ -32,6 +32,28 @@ const MEAL_SLOTS = [
   ['snack', 'Snack'],
 ]
 const KCAL_PER_KG = 7700
+
+// Short date for the maintenance breakdown, e.g. "1 Aug". Local, no year.
+const shortDate = (iso) =>
+  iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : ''
+
+// One bar in the weekday/weekend card. The target sits at a fixed mark so bars
+// scale to it; over-budget bars (kcal/carbs/fat) turn red. `kind` picks the
+// base colour (weekday blue / weekend amber).
+const WEEK_MARK = 70 // target marker position, % of track width
+function WeekTrack({ value, target, kind, budget }) {
+  const over = budget && target > 0 && value > target
+  const w = target > 0 ? Math.max(2, Math.min(100, (value / target) * WEEK_MARK)) : 0
+  const fill = over ? 'bg-red-500' : kind === 'we' ? 'bg-amber-400' : 'bg-blue-500'
+  return (
+    <div className="relative h-[7px] overflow-hidden rounded bg-slate-700/50">
+      <div className={`h-full rounded ${fill}`} style={{ width: `${w}%` }} />
+      {target > 0 && (
+        <div className="absolute inset-y-0 w-0.5 bg-slate-200/70" style={{ left: `${WEEK_MARK}%` }} />
+      )}
+    </div>
+  )
+}
 // Daily kcal offset from measured maintenance, per goal + rate.
 const RATE_KCAL = {
   cut: { slow: -275, medium: -550, fast: -825 },
@@ -161,6 +183,7 @@ export default function Weight() {
   const [foodByDay, setFoodByDay] = useState([])
   const [goalHist, setGoalHist] = useState([]) // goal snapshots, ascending by date
   const [preset, setPreset] = useState('30d') // must match a RANGES label
+  const [showMaintDetail, setShowMaintDetail] = useState(false) // maintenance-avg breakdown
   // Preset "Nd" = last N days *including today*, so it reads /N not /N+1.
   const [fromDate, setFromDate] = useState(isoDaysAgo(29))
   const [toDate, setToDate] = useState(todayISODate())
@@ -444,6 +467,99 @@ export default function Weight() {
     : maint
   const goalChangedInRange = new Set(foodData.map((d) => d.dayGoal || goalCal)).size > 1
 
+  // ---- Weekday vs weekend --------------------------------------------------
+  // Split the logged days into weekday / weekend (Sat+Sun, local time) and take
+  // the daily average of kcal + macros for each, judged against the target that
+  // was in effect on each day (history-aware). Only logged days count.
+  const weekSplit = useMemo(() => {
+    const wd = []
+    const we = []
+    for (const d of foodData) {
+      const dow = new Date(d.date + 'T00:00:00').getDay()
+      ;(dow === 0 || dow === 6 ? we : wd).push(d)
+    }
+    const agg = (arr) => {
+      if (!arr.length) return null
+      const n = arr.length
+      const mean = (f) => arr.reduce((s, d) => s + f(d), 0) / n
+      const goalMean = (key) =>
+        arr.reduce((s, d) => s + (goalForDate(goalHist, d.date)?.[key] || 0), 0) / n
+      return {
+        n,
+        kcal: mean((d) => d.kcal),
+        protein: mean((d) => d.protein),
+        carbs: mean((d) => d.carbs),
+        fat: mean((d) => d.fat),
+        goalCal: goalMean('goal_calories'),
+        goalP: goalMean('goal_protein_g'),
+        goalC: goalMean('goal_carbs_g'),
+        goalF: goalMean('goal_fat_g'),
+      }
+    }
+    return { weekday: agg(wd), weekend: agg(we), nWd: wd.length, nWe: we.length }
+  }, [foodData, goalHist])
+
+  // Rows for the card: one per metric, with the shared target. `budget` = over
+  // target is bad (kcal/carbs/fat); protein instead warns when it's too LOW.
+  const weekRows = useMemo(() => {
+    const a = weekSplit.weekday
+    const b = weekSplit.weekend
+    if (!a || !b) return null
+    const mk = (key, label, gk, budget) => ({
+      key,
+      label,
+      budget,
+      wd: a[key],
+      we: b[key],
+      target: (a[gk] + b[gk]) / 2,
+    })
+    return [
+      mk('kcal', 'kcal', 'goalCal', true),
+      mk('protein', 'Protein', 'goalP', false),
+      mk('carbs', 'Carbs', 'goalC', true),
+      mk('fat', 'Fat', 'goalF', true),
+    ]
+  }, [weekSplit])
+
+  // Highlight line: the metric whose weekend value deviates most from weekdays,
+  // ranked relative to its own target so grams and kcal compare fairly.
+  const weekHighlight = useMemo(() => {
+    if (!weekRows) return null
+    let best = null
+    for (const r of weekRows) {
+      if (!(r.target > 0)) continue
+      const rel = Math.abs(r.we - r.wd) / r.target
+      if (!best || rel > best.rel) best = { ...r, rel }
+    }
+    if (!best || best.rel < 0.05) return null
+    const unit = best.key === 'kcal' ? '' : 'g'
+    const gap = Math.round(best.we - best.wd)
+    const overTgt = Math.round(best.we - best.target)
+    return `Weekend ${best.label.toLowerCase()} runs ${Math.abs(gap)}${unit} ${
+      gap >= 0 ? 'higher' : 'lower'
+    } than weekdays — ${Math.abs(overTgt)}${unit} ${overTgt >= 0 ? 'over' : 'under'} target, the widest gap of any macro`
+  }, [weekRows])
+
+  // ---- Maintenance across goal periods (Task 4) ----------------------------
+  // Group the logged days by the goal period in effect, so a range spanning ≥2
+  // periods can show each period's maintenance + a day-weighted average.
+  const maintPeriods = useMemo(() => {
+    const days = foodData.filter((d) => d.eaten >= intakeFloor)
+    const m = new Map()
+    for (const d of days) {
+      const g = goalForDate(goalHist, d.date)
+      const key = g?.effective_from || 'base'
+      const cur =
+        m.get(key) || { tdee: g?.tdee || profile?.tdee || 0, days: 0, min: d.date, max: d.date }
+      cur.days += 1
+      if (d.date < cur.min) cur.min = d.date
+      if (d.date > cur.max) cur.max = d.date
+      m.set(key, cur)
+    }
+    return [...m.values()].sort((x, y) => (x.min < y.min ? -1 : 1))
+  }, [foodData, goalHist, intakeFloor, profile])
+  const maintSpansPeriods = maintPeriods.length >= 2
+
   // Tier colour for the avg-kcal tile — against the day-specific goal averaged
   // over the range (green ≤ goal · amber over goal · red over maintenance).
   const avgKcalCls =
@@ -619,14 +735,45 @@ export default function Weight() {
             </p>
           )}
           {periodRecap.vsMaint != null && (
-            <p className="text-sm text-slate-300">
-              vs maintenance:{' '}
-              <b className={periodRecap.vsMaint <= 0 ? 'text-green-400' : 'text-amber-400'}>
-                {periodRecap.vsMaint > 0 ? '+' : ''}
-                {periodRecap.vsMaint} kcal
-              </b>
-              <span className="text-slate-500"> · ~{periodRecap.maint} maintenance</span>
-            </p>
+            <div>
+              <p className="text-sm text-slate-300">
+                vs maintenance:{' '}
+                <b className={periodRecap.vsMaint <= 0 ? 'text-green-400' : 'text-amber-400'}>
+                  {periodRecap.vsMaint > 0 ? '+' : ''}
+                  {periodRecap.vsMaint} kcal
+                </b>
+                <span className="text-slate-500"> · ~{periodRecap.maint} maintenance</span>
+                {/* Range spans ≥2 goal periods → the number is a day-weighted
+                    average, not one fixed value. Tag it + let them see the mix. */}
+                {maintSpansPeriods && (
+                  <button
+                    onClick={() => setShowMaintDetail((v) => !v)}
+                    className="ml-1.5 whitespace-nowrap align-middle"
+                  >
+                    <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                      avg
+                    </span>
+                    <span className="ml-1 text-[10px] text-slate-500">{showMaintDetail ? '▴' : '▾'}</span>
+                  </button>
+                )}
+              </p>
+              {maintSpansPeriods && showMaintDetail && (
+                <div className="mt-1 rounded-lg border border-slate-700/60 bg-slate-800/50 p-2.5">
+                  {maintPeriods.map((p, i) => (
+                    <div key={i} className="flex justify-between py-1 text-xs text-slate-300 tabular-nums">
+                      <span className="text-slate-500">
+                        {shortDate(p.min)} – {shortDate(p.max)} ({p.days} day{p.days > 1 ? 's' : ''})
+                      </span>
+                      <span>{p.tdee}</span>
+                    </div>
+                  ))}
+                  <div className="mt-1 flex justify-between border-t border-dashed border-slate-600 pt-2 text-xs font-semibold text-white tabular-nums">
+                    <span>Weighted by days</span>
+                    <span>{periodRecap.maint}</span>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {periodRecap.predictedKg != null && (
             <p className="text-sm text-slate-300">
@@ -738,6 +885,88 @@ export default function Weight() {
             <p className="text-center text-[11px] text-amber-400/80">
               Your goal changed during this range — each bar is coloured against the goal that
               applied on its own day.
+            </p>
+          )}
+        </Card>
+      )}
+
+      {/* Weekday vs weekend — how the same targets land on work days vs days off */}
+      {daysLogged > 0 && (
+        <Card>
+          <h2 className="text-sm font-medium text-slate-300">Weekday vs Weekend</h2>
+          {weekRows ? (
+            <>
+              <p className="mb-3 text-[11px] text-slate-500">
+                Daily average · {weekSplit.nWd} weekday{weekSplit.nWd === 1 ? '' : 's'} ·{' '}
+                {weekSplit.nWe} weekend day{weekSplit.nWe === 1 ? '' : 's'}
+              </p>
+              <div className="mb-1 grid grid-cols-[48px_1fr_44px_44px] gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <span />
+                <span />
+                <span className="text-right">Weekday</span>
+                <span className="text-right">Weekend</span>
+              </div>
+              {weekRows.map((r) => (
+                <div
+                  key={r.key}
+                  className="grid grid-cols-[48px_1fr_44px_44px] items-center gap-2 border-t border-slate-800 py-2"
+                >
+                  <div className="text-xs font-semibold text-slate-400">{r.label}</div>
+                  <div className="flex flex-col gap-1">
+                    <WeekTrack value={r.wd} target={r.target} kind="wd" budget={r.budget} />
+                    <WeekTrack value={r.we} target={r.target} kind="we" budget={r.budget} />
+                  </div>
+                  <div
+                    className={`text-right text-xs tabular-nums ${
+                      !r.budget && r.target > 0 && r.wd < r.target * 0.9
+                        ? 'text-amber-400'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {Math.round(r.wd)}
+                  </div>
+                  <div
+                    className={`text-right text-xs font-semibold tabular-nums ${
+                      r.budget
+                        ? r.target > 0 && r.we > r.target
+                          ? 'text-red-400'
+                          : 'text-white'
+                        : r.target > 0 && r.we < r.target * 0.9
+                          ? 'text-amber-400'
+                          : 'text-white'
+                    }`}
+                  >
+                    {Math.round(r.we)}
+                  </div>
+                </div>
+              ))}
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-slate-800 pt-3 text-[11px] text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <i className="inline-block h-2 w-2 rounded-sm bg-blue-500" />
+                  Weekday
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="inline-block h-2 w-2 rounded-sm bg-amber-400" />
+                  Weekend
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="inline-block h-2 w-2 rounded-sm bg-red-500" />
+                  Over target
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="inline-block h-2.5 w-0.5 rounded-sm bg-slate-200/80" />
+                  Target
+                </span>
+              </div>
+              {weekHighlight && (
+                <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200/90">
+                  {weekHighlight}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">
+              Not enough data — need at least one weekday and one weekend day logged.
             </p>
           )}
         </Card>
