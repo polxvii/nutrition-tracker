@@ -128,7 +128,7 @@ export default function AddFood({
       name: f.food_name,
       brand: null,
       unit: f.unit === 'ml' ? 'ml' : 'g',
-      serving_g: null,
+      serving_g: Number(f.serving_g) || null,
       per100: {
         calories: Math.round(Number(f.calories || 0) * k),
         protein_g: Math.round(Number(f.protein_g || 0) * k * 10) / 10,
@@ -254,7 +254,23 @@ export default function AddFood({
     // 1) Personal cache — have we resolved this barcode before? Instant, offline.
     const cached = (saved || []).find((f) => f.barcode && String(f.barcode) === String(code))
     if (cached) {
-      pick(cachedToFood(cached))
+      const food = cachedToFood(cached)
+      // Older cache rows predate serving_g — re-fetch once to recover the
+      // serving size so the servings field shows; fall back to the cache if the
+      // lookup is unavailable (offline).
+      if (food.serving_g) {
+        pick(food)
+        return
+      }
+      setSearching(true)
+      try {
+        const fresh = await lookupBarcode(code)
+        pick(fresh?.serving_g ? fresh : food)
+      } catch {
+        pick(food)
+      } finally {
+        setSearching(false)
+      }
       return
     }
     setSearching(true)
@@ -303,7 +319,13 @@ export default function AddFood({
         asFrequent,
         // Cache barcode products (per-100 basis) so a re-scan is instant.
         cache: picked.code
-          ? { barcode: String(picked.code), name, unit: picked.unit || 'g', per100: picked.per100 }
+          ? {
+              barcode: String(picked.code),
+              name,
+              unit: picked.unit || 'g',
+              per100: picked.per100,
+              serving_g: picked.serving_g || null,
+            }
           : null,
       }
     )

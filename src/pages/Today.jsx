@@ -263,6 +263,8 @@ export default function Today() {
       protein_g: num(cache.per100.protein_g),
       carbs_g: num(cache.per100.carbs_g),
       fat_g: num(cache.per100.fat_g),
+      // Keep the serving size so a re-scan can still offer the servings field.
+      ...(cache.serving_g ? { serving_g: cache.serving_g } : {}),
     }
     if (existing) await supabase.from('frequent_foods').update(row).eq('id', existing.id)
     else await supabase.from('frequent_foods').insert({ user_id: user.id, times_used: 1, ...row })
