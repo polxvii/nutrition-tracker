@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
 import { loadGoalHistory, goalForDate } from '../lib/goalHistory'
+import { tierName, tierText } from '../lib/tiers'
 import { Card } from '../components/ui'
 
 const num = (v) => {
@@ -159,24 +160,15 @@ export default function Calendar() {
       ? Math.round(((totalNet - totMaintOn) / 7700) * 100) / 100
       : null
 
-  // Net-kcal colour tier, matching the Progress adherence chart:
-  // green ≤ goal · amber over goal · red over maintenance.
-  // 3-tier text colour for a value against a given goal / maintenance:
-  // green ≤ goal · amber over goal · red over maintenance.
-  const tierText = (v, g, m) =>
-    m > 0 && v > m ? 'text-red-400' : g > 0 && v > g ? 'text-amber-400' : 'text-green-400'
-
   // Heatmap tint for a day cell — same 3-tier scale as the text colour, but as a
   // faint background so the whole month reads at a glance. Each day is judged
-  // against the goal in effect *that* day. Days with no food fall back to
-  // neutral: exercise-only, future (dimmer), or past-unlogged.
+  // against the goal in effect *that* day (with the tolerance band). Days with
+  // no food fall back to neutral: exercise-only, future (dimmer), or unlogged.
   const cellStyle = (b, k) => {
     if (b && b.cal > 0) {
-      const net = netOf(b)
-      const g = goalOn(k)
-      const m = maintOn(k)
-      if (m > 0 && net > m) return 'border-red-500/40 bg-red-500/10'
-      if (g > 0 && net > g) return 'border-amber-500/40 bg-amber-500/10'
+      const t = tierName(netOf(b), goalOn(k), maintOn(k), 'kcal', true)
+      if (t === 'red') return 'border-red-500/40 bg-red-500/10'
+      if (t === 'amber') return 'border-amber-500/40 bg-amber-500/10'
       return 'border-green-500/40 bg-green-500/10'
     }
     if (b && b.burned > 0) return 'border-slate-700 bg-slate-900' // exercise only
@@ -246,7 +238,7 @@ export default function Calendar() {
                     {hasFood ? (
                       <>
                         <span
-                          className={`text-[11px] font-semibold ${tierText(net, goalOn(k), maintOn(k))}`}
+                          className={`text-[11px] font-semibold ${tierText(net, goalOn(k), maintOn(k), 'kcal', true)}`}
                         >
                           {net}
                         </span>
@@ -323,17 +315,13 @@ export default function Calendar() {
                   { label: 'C', value: avg.c, unit: 'g', goal: profile?.goal_carbs_g },
                   { label: 'F', value: avg.f, unit: 'g', goal: profile?.goal_fat_g },
                 ].map((s) => {
-                  // kcal uses the day-specific goal/maintenance averaged over the
-                  // month (history-aware). Macros colour vs their goal (protein:
-                  // higher is good; carbs/fat: lower).
+                  // Month averages → no tolerance band (daily=false). kcal vs the
+                  // month-averaged goal/maintenance; protein greens when it meets
+                  // goal, carbs/fat amber when over.
                   const cls =
                     s.label === 'kcal'
-                      ? tierText(s.value, avgGoalOn, avgMaintOn)
-                      : s.goal > 0
-                        ? (s.label === 'P' ? s.value >= s.goal * 0.9 : s.value <= s.goal)
-                          ? 'text-green-400'
-                          : 'text-amber-400'
-                        : 'text-white'
+                      ? tierText(s.value, avgGoalOn, avgMaintOn, 'kcal', false)
+                      : tierText(s.value, s.goal, 0, s.label === 'P' ? 'protein' : 'budget', false)
                   return (
                     <div key={s.label} className="rounded-lg bg-slate-800 py-2">
                       <div className={`text-base font-bold ${cls}`}>

@@ -6,6 +6,7 @@ import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
 import { mealForNow } from '../lib/mealWindows'
 import { loadGoalHistory, goalForDate } from '../lib/goalHistory'
+import { tierHex, tolBand } from '../lib/tiers'
 import ProgressRing from '../components/ProgressRing'
 import { MEALS } from '../components/AddFoodForm'
 import AddFood from '../components/AddFood'
@@ -207,12 +208,8 @@ export default function Today() {
   // over maintenance) — colours the ring and the "over" number. Uses gross eaten.
   const netCal = totals.calories
   const maint = dayTargets?.tdee ?? profile?.tdee ?? 0
-  const calColor =
-    maint > 0 && netCal > maint
-      ? '#ef4444'
-      : goalCal > 0 && netCal > goalCal
-        ? '#f59e0b'
-        : '#22c55e'
+  // Today is a single day → tolerance band applies (daily=true).
+  const calColor = tierHex(netCal, goalCal, maint, 'kcal', true)
 
   // ---- actions ----
   async function upsertFrequent(entry) {
@@ -611,21 +608,22 @@ export default function Today() {
               label: 'Protein',
               val: totals.protein,
               goal: goalProtein,
-              // reach it → green; short → amber
+              // reach it (within band) → green; short → amber. Over is fine.
               over: false,
-              color: goalProtein > 0 && totals.protein >= goalProtein ? '#22c55e' : '#f59e0b',
+              color: tierHex(totals.protein, goalProtein, 0, 'protein', true),
             },
             {
               label: 'Carbs',
               val: totals.carbs,
               goal: goalCarbs,
-              color: goalCarbs > 0 && totals.carbs > goalCarbs ? '#ef4444' : '#3b82f6',
+              // over goal by more than the day's band → red, else the carb blue
+              color: goalCarbs > 0 && totals.carbs > goalCarbs + tolBand(goalCarbs, 'budget', true) ? '#ef4444' : '#3b82f6',
             },
             {
               label: 'Fat',
               val: totals.fat,
               goal: goalFat,
-              color: goalFat > 0 && totals.fat > goalFat ? '#ef4444' : '#FEC6DF',
+              color: goalFat > 0 && totals.fat > goalFat + tolBand(goalFat, 'budget', true) ? '#ef4444' : '#FEC6DF',
             },
           ].map((m) => {
             const pct = m.goal > 0 ? Math.min((m.val / m.goal) * 100, 100) : 0

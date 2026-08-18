@@ -18,6 +18,7 @@ import { todayISODate } from '../lib/dateHelpers'
 import { Button, Card, Collapsible, Field, Input } from '../components/ui'
 import BodyMeasurements from '../components/BodyMeasurements'
 import { loadGoalHistory, goalForDate, recordGoalHistory } from '../lib/goalHistory'
+import { tierName, tierText, tierBg, tierHex } from '../lib/tiers'
 
 const RANGES = [
   { days: 7, label: '7d' },
@@ -42,17 +43,7 @@ const shortDate = (iso) =>
 // maintenance. Every row scales to GOAL so the amber goal line lines up across
 // all four rows; the kcal row also draws a red maintenance line to its right.
 const WEEK_MARK = 70 // goal marker position, % of track width (same on every row)
-function weekTier(value, goal, maint, mode) {
-  if (mode === 'protein') return goal > 0 && value < goal * 0.9 ? 'bg-amber-500' : 'bg-green-500'
-  if (mode === 'kcal' && maint > 0 && value > maint) return 'bg-red-500'
-  return goal > 0 && value > goal ? 'bg-amber-500' : 'bg-green-500'
-}
-function weekTierText(value, goal, maint, mode) {
-  if (!(goal > 0)) return 'text-white'
-  if (mode === 'protein') return value < goal * 0.9 ? 'text-amber-400' : 'text-green-400'
-  if (mode === 'kcal' && maint > 0 && value > maint) return 'text-red-400'
-  return value > goal ? 'text-amber-400' : 'text-green-400'
-}
+// Weekday/weekend bars are AVERAGES → no tolerance band (daily=false).
 function WeekTrack({ label, value, goal, maint, mode }) {
   const scale = goal > 0 ? WEEK_MARK / goal : 0 // scale to goal → goal line at the same mark everywhere
   const w = Math.max(2, Math.min(100, value * scale))
@@ -61,7 +52,7 @@ function WeekTrack({ label, value, goal, maint, mode }) {
     <div className="flex items-center gap-1.5">
       <span className="w-4 shrink-0 text-[9px] font-semibold uppercase text-slate-500">{label}</span>
       <div className="relative h-[7px] flex-1 overflow-hidden rounded bg-slate-700/50">
-        <div className={`h-full rounded ${weekTier(value, goal, maint, mode)}`} style={{ width: `${w}%` }} />
+        <div className={`h-full rounded ${tierBg(value, goal, maint, mode, false)}`} style={{ width: `${w}%` }} />
         {goal > 0 && (
           <div className="absolute inset-y-0 w-0.5 bg-amber-300/80" style={{ left: `${WEEK_MARK}%` }} />
         )}
@@ -173,15 +164,15 @@ function BarTooltip({ active, payload, goalCal, maint }) {
   const d = payload[0].payload
   const g = d.dayGoal || goalCal // that day's goal / maintenance (history-aware)
   const m = d.dayMaint || maint
-  const overGoal = g > 0 && d.kcal > g
-  const overMaint = m > 0 && d.kcal > m
-  const cls = overMaint ? 'text-red-400' : overGoal ? 'text-amber-400' : 'text-green-400'
+  // One day → apply the tolerance band (daily=true), so the label matches the bar.
+  const name = tierName(d.kcal, g, m, 'kcal', true)
+  const cls = tierText(d.kcal, g, m, 'kcal', true)
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs">
       <div className="text-slate-300">{d.date}</div>
       <div className={cls}>
         <b>{Math.round(d.kcal)}</b> kcal
-        {overMaint ? ' · over maintenance' : overGoal ? ' · over goal' : ' · on target'}
+        {name === 'red' ? ' · over maintenance' : name === 'amber' ? ' · over goal' : ' · on target'}
       </div>
       <div className="text-slate-500">
         goal {g || '–'}
@@ -351,20 +342,32 @@ export default function Weight() {
   })()
 
   // Adherence over the range.
-  const foodData = useMemo(
-    () =>
-      foodByDay.filter((d) => inPeriod(d.date)).map((d) => {
-        // The goal + maintenance that were in effect on this specific day, so
-        // each bar is coloured against its own target (not the current one).
-        const g = goalForDate(goalHist, d.date)
-        return { ...d, label: d.date.slice(5), dayGoal: g?.goal_calories ?? 0, dayMaint: g?.tdee ?? 0 }
-      }),
+  const foodData = useMemo(() => {
+    const rows = foodByDay.filter((d) => inPeriod(d.date)).map((d) => {
+      // The goal + maintenance that were in effect on this specific day, so
+      // each bar is coloured against its own target (not the current one).
+      const g = goalForDate(goalHist, d.date)
+      return { ...d, label: d.date.slice(5), dayGoal: g?.goal_calories ?? 0, dayMaint: g?.tdee ?? 0 }
+    })
+    // Rolling 7-day intake: mean kcal over the logged days in the trailing
+    // 7-calendar-day window ending on each day. Smooths the daily noise.
+    const DAY = 86400000
+    return rows.map((d) => {
+      const end = new Date(d.date + 'T00:00:00').getTime()
+      const win = rows.filter((x) => {
+        const t = new Date(x.date + 'T00:00:00').getTime()
+        return t <= end && t > end - 7 * DAY
+      })
+      const roll7 = win.length ? Math.round(win.reduce((s, x) => s + x.kcal, 0) / win.length) : null
+      return { ...d, roll7 }
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [foodByDay, fromDate, toDate, goalHist]
-  )
+  }, [foodByDay, fromDate, toDate, goalHist])
   const goalCal = profile?.goal_calories ?? 0
   const goalProtein = profile?.goal_protein_g ?? 0
   const daysLogged = foodData.length
+  // Rolling 7-day line is only meaningful past a week and with a few points.
+  const showRoll7 = periodDays > 7 && daysLogged >= 3
   const avg = (key) =>
     daysLogged ? Math.round(foodData.reduce((s, d) => s + d[key], 0) / daysLogged) : 0
   const avgKcal = avg('kcal')
@@ -582,16 +585,9 @@ export default function Weight() {
   }, [foodData, goalHist, intakeFloor, profile])
   const maintSpansPeriods = maintPeriods.length >= 2
 
-  // Tier colour for the avg-kcal tile — against the day-specific goal averaged
-  // over the range (green ≤ goal · amber over goal · red over maintenance).
-  const avgKcalCls =
-    periodGoal <= 0
-      ? 'text-white'
-      : periodMaint > 0 && avgKcal > periodMaint
-        ? 'text-red-400'
-        : avgKcal > periodGoal
-          ? 'text-amber-400'
-          : 'text-green-400'
+  // Tier colour for the avg-kcal tile — an average, so no tolerance band
+  // (daily=false): green ≤ goal · amber over goal · red over maintenance.
+  const avgKcalCls = tierText(avgKcal, periodGoal, periodMaint, 'kcal', false)
 
   // The projection uses ALL weigh-ins, not just the selected period, so it still
   // works when your data is in another month. Latest weigh-in overall + an EWMA
@@ -831,18 +827,9 @@ export default function Weight() {
           </div>
           <div className="mb-2 grid grid-cols-3 gap-2 text-center">
             {macroStats.map((m) => {
-              // Protein is "higher is good" → green at ≥90% of goal, else amber.
-              // Carbs/fat are budgets → green at or under goal, amber when over.
-              const cls =
-                m.goal > 0
-                  ? m.key === 'p'
-                    ? m.avg >= m.goal * 0.9
-                      ? 'text-green-400'
-                      : 'text-amber-400'
-                    : m.avg <= m.goal
-                      ? 'text-green-400'
-                      : 'text-amber-400'
-                  : 'text-white'
+              // Averages → no band (daily=false). Protein: under goal = amber,
+              // over = green. Carbs/fat: over goal = amber.
+              const cls = tierText(m.avg, m.goal, 0, m.key === 'p' ? 'protein' : 'budget', false)
               return (
               <div key={m.key} className="rounded-lg bg-slate-800 py-2">
                 <div className={`text-sm font-bold ${cls}`}>
@@ -859,7 +846,7 @@ export default function Weight() {
           </div>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={foodData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+              <ComposedChart data={foodData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={20} />
                 <YAxis {...axis} />
@@ -875,25 +862,30 @@ export default function Weight() {
                   <ReferenceLine y={maint} stroke="#ef4444" strokeDasharray="4 4" />
                 )}
                 <Bar dataKey="kcal" name="kcal" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  {foodData.map((d, i) => {
-                    // colour against THIS day's goal/maintenance (history-aware)
-                    const dg = d.dayGoal || goalCal
-                    const dm = d.dayMaint || maint
-                    return (
-                      <Cell
-                        key={i}
-                        fill={
-                          dm > 0 && d.kcal > dm
-                            ? '#ef4444'
-                            : dg > 0 && d.kcal > dg
-                              ? '#f59e0b'
-                              : '#22c55e'
-                        }
-                      />
-                    )
-                  })}
+                  {foodData.map((d, i) => (
+                    // colour against THIS day's goal/maintenance (history-aware),
+                    // with the per-day tolerance band (daily=true)
+                    <Cell
+                      key={i}
+                      fill={tierHex(d.kcal, d.dayGoal || goalCal, d.dayMaint || maint, 'kcal', true)}
+                    />
+                  ))}
                 </Bar>
-              </BarChart>
+                {/* Rolling 7-day intake — trend through the daily noise. Only
+                    meaningful once the range is wider than a week. */}
+                {showRoll7 && (
+                  <Line
+                    type="monotone"
+                    dataKey="roll7"
+                    name="7-day avg"
+                    stroke="#e2e8f0"
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                    connectNulls
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
           {goalCal > 0 && (
@@ -901,6 +893,7 @@ export default function Weight() {
               Daily kcal eaten · <span className="text-green-400">green</span> ≤ goal ·{' '}
               <span className="text-amber-400">amber</span> over goal ·{' '}
               <span className="text-red-400">red</span> over maintenance
+              {showRoll7 && <> · <span className="text-slate-200">white line</span> = 7-day avg</>}
             </p>
           )}
           {goalChangedInRange && (
@@ -922,7 +915,7 @@ export default function Weight() {
                 Daily average · {weekSplit.nWd} weekday{weekSplit.nWd === 1 ? '' : 's'} ·{' '}
                 {weekSplit.nWe} weekend day{weekSplit.nWe === 1 ? '' : 's'}
               </p>
-              <div className="mb-1 grid grid-cols-[48px_1fr_44px_44px] gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="mb-1 grid grid-cols-[40px_1fr_54px_54px] gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 <span />
                 <span />
                 <span className="text-right">Weekday</span>
@@ -931,18 +924,18 @@ export default function Weight() {
               {weekRows.map((r) => (
                 <div
                   key={r.key}
-                  className="grid grid-cols-[48px_1fr_44px_44px] items-center gap-2 border-t border-slate-800 py-2"
+                  className="grid grid-cols-[40px_1fr_54px_54px] items-center gap-2 border-t border-slate-800 py-2"
                 >
                   <div className="text-xs font-semibold text-slate-400">{r.label}</div>
                   <div className="flex flex-col gap-1">
                     <WeekTrack label="Wd" value={r.wd} goal={r.goal} maint={r.maint} mode={r.mode} />
                     <WeekTrack label="We" value={r.we} goal={r.goal} maint={r.maint} mode={r.mode} />
                   </div>
-                  <div className={`text-right text-xs tabular-nums ${weekTierText(r.wd, r.goal, r.maint, r.mode)}`}>
+                  <div className={`text-right text-xs tabular-nums ${tierText(r.wd, r.goal, r.maint, r.mode, false)}`}>
                     {Math.round(r.wd)}
                   </div>
                   <div
-                    className={`text-right text-xs font-semibold tabular-nums ${weekTierText(r.we, r.goal, r.maint, r.mode)}`}
+                    className={`text-right text-xs font-semibold tabular-nums ${tierText(r.we, r.goal, r.maint, r.mode, false)}`}
                   >
                     {Math.round(r.we)}
                   </div>
@@ -1002,7 +995,7 @@ export default function Weight() {
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                   <div
-                    className="h-full rounded-full bg-green-500"
+                    className="h-full rounded-full bg-slate-400"
                     style={{ width: `${(m.avg / mealMax) * 100}%` }}
                   />
                 </div>
