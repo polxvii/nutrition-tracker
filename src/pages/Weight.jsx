@@ -952,7 +952,7 @@ export default function Weight() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <i className="inline-block h-2 w-2 rounded-sm bg-red-500" />
-                  Over maintenance
+                  Way over
                 </span>
                 <span className="flex items-center gap-1.5">
                   <i className="inline-block h-2.5 w-0.5 rounded-sm bg-amber-300/80" />

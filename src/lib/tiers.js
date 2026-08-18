@@ -19,15 +19,28 @@ export function tolBand(goal, mode, daily) {
   return mode === 'kcal' ? goal * 0.05 : Math.max(goal * 0.05, 5)
 }
 
+// Macros have no maintenance to map red to, so a second % threshold flags a big
+// miss: carbs/fat >25% OVER goal, protein >25% UNDER goal (muscle risk).
+const MACRO_RED_OVER = 1.25
+const PROTEIN_RED_UNDER = 0.75
+
 export function tierName(value, goal, maint, mode, daily) {
   const g = Number(goal) || 0
   if (!(g > 0)) return 'none'
   const v = Number(value) || 0
   const band = tolBand(g, mode, daily)
-  // Protein: being over is always fine; only running low (beyond the band) warns.
-  if (mode === 'protein') return v >= g - band ? 'green' : 'amber'
-  const m = Number(maint) || 0
-  if (mode === 'kcal' && m > 0 && v > m + band) return 'red'
+  // Protein: over is always fine; low beyond the band warns; far below → red.
+  if (mode === 'protein') {
+    if (v < g * PROTEIN_RED_UNDER) return 'red'
+    return v >= g - band ? 'green' : 'amber'
+  }
+  if (mode === 'kcal') {
+    const m = Number(maint) || 0
+    if (m > 0 && v > m + band) return 'red'
+    return v > g + band ? 'amber' : 'green'
+  }
+  // budget (carbs/fat): amber once over goal, red once well over.
+  if (v > g * MACRO_RED_OVER) return 'red'
   return v > g + band ? 'amber' : 'green'
 }
 
