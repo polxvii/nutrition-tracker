@@ -210,10 +210,13 @@ export default function Weight() {
   }
 
   const load = useCallback(async () => {
-    // Fetch far enough back to cover the chosen period AND the 30-day window the
-    // weekly check-in looks at. Filter to the period client-side.
+    // Fetch far enough back to cover the chosen period, the 30-day check-in
+    // window, AND 6 days before the range start so the rolling 7-day line is a
+    // true trailing average from day one (not an expanding window). Filter to
+    // the period client-side.
     const win30 = isoDaysAgo(30)
-    const start = fromDate < win30 ? fromDate : win30
+    const preRoll = todayISODate(new Date(new Date(fromDate + 'T00:00:00').getTime() - 6 * 86400000))
+    const start = [win30, preRoll].sort()[0] // earliest of the two (ISO dates sort lexically)
     const [wRes, fRes] = await Promise.all([
       // Weigh-ins are few (one per day) — load ALL so history + editing aren't
       // limited to the selected period. Trend/check-in still scope client-side.
@@ -350,11 +353,13 @@ export default function Weight() {
       return { ...d, label: d.date.slice(5), dayGoal: g?.goal_calories ?? 0, dayMaint: g?.tdee ?? 0 }
     })
     // Rolling 7-day intake: mean kcal over the logged days in the trailing
-    // 7-calendar-day window ending on each day. Smooths the daily noise.
+    // 7-calendar-day window ending on each day. Uses the FULL fetched set (which
+    // reaches 6 days before the range), so the first in-range days get a true
+    // trailing average, not an expanding one.
     const DAY = 86400000
     return rows.map((d) => {
       const end = new Date(d.date + 'T00:00:00').getTime()
-      const win = rows.filter((x) => {
+      const win = foodByDay.filter((x) => {
         const t = new Date(x.date + 'T00:00:00').getTime()
         return t <= end && t > end - 7 * DAY
       })
@@ -890,7 +895,7 @@ export default function Weight() {
           </div>
           {goalCal > 0 && (
             <p className="mt-1 text-center text-[11px] text-slate-500">
-              Daily kcal eaten · <span className="text-green-400">green</span> ≤ goal ·{' '}
+              Daily kcal eaten · <span className="text-green-400">green</span> on target ·{' '}
               <span className="text-amber-400">amber</span> over goal ·{' '}
               <span className="text-red-400">red</span> over maintenance
               {showRoll7 && <> · <span className="text-slate-200">white line</span> = 7-day avg</>}

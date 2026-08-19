@@ -208,8 +208,14 @@ export default function Today() {
   // over maintenance) — colours the ring and the "over" number. Uses gross eaten.
   const netCal = totals.calories
   const maint = dayTargets?.tdee ?? profile?.tdee ?? 0
-  // Today is a single day → tolerance band applies (daily=true).
+  // Ring stroke = severity tier (with the per-day band, so a little over goal
+  // still reads green). daily=true.
   const calColor = tierHex(netCal, goalCal, maint, 'kcal', true)
+  // The centre readout is a separate, stricter cue: the moment intake crosses
+  // goal it turns amber (even while the ring is still green), so "under goal"
+  // vs "over goal, within tolerance" is obvious at a glance.
+  const overGoal = goalCal > 0 && netCal > goalCal
+  const centerColor = overGoal ? '#f59e0b' : '#22c55e'
 
   // ---- actions ----
   async function upsertFrequent(entry) {
@@ -558,8 +564,9 @@ export default function Today() {
             size={128}
             stroke={12}
             color={calColor}
+            centerColor={centerColor}
             centerTop={Math.abs(remaining)}
-            centerBottom={`kcal ${remaining >= 0 ? 'left' : 'over'}`}
+            centerBottom={`kcal ${remaining >= 0 ? 'left' : 'over goal'}`}
           />
           <div className="flex-1">
             {(() => {

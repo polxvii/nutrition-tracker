@@ -9,6 +9,7 @@ export default function ProgressRing({
   glow = false, // soft outer glow tinted to the stroke (hero ring only)
   centerTop, // override the big center value (e.g. remaining "kcal left")
   centerBottom, // override the center sub-label
+  centerColor, // optional: colour the centre readout (e.g. amber once over goal)
   label,
   unit = '',
 }) {
@@ -55,14 +56,14 @@ export default function ProgressRing({
           {centerTop != null ? (
             <>
               <span
-                className="font-bold tabular-nums text-white"
-                style={{ fontSize: Math.round(size * 0.26), letterSpacing: '-0.03em' }}
+                className={`font-bold tabular-nums ${centerColor ? '' : 'text-white'}`}
+                style={{ fontSize: Math.round(size * 0.26), letterSpacing: '-0.03em', color: centerColor || undefined }}
               >
                 {centerTop}
               </span>
               <span
-                className="mt-1 text-slate-400"
-                style={{ fontSize: Math.max(10, Math.round(size * 0.095)) }}
+                className={`mt-1 ${centerColor ? '' : 'text-slate-400'}`}
+                style={{ fontSize: Math.max(10, Math.round(size * 0.095)), color: centerColor || undefined }}
               >
                 {centerBottom}
               </span>
