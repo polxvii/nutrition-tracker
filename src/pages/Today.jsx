@@ -211,11 +211,11 @@ export default function Today() {
   // Ring stroke = severity tier (with the per-day band, so a little over goal
   // still reads green). daily=true.
   const calColor = tierHex(netCal, goalCal, maint, 'kcal', true)
-  // The centre readout is a separate, stricter cue: the moment intake crosses
-  // goal it turns amber (even while the ring is still green), so "under goal"
-  // vs "over goal, within tolerance" is obvious at a glance.
-  const overGoal = goalCal > 0 && netCal > goalCal
-  const centerColor = overGoal ? '#f59e0b' : '#22c55e'
+  // The centre readout is a separate, stricter cue (no tolerance band): the
+  // moment intake crosses goal it turns amber (even while the ring is still
+  // green), then red past maintenance — so "under goal" vs "over goal, within
+  // tolerance" is obvious at a glance.
+  const centerColor = tierHex(netCal, goalCal, maint, 'kcal', false)
 
   // ---- actions ----
   async function upsertFrequent(entry) {

@@ -238,7 +238,7 @@ export default function Calendar() {
                     {hasFood ? (
                       <>
                         <span
-                          className={`text-[11px] font-semibold ${tierText(net, goalOn(k), maintOn(k), 'kcal', true)}`}
+                          className={`text-[11px] font-semibold ${tierText(net, goalOn(k), maintOn(k), 'kcal', false)}`}
                         >
                           {net}
                         </span>
@@ -284,7 +284,7 @@ export default function Calendar() {
       </p>
       <div className="flex justify-center gap-3 text-[10px] text-slate-500">
         <span className="flex items-center gap-1">
-          <span className="h-2 w-2 rounded-sm bg-green-500/70" /> ≤ goal
+          <span className="h-2 w-2 rounded-sm bg-green-500/70" /> on target
         </span>
         <span className="flex items-center gap-1">
           <span className="h-2 w-2 rounded-sm bg-amber-500/70" /> &gt; goal
