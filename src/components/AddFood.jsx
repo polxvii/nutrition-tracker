@@ -92,6 +92,7 @@ export default function AddFood({
   const [savedPick, setSavedPick] = useState(null)
   const [savedServ, setSavedServ] = useState(1)
   const [savedServText, setSavedServText] = useState('1')
+  const [savedGramsText, setSavedGramsText] = useState('') // synced to savedServ via per-serving grams
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [historyHits, setHistoryHits] = useState([]) // matches across ALL your logs
@@ -391,27 +392,43 @@ export default function AddFood({
     )
   }
 
-  // Open the serving picker for a saved food (always starts at ×1).
+  // Per-serving grams of the saved food being picked (0 if it has no amount).
+  const savedBaseG = () => Number(savedPick?.default_grams ?? savedPick?.grams) || 0
+  // Open the serving picker for a saved food (always starts at ×1). Servings and
+  // grams stay in sync — 1 serving = the saved food's own amount.
   function openSavedPick(f) {
     setSavedPick(f)
     setSavedServ(1)
     setSavedServText('1')
+    const g = Number(f.default_grams ?? f.grams) || 0
+    setSavedGramsText(g > 0 ? String(Math.round(g)) : '')
+  }
+  function applySavedServ(n) {
+    setSavedServ(n)
+    setSavedServText(String(n))
+    const b = savedBaseG()
+    if (b > 0) setSavedGramsText(String(Math.round(b * n)))
   }
   const stepSaved = (d) => {
     const n = Math.round((savedServ + d) * 10) / 10
-    if (n >= 0.5) {
-      setSavedServ(n)
-      setSavedServText(String(n))
-    }
+    if (n >= 0.5) applySavedServ(n)
   }
   const commitSavedServ = () => {
     const n = Number(savedServText)
-    if (n > 0) {
-      const v = Math.round(n * 100) / 100
-      setSavedServ(v)
-      setSavedServText(String(v))
+    if (n > 0) applySavedServ(Math.round(n * 100) / 100)
+    else setSavedServText(String(savedServ))
+  }
+  // Editing grams sets the servings count from it (grams ÷ per-serving grams).
+  const commitSavedGrams = () => {
+    const b = savedBaseG()
+    const gv = Number(savedGramsText)
+    if (b > 0 && gv > 0) {
+      const n = Math.round((gv / b) * 100) / 100
+      setSavedServ(n)
+      setSavedServText(String(n))
+      setSavedGramsText(String(Math.round(gv)))
     } else {
-      setSavedServText(String(savedServ))
+      setSavedGramsText(b > 0 ? String(Math.round(b * savedServ)) : savedGramsText)
     }
   }
   // Log the picked template (saved food OR recent item) scaled by the chosen
@@ -422,6 +439,7 @@ export default function AddFood({
     const N = savedServ
     const t = savedPick
     const g = t.default_grams ?? t.grams
+    const perServ = Number(g) || 0
     const entry = {
       food_name: t.food_name,
       meal_type: meal,
@@ -432,6 +450,9 @@ export default function AddFood({
       protein_g: r1(Number(t.protein_g || 0) * N),
       carbs_g: r1(Number(t.carbs_g || 0) * N),
       fat_g: r1(Number(t.fat_g || 0) * N),
+      // Remember it was logged as N servings (1 serving = perServ grams), so the
+      // edit screen reopens at N — not a stray ×1 — and grams stay editable.
+      ...(perServ > 0 ? { serving_g: r1(perServ), servings: N } : {}),
     }
     if (t.components?.length) {
       entry.components = t.components.map((c) => ({
@@ -639,6 +660,21 @@ export default function AddFood({
             </button>
           </div>
         </Field>
+
+        {baseG > 0 && (
+          <Field label={`Amount (${pickUnit})`}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={savedGramsText}
+              onChange={(e) => setSavedGramsText(e.target.value)}
+              onBlur={commitSavedGrams}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+              }}
+            />
+          </Field>
+        )}
 
         <div className="text-center text-sm text-slate-300">
           <b className="text-white">{Math.round(Number(savedPick.calories || 0) * N)}</b> kcal ·{' '}
