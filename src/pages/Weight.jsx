@@ -71,6 +71,8 @@ const RATE_KCAL = {
   maintain: { slow: 0, medium: 0, fast: 0 },
 }
 const r1 = (n) => Math.round(n * 10) / 10
+// Weight values keep 2 decimals to match the scale (kg/wk rates stay at r1).
+const r2 = (n) => Math.round(n * 100) / 100
 const isoDaysAgo = (n) => {
   const d = new Date()
   d.setDate(d.getDate() - n)
@@ -290,7 +292,7 @@ export default function Weight() {
   }
 
   async function deleteLog(l) {
-    if (!window.confirm(`Delete weigh-in ${Number(l.weight_kg).toFixed(1)} kg on ${l.logged_date}?`)) return
+    if (!window.confirm(`Delete weigh-in ${Number(l.weight_kg).toFixed(2)} kg on ${l.logged_date}?`)) return
     setWeightLogs((prev) => prev.filter((x) => x.id !== l.id))
     await supabase.from('weight_logs').delete().eq('id', l.id)
   }
@@ -315,7 +317,7 @@ export default function Weight() {
         ema = a * p.weight + (1 - a) * ema
       }
       prevT = t
-      return { ...p, ma: r1(ema) }
+      return { ...p, ma: r2(ema) }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weightLogs, fromDate, toDate])
@@ -327,7 +329,7 @@ export default function Weight() {
   )
   const verdict = trendVerdict(rate, profile?.goal_type)
   const curWeight = weightData.length ? weightData[weightData.length - 1].weight : null
-  const delta = weightData.length >= 2 ? r1(curWeight - weightData[0].weight) : null
+  const delta = weightData.length >= 2 ? r2(curWeight - weightData[0].weight) : null
 
   // Goal-weight line on the trend chart. Extend the Y domain to include the
   // target so the line always shows, not just when it's inside the data range.
@@ -625,11 +627,11 @@ export default function Weight() {
     const remaining = targetW - projCurWeight // <0 need to lose, >0 need to gain
     if (Math.abs(remaining) < 0.15) return { targetW, reached: true }
     const toward = remaining < 0 ? rateWk < -0.02 : rateWk > 0.02
-    if (!toward) return { targetW, remaining: r1(remaining), stalled: true }
+    if (!toward) return { targetW, remaining: r2(remaining), stalled: true }
     const weeks = remaining / rateWk
     const dt = new Date()
     dt.setDate(dt.getDate() + Math.round(weeks * 7))
-    return { targetW, remaining: r1(remaining), rateWk: r1(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
+    return { targetW, remaining: r2(remaining), rateWk: r1(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
   }, [profile?.goal_weight_kg, projCurWeight, checkIn, rate, allRateWk])
 
   async function applyGoal(newCal) {
@@ -1130,12 +1132,12 @@ export default function Weight() {
         right={
           curWeight != null ? (
             <span className="text-xs text-slate-400">
-              {curWeight}kg
+              {curWeight.toFixed(2)}kg
               {delta != null && (
                 <span className={delta < 0 ? 'text-green-400' : delta > 0 ? 'text-amber-400' : ''}>
                   {' '}
                   ({delta > 0 ? '+' : ''}
-                  {delta}kg)
+                  {delta.toFixed(2)}kg)
                 </span>
               )}
             </span>
@@ -1154,10 +1156,10 @@ export default function Weight() {
               <Input
                 type="number"
                 inputMode="decimal"
-                step="0.1"
+                step="0.01"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
-                placeholder="70.5"
+                placeholder="70.25"
               />
             </Field>
           </div>
@@ -1276,7 +1278,7 @@ export default function Weight() {
                       )}
                     </button>
                     <span className="text-sm font-medium text-white">
-                      {Number(l.weight_kg).toFixed(1)} kg
+                      {Number(l.weight_kg).toFixed(2)} kg
                     </span>
                     <button
                       onClick={() => deleteLog(l)}

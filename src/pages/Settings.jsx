@@ -121,7 +121,7 @@ export default function Settings() {
           <Input
             type="number"
             inputMode="decimal"
-            step="0.1"
+            step="0.01"
             value={goalWeight}
             onChange={(e) => {
               setGoalWeight(e.target.value)

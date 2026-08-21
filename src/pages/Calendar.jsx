@@ -50,7 +50,7 @@ export default function Calendar() {
     if (w.length) {
       const first = Number(w[0].weight_kg)
       const last = Number(w[w.length - 1].weight_kg)
-      setMonthWeight({ first, last, delta: w.length >= 2 ? Math.round((last - first) * 10) / 10 : null })
+      setMonthWeight({ first, last, delta: w.length >= 2 ? Math.round((last - first) * 100) / 100 : null })
     } else {
       setMonthWeight(null)
     }
@@ -363,10 +363,10 @@ export default function Calendar() {
             </span>
             {monthWeight && (
               <span className="text-slate-400">
-                ⚖️ {monthWeight.first}
+                ⚖️ {monthWeight.first.toFixed(2)}
                 {monthWeight.delta != null ? (
                   <>
-                    →{monthWeight.last}{' '}
+                    →{monthWeight.last.toFixed(2)}{' '}
                     <span
                       className={
                         monthWeight.delta < 0
@@ -377,7 +377,7 @@ export default function Calendar() {
                       }
                     >
                       ({monthWeight.delta > 0 ? '+' : ''}
-                      {monthWeight.delta}kg)
+                      {monthWeight.delta.toFixed(2)}kg)
                     </span>
                   </>
                 ) : (
