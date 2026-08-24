@@ -17,14 +17,16 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 //   gemini-flash-lite-latest. NB: gemini-2.5-flash / *-lite are "not available
 //   to new users" (404), and gemini-3-flash / gemini-2.0-flash are unavailable
 //   or quota-0 — do not add them back without re-checking ListModels.
-// Best → worst. The best available model is tried across ALL keys before we
-// drop to the next model (quality first). gemini-3.1-flash-lite is an extra —
-// if this key can't use it, it simply cascades (harmless).
+// Speed first: the free flash models (with non-disableable thinking) routinely
+// took >20s on multi-image meals and timed out, making the feature unusable.
+// Lead with the low-latency lite model so requests actually finish; fall back
+// to the heavier/higher-quality models only if lite fails or is rate-limited.
+// Override the order with the GEMINI_MODELS env var (comma-separated).
 const DEFAULT_MODELS = [
+  'gemini-flash-lite-latest',
   'gemini-flash-latest',
   'gemini-3-flash-preview',
   'gemini-3.1-flash-lite',
-  'gemini-flash-lite-latest',
 ]
 
 // Abort a single model call that runs too long, so a slow/hung model doesn't
