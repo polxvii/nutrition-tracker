@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS, UNITS } from './AddFoodForm'
 import { todayISODate } from '../lib/dateHelpers'
-import { kcalFromMacros, isLikelyAlcohol } from '../lib/macros'
+import { kcalFromMacros, isLikelyAlcohol, abvFromGrams } from '../lib/macros'
 import AddFood from './AddFood'
 import AlcoholField from './AlcoholField'
 import SwipeRow from './SwipeRow'
@@ -61,6 +61,10 @@ export default function EntryEditor({
   const [qty, setQty] = useState(initQty)
   const [qtyText, setQtyText] = useState(String(initQty))
   const [showAlc, setShowAlc] = useState(false) // reveal the alcohol field on a plain food
+  // Seed the ABV calculator when re-opening a drink logged in ml: its volume is
+  // the stored amount, so %ABV is recoverable from the ethanol grams.
+  const alcMl = entry.unit === 'ml' ? num(entry.grams) : 0
+  const seedAbv = alcMl > 0 && num(entry.alcohol_g) > 0 ? abvFromGrams(entry.alcohol_g, alcMl) : 0
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -681,7 +685,12 @@ export default function EntryEditor({
             </Field>
           </div>
           {showAlc || num(f.alcohol_g) || isLikelyAlcohol(f.food_name) ? (
-            <AlcoholField value={f.alcohol_g} onChange={setAlcohol} />
+            <AlcoholField
+              value={f.alcohol_g}
+              onChange={setAlcohol}
+              initialMl={alcMl > 0 ? String(alcMl) : ''}
+              initialAbv={seedAbv > 0 ? String(seedAbv) : ''}
+            />
           ) : (
             <button
               type="button"

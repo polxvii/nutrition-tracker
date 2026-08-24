@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
 import { UNITS } from './AddFoodForm'
-import { kcalFromMacros, isLikelyAlcohol } from '../lib/macros'
+import { kcalFromMacros, isLikelyAlcohol, abvFromGrams } from '../lib/macros'
 import AlcoholField from './AlcoholField'
 
 const num = (v) => {
@@ -29,6 +29,9 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
     return { ...v, _base: v } // fixed base so grams edits scale correctly
   })
   const [showAlc, setShowAlc] = useState(false)
+  // Seed the ABV calculator for a drink saved in ml (strength recoverable).
+  const alcMl = food.unit === 'ml' ? num(food.default_grams) : 0
+  const seedAbv = alcMl > 0 && num(food.alcohol_g) > 0 ? abvFromGrams(food.alcohol_g, alcMl) : 0
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
 
@@ -128,7 +131,12 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
       </div>
 
       {showAlc || num(f.alcohol_g) || isLikelyAlcohol(f.food_name) ? (
-        <AlcoholField value={f.alcohol_g} onChange={setAlcohol} />
+        <AlcoholField
+          value={f.alcohol_g}
+          onChange={setAlcohol}
+          initialMl={alcMl > 0 ? String(alcMl) : ''}
+          initialAbv={seedAbv > 0 ? String(seedAbv) : ''}
+        />
       ) : (
         <button
           type="button"

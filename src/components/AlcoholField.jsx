@@ -5,9 +5,11 @@ import { alcoholGramsFromAbv } from '../lib/macros'
 // Alcohol (g) input with an optional "ml × %ABV → g" calculator, so you can
 // enter a drink's size + strength and let it fill the grams. `value` is the
 // grams string; `onChange(v)` receives the new grams string.
-export default function AlcoholField({ value, onChange }) {
-  const [ml, setMl] = useState('')
-  const [abv, setAbv] = useState('')
+// `initialMl` / `initialAbv` seed the calculator when re-opening a saved drink,
+// so its strength stays visible instead of clearing to blank.
+export default function AlcoholField({ value, onChange, initialMl = '', initialAbv = '' }) {
+  const [ml, setMl] = useState(String(initialMl || ''))
+  const [abv, setAbv] = useState(String(initialAbv || ''))
   const calc = (mlV, abvV) => {
     const g = alcoholGramsFromAbv(mlV, abvV)
     if (g > 0) onChange(String(Math.round(g * 10) / 10))

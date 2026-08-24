@@ -13,6 +13,13 @@ export const ETHANOL_DENSITY = 0.789
 export function alcoholGramsFromAbv(ml, abvPct) {
   return (Number(ml) || 0) * ((Number(abvPct) || 0) / 100) * ETHANOL_DENSITY
 }
+// Inverse of the above: recover %ABV from grams of ethanol + volume, so a
+// re-opened drink can show its strength instead of a blank calculator.
+export function abvFromGrams(alcoholG, ml) {
+  const m = Number(ml) || 0
+  if (m <= 0) return 0
+  return Math.round(((Number(alcoholG) || 0) / (m * ETHANOL_DENSITY)) * 1000) / 10
+}
 
 // Does this food name look like an alcoholic drink? Used to auto-reveal the
 // alcohol field. False positives are cheap (just shows an empty optional
