@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
 import { UNITS } from './AddFoodForm'
-import { kcalFromMacros } from '../lib/macros'
+import { kcalFromMacros, isLikelyAlcohol } from '../lib/macros'
+import AlcoholField from './AlcoholField'
 
 const num = (v) => {
   const n = Number(v)
@@ -56,6 +57,13 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
   const setMacro = (k) => (e) => {
     setF((p) => {
       const next = { ...p, [k]: e.target.value }
+      next.calories = kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g)
+      return next
+    })
+  }
+  const setAlcohol = (v) => {
+    setF((p) => {
+      const next = { ...p, alcohol_g: v }
       next.calories = kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g)
       return next
     })
@@ -119,10 +127,8 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
         <Input type="number" inputMode="decimal" value={f.fat_g} onChange={setMacro('fat_g')} className="px-1 text-center" />
       </div>
 
-      {showAlc || num(f.alcohol_g) ? (
-        <Field label="Alcohol (g)" hint="Pure alcohol — 7 kcal/g.">
-          <Input type="number" inputMode="decimal" value={f.alcohol_g} onChange={setMacro('alcohol_g')} />
-        </Field>
+      {showAlc || num(f.alcohol_g) || isLikelyAlcohol(f.food_name) ? (
+        <AlcoholField value={f.alcohol_g} onChange={setAlcohol} />
       ) : (
         <button
           type="button"

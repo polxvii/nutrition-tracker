@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
-import { kcalFromMacros } from '../lib/macros'
+import { kcalFromMacros, isLikelyAlcohol } from '../lib/macros'
+import AlcoholField from './AlcoholField'
 
 export const MEALS = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -34,6 +35,12 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
   // Editing a macro fills kcal from 4/4/9 (+7/g alcohol); editing kcal directly still works.
   const setMacro = (k) => (e) => {
     const next = { ...f, [k]: e.target.value }
+    next.calories = String(kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g))
+    setF(next)
+  }
+  // Alcohol edits (from the field or the ABV calculator) recompute kcal too.
+  const setAlcohol = (v) => {
+    const next = { ...f, alcohol_g: v }
     next.calories = String(kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g))
     setF(next)
   }
@@ -114,10 +121,8 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
         </Field>
       </div>
 
-      {showAlc || Number(f.alcohol_g) ? (
-        <Field label="Alcohol (g)" hint="Pure alcohol — 7 kcal/g. Leave blank for non-drinks.">
-          <Input type="number" inputMode="decimal" value={f.alcohol_g} onChange={setMacro('alcohol_g')} placeholder="e.g. 14" />
-        </Field>
+      {showAlc || Number(f.alcohol_g) || isLikelyAlcohol(f.food_name) ? (
+        <AlcoholField value={f.alcohol_g} onChange={setAlcohol} />
       ) : (
         <button
           type="button"
