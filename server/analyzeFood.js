@@ -28,11 +28,13 @@ const DEFAULT_MODELS = [
 ]
 
 // Abort a single model call that runs too long, so a slow/hung model doesn't
-// stall the whole request — we cascade to the next instead.
-const REQUEST_TIMEOUT_MS = 15000
+// stall the whole request — we cascade to the next instead. Flash vision +
+// (non-disableable) thinking legitimately needs ~15-22s, so 15s was killing
+// calls that would have succeeded; give each one real room.
+const REQUEST_TIMEOUT_MS = 22000
 // Overall wall-clock budget across all attempts, so many hung models/keys can't
-// stack past the serverless function's limit.
-const OVERALL_BUDGET_MS = 25000
+// stack past the serverless function's limit — fits one full call + a fallback.
+const OVERALL_BUDGET_MS = 40000
 // After a (key,model) returns 429 (quota), skip it for a while so we stop
 // paying a failed round-trip on every request. Module scope → persists across
 // requests within a warm isolate (best-effort; fine if the isolate recycles).

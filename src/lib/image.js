@@ -19,7 +19,7 @@ function loadImage(src) {
   })
 }
 
-export async function fileToAnalyzableImage(file, maxEdge = 1080, quality = 0.85) {
+export async function fileToAnalyzableImage(file, maxEdge = 900, quality = 0.8) {
   const dataUrl = await readAsDataURL(file)
   const img = await loadImage(dataUrl)
 
