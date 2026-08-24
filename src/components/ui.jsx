@@ -77,8 +77,25 @@ export function Field({ label, hint, children }) {
 const inputCls =
   'w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder-slate-500 outline-none focus:border-green-500'
 
-export function Input({ className = '', ...props }) {
-  return <input className={`${inputCls} ${className}`} {...props} />
+export function Input({ className = '', onFocus, ...props }) {
+  // Numeric fields select their value on focus so you can type straight over it
+  // (no delete-first). Deferred a frame so mobile keeps the selection after the
+  // caret settles. Text fields (names, dates) are left alone.
+  const isNumeric = props.type === 'number' || props.inputMode === 'decimal'
+  const handleFocus = (e) => {
+    if (isNumeric) {
+      const el = e.target
+      requestAnimationFrame(() => {
+        try {
+          el.select()
+        } catch {
+          /* number inputs on some browsers reject select() — harmless */
+        }
+      })
+    }
+    onFocus?.(e)
+  }
+  return <input className={`${inputCls} ${className}`} onFocus={handleFocus} {...props} />
 }
 
 export function Select({ className = '', children, ...props }) {
