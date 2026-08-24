@@ -72,7 +72,8 @@ Guidelines:
 - If the user provides a note/description, treat it as ground truth and prioritise it (stated amounts, ingredients, or cooking style override any visual guess).
 - If there is no photo, estimate from the text description alone. If amounts are unstated, assume typical Thai portions and lower the confidence.
 - Give per-component calories, protein, carbs, and fat in grams.
-- For alcoholic drinks, also estimate alcohol_g (grams of pure ethanol; e.g. a 330 ml 5% beer ≈ 13 g, a 150 ml 12% wine ≈ 14 g). Alcohol is 7 kcal/g, so make sure the component's calories include it. Set alcohol_g to 0 for anything non-alcoholic.
+- For alcoholic drinks, give abv (alcohol by volume, %) and estimate alcohol_g (grams of pure ethanol = volume_ml × %ABV/100 × 0.789; e.g. a 330 ml 5% beer ≈ 13 g, a 330 ml 5.8% beer ≈ 15 g, a 150 ml 12% wine ≈ 14 g). Alcohol is 7 kcal/g, so make sure the component's calories include it. Set abv and alcohol_g to 0 for anything non-alcoholic.
+- Set unit to "ml" for anything measured by volume (beer, wine, coffee, juice, soft drinks, milk, broth-y soups); use "g" for solid food. When a drink's size isn't stated, assume a standard 330 ml can/serving. The grams field then holds that volume in ml.
 - Also provide a short overall dish name in the "dish" field — the menu name a person would use for the whole meal (e.g. "ก๋วยเตี๋ยวน้ำตกเนื้อ", "ข้าวมันไก่"). Use the same language as the user's note when one is given; otherwise name it in Thai if it's a Thai dish.
 - Set overall confidence: "high" (clear photo, familiar dish, or a detailed description), "medium", or "low" (blurry, ambiguous, or portion hard to judge).
 - Respond ONLY with a JSON object matching the required schema. No commentary, no markdown.`
@@ -94,6 +95,8 @@ const RESPONSE_SCHEMA = {
           carbs_g: { type: 'NUMBER' },
           fat_g: { type: 'NUMBER' },
           alcohol_g: { type: 'NUMBER' },
+          abv: { type: 'NUMBER' },
+          unit: { type: 'STRING', enum: ['g', 'ml'] },
         },
         required: ['name', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g'],
       },

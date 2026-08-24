@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fileToAnalyzableImage } from '../lib/image'
 import { analyzePhoto } from '../lib/analyzeApi'
-import { kcalFromMacros } from '../lib/macros'
+import { kcalFromMacros, alcoholGramsFromAbv } from '../lib/macros'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
 
@@ -70,16 +70,27 @@ export default function PhotoLogger({
       })
       setItems(
         (res.items || []).map((it) => {
+          const grams = Math.round(num(it.grams))
+          // A drink (abv > 0): grams is the volume in ml. Compute alcohol from
+          // volume × ABV deterministically (don't trust the model's arithmetic),
+          // then reconcile kcal to 4/4/9 + 7×alcohol.
+          const abv = num(it.abv)
+          const isDrink = abv > 0 && grams > 0
+          const alcohol_g = isDrink ? round1(alcoholGramsFromAbv(grams, abv)) : round1(it.alcohol_g)
           const v = {
-            grams: Math.round(num(it.grams)),
-            calories: Math.round(num(it.calories)),
+            grams,
+            calories: isDrink
+              ? kcalFromMacros(it.protein_g, it.carbs_g, it.fat_g, alcohol_g)
+              : Math.round(num(it.calories)),
             protein_g: round1(it.protein_g),
             carbs_g: round1(it.carbs_g),
             fat_g: round1(it.fat_g),
-            alcohol_g: round1(it.alcohol_g),
+            alcohol_g,
           }
           // Keep the estimate as a fixed base so amount edits scale from it.
-          return { name: it.name ?? '', ...v, _base: v }
+          // unit ('g'/'ml') rides alongside — it doesn't scale, just labels.
+          const unit = isDrink || it.unit === 'ml' ? 'ml' : 'g'
+          return { name: it.name ?? '', unit, ...v, _base: v }
         })
       )
       setConfidence(res.confidence)
@@ -206,6 +217,8 @@ export default function PhotoLogger({
     // Combine into one diary entry (keeps the log/Recent clean), or log each
     // component separately for granular tracking — the breakdown above always
     // drives the numbers either way.
+    // A whole meal is 'ml' only when every part is a liquid; otherwise 'g'.
+    const dishUnit = items.length && items.every((it) => it.unit === 'ml') ? 'ml' : 'g'
     if (combine) {
       const totalG = items.reduce((s, it) => s + num(it.grams), 0)
       // If this AI run resolved a scanned barcode, cache the result (per-100
@@ -215,7 +228,7 @@ export default function PhotoLogger({
         meta.cache = {
           barcode: String(barcode),
           name: (dish || '').trim() || note.trim() || 'Product',
-          unit: 'g',
+          unit: dishUnit,
           per100: {
             calories: Math.round(totals.calories * k),
             protein_g: Math.round(totals.protein * k * 10) / 10,
@@ -244,6 +257,7 @@ export default function PhotoLogger({
             food_name: (dish || '').trim() || note.trim() || 'Meal',
             meal_type: meal,
             grams: Math.round(totalG) || null,
+            unit: dishUnit,
             calories: Math.round(totals.calories),
             protein_g: round1(totals.protein),
             carbs_g: round1(totals.carbs),
@@ -261,6 +275,7 @@ export default function PhotoLogger({
         food_name: (it.name || '').trim() || 'Food',
         meal_type: meal,
         grams: num(it.grams) || null,
+        unit: it.unit === 'ml' ? 'ml' : 'g',
         calories: num(it.calories),
         protein_g: num(it.protein_g),
         carbs_g: num(it.carbs_g),
