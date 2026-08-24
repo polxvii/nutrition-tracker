@@ -175,9 +175,10 @@ export default function Today() {
           a.protein += num(l.protein_g)
           a.carbs += num(l.carbs_g)
           a.fat += num(l.fat_g)
+          a.alcohol += num(l.alcohol_g)
           return a
         },
-        { calories: 0, burned: 0, protein: 0, carbs: 0, fat: 0 }
+        { calories: 0, burned: 0, protein: 0, carbs: 0, fat: 0, alcohol: 0 }
       ),
     [logs]
   )
@@ -235,6 +236,7 @@ export default function Today() {
       protein_g: Number(entry.protein_g) || 0,
       carbs_g: Number(entry.carbs_g) || 0,
       fat_g: Number(entry.fat_g) || 0,
+      ...(Number(entry.alcohol_g) ? { alcohol_g: Number(entry.alcohol_g) } : {}),
       barcode: null,
     }
     const { error } = existing
@@ -268,6 +270,7 @@ export default function Today() {
       fat_g: num(cache.per100.fat_g),
       // Keep the serving size so a re-scan can still offer the servings field.
       ...(cache.serving_g ? { serving_g: cache.serving_g } : {}),
+      ...(num(cache.per100.alcohol_g) ? { alcohol_g: num(cache.per100.alcohol_g) } : {}),
     }
     if (existing) await supabase.from('frequent_foods').update(row).eq('id', existing.id)
     else await supabase.from('frequent_foods').insert({ user_id: user.id, times_used: 1, ...row })
@@ -576,6 +579,12 @@ export default function Today() {
               ]
               if (totals.burned > 0)
                 rows.push({ k: '🔥 Burned', v: `+${Math.round(totals.burned)}`, cls: 'text-teal-400' })
+              if (totals.alcohol > 0)
+                rows.push({
+                  k: '🍷 Alcohol',
+                  v: `${Math.round(totals.alcohol * 10) / 10} g · ${Math.round(totals.alcohol * 7)} kcal`,
+                  cls: 'text-fuchsia-300',
+                })
               return rows.map((r, i) => (
                 <div
                   key={r.k}
@@ -792,6 +801,9 @@ export default function Today() {
                             <div className="text-xs text-slate-500">
                               {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C ·{' '}
                               {Math.round(num(l.fat_g))}F
+                              {num(l.alcohol_g) > 0 && (
+                                <span className="text-fuchsia-300"> · 🍷 {Math.round(num(l.alcohol_g) * 10) / 10}g</span>
+                              )}
                               {amountLabel(l)}
                               {l.components?.length ? ` · 🍱 ${l.components.length} items` : ''}
                             </div>

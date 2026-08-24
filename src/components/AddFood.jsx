@@ -135,6 +135,7 @@ export default function AddFood({
         protein_g: Math.round(Number(f.protein_g || 0) * k * 10) / 10,
         carbs_g: Math.round(Number(f.carbs_g || 0) * k * 10) / 10,
         fat_g: Math.round(Number(f.fat_g || 0) * k * 10) / 10,
+        alcohol_g: Math.round(Number(f.alcohol_g || 0) * k * 10) / 10,
       },
     }
   }
@@ -157,7 +158,7 @@ export default function AddFood({
       // de-duped by name — so anything you've ever logged is findable.
       supabase
         .from('food_logs')
-        .select('id,food_name,calories,protein_g,carbs_g,fat_g,grams,unit,components,serving_g,servings')
+        .select('id,food_name,calories,protein_g,carbs_g,fat_g,grams,unit,components,serving_g,servings,alcohol_g')
         .neq('source', 'exercise')
         .ilike('food_name', `%${query}%`)
         .order('created_at', { ascending: false })
@@ -345,8 +346,9 @@ export default function AddFood({
         protein_g: a.protein_g + (Number(it.protein_g) || 0),
         carbs_g: a.carbs_g + (Number(it.carbs_g) || 0),
         fat_g: a.fat_g + (Number(it.fat_g) || 0),
+        alcohol_g: a.alcohol_g + (Number(it.alcohol_g) || 0),
       }),
-      { grams: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+      { grams: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, alcohol_g: 0 }
     )
     onLogMeal({
       food_name: m.name,
@@ -358,6 +360,7 @@ export default function AddFood({
       protein_g: r1(tot.protein_g),
       carbs_g: r1(tot.carbs_g),
       fat_g: r1(tot.fat_g),
+      ...(tot.alcohol_g > 0 ? { alcohol_g: r1(tot.alcohol_g) } : {}),
       components: items.map((it) => ({
         name: it.food_name || 'Item',
         grams: Number(it.grams) || null,
@@ -365,6 +368,7 @@ export default function AddFood({
         protein_g: Number(it.protein_g) || 0,
         carbs_g: Number(it.carbs_g) || 0,
         fat_g: Number(it.fat_g) || 0,
+        ...(Number(it.alcohol_g) ? { alcohol_g: Number(it.alcohol_g) } : {}),
       })),
     })
   }
@@ -382,6 +386,7 @@ export default function AddFood({
         protein_g: t.protein_g,
         carbs_g: t.carbs_g,
         fat_g: t.fat_g,
+        ...(Number(t.alcohol_g) ? { alcohol_g: Number(t.alcohol_g) } : {}),
         // Re-adding a logged dish carries its breakdown along, so you can still
         // drill in and edit the parts.
         ...(t.components?.length ? { components: t.components } : {}),
@@ -450,6 +455,7 @@ export default function AddFood({
       protein_g: r1(Number(t.protein_g || 0) * N),
       carbs_g: r1(Number(t.carbs_g || 0) * N),
       fat_g: r1(Number(t.fat_g || 0) * N),
+      ...(Number(t.alcohol_g) ? { alcohol_g: r1(Number(t.alcohol_g) * N) } : {}),
       // Remember it was logged as N servings (1 serving = perServ grams), so the
       // edit screen reopens at N — not a stray ×1 — and grams stay editable.
       ...(perServ > 0 ? { serving_g: r1(perServ), servings: N } : {}),
@@ -462,6 +468,7 @@ export default function AddFood({
         protein_g: r1(Number(c.protein_g || 0) * N),
         carbs_g: r1(Number(c.carbs_g || 0) * N),
         fat_g: r1(Number(c.fat_g || 0) * N),
+        ...(Number(c.alcohol_g) ? { alcohol_g: r1(Number(c.alcohol_g) * N) } : {}),
       }))
     }
     onLog(entry, { asFrequent: false })
@@ -573,6 +580,7 @@ export default function AddFood({
         <div className="text-center text-sm text-slate-300">
           <b className="text-white">{r(scaled.calories)}</b> kcal · {r(scaled.protein_g)}P ·{' '}
           {r(scaled.carbs_g)}C · {r(scaled.fat_g)}F
+          {scaled.alcohol_g > 0 && <span className="text-fuchsia-300"> · 🍷 {r1(scaled.alcohol_g)}g</span>}
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-300">

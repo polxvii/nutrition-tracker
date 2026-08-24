@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
 import { UNITS } from './AddFoodForm'
+import { kcalFromMacros } from '../lib/macros'
 
 const num = (v) => {
   const n = Number(v)
@@ -22,9 +23,11 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
       protein_g: round1(food.protein_g),
       carbs_g: round1(food.carbs_g),
       fat_g: round1(food.fat_g),
+      alcohol_g: round1(food.alcohol_g),
     }
     return { ...v, _base: v } // fixed base so grams edits scale correctly
   })
+  const [showAlc, setShowAlc] = useState(false)
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
 
@@ -43,6 +46,7 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
           protein_g: round1(num(base.protein_g) * rt),
           carbs_g: round1(num(base.carbs_g) * rt),
           fat_g: round1(num(base.fat_g) * rt),
+          alcohol_g: round1(num(base.alcohol_g) * rt),
         }
       }
       return { ...p, grams: value }
@@ -52,7 +56,7 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
   const setMacro = (k) => (e) => {
     setF((p) => {
       const next = { ...p, [k]: e.target.value }
-      next.calories = Math.round(4 * num(next.protein_g) + 4 * num(next.carbs_g) + 9 * num(next.fat_g))
+      next.calories = kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g)
       return next
     })
   }
@@ -66,6 +70,7 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
       protein_g: num(f.protein_g),
       carbs_g: num(f.carbs_g),
       fat_g: num(f.fat_g),
+      ...(num(f.alcohol_g) > 0 || num(food.alcohol_g) > 0 ? { alcohol_g: num(f.alcohol_g) || null } : {}),
     })
   }
 
@@ -113,6 +118,20 @@ export default function FrequentEditor({ food, onSave, onDelete, onCancel, busy 
         <Input type="number" inputMode="decimal" value={f.carbs_g} onChange={setMacro('carbs_g')} className="px-1 text-center" />
         <Input type="number" inputMode="decimal" value={f.fat_g} onChange={setMacro('fat_g')} className="px-1 text-center" />
       </div>
+
+      {showAlc || num(f.alcohol_g) ? (
+        <Field label="Alcohol (g)" hint="Pure alcohol — 7 kcal/g.">
+          <Input type="number" inputMode="decimal" value={f.alcohol_g} onChange={setMacro('alcohol_g')} />
+        </Field>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowAlc(true)}
+          className="text-left text-xs text-slate-500 hover:text-slate-300"
+        >
+          ＋ alcohol (for drinks)
+        </button>
+      )}
 
       <p className="text-xs text-slate-500">
         Changing the amount scales macros. Editing a macro recomputes kcal.

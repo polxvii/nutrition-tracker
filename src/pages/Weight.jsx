@@ -19,6 +19,7 @@ import { Button, Card, Collapsible, Field, Input } from '../components/ui'
 import BodyMeasurements from '../components/BodyMeasurements'
 import { loadGoalHistory, goalForDate, recordGoalHistory } from '../lib/goalHistory'
 import { tierName, tierText, tierBg, tierHex } from '../lib/tiers'
+import { ALCOHOL_KCAL_PER_G } from '../lib/macros'
 
 const RANGES = [
   { days: 7, label: '7d' },
@@ -228,7 +229,7 @@ export default function Weight() {
         .order('logged_date', { ascending: true }),
       supabase
         .from('food_logs')
-        .select('logged_at,calories,protein_g,carbs_g,fat_g,source,meal_type')
+        .select('logged_at,calories,protein_g,carbs_g,fat_g,alcohol_g,source,meal_type')
         .gte('logged_at', start + 'T00:00:00')
         .order('logged_at', { ascending: true }),
     ])
@@ -240,7 +241,8 @@ export default function Weight() {
     for (const l of fRes.data ?? []) {
       const day = todayISODate(new Date(l.logged_at)) // local day (matches Calendar)
       const b =
-        map[day] || (map[day] = { date: day, eaten: 0, burned: 0, protein: 0, carbs: 0, fat: 0, meals: {} })
+        map[day] ||
+        (map[day] = { date: day, eaten: 0, burned: 0, protein: 0, carbs: 0, fat: 0, alcohol: 0, meals: {} })
       if (l.source === 'exercise') {
         b.burned += Number(l.calories) || 0
       } else {
@@ -249,6 +251,7 @@ export default function Weight() {
         b.protein += Number(l.protein_g) || 0
         b.carbs += Number(l.carbs_g) || 0
         b.fat += Number(l.fat_g) || 0
+        b.alcohol += Number(l.alcohol_g) || 0
         if (l.meal_type) b.meals[l.meal_type] = (b.meals[l.meal_type] || 0) + kcal
       }
     }
@@ -591,6 +594,21 @@ export default function Weight() {
     return [...m.values()].sort((x, y) => (x.min < y.min ? -1 : 1))
   }, [foodData, goalHist, intakeFloor, profile])
   const maintSpansPeriods = maintPeriods.length >= 2
+
+  // Alcohol summary for the period — only when there's any. Not a PFC-style
+  // average card; a compact "N drinking days · kcal · g" readout.
+  const alcoholSummary = useMemo(() => {
+    const drinking = foodData.filter((d) => (Number(d.alcohol) || 0) > 0)
+    if (!drinking.length) return null
+    const grams = drinking.reduce((s, d) => s + (Number(d.alcohol) || 0), 0)
+    const kcal = Math.round(grams * ALCOHOL_KCAL_PER_G)
+    return {
+      days: drinking.length,
+      grams: Math.round(grams * 10) / 10,
+      kcal,
+      avgKcal: Math.round(kcal / drinking.length),
+    }
+  }, [foodData])
 
   // Tier colour for the avg-kcal tile — an average, so no tolerance band
   // (daily=false): green ≤ goal · amber over goal · red over maintenance.
@@ -981,6 +999,22 @@ export default function Weight() {
               Not enough data — need at least one weekday and one weekend day logged.
             </p>
           )}
+        </Card>
+      )}
+
+      {/* Alcohol — only when the period actually has any */}
+      {alcoholSummary && (
+        <Card className="space-y-1">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-slate-300">🍷 Alcohol</h2>
+            <span className="text-sm tabular-nums text-slate-300">
+              {alcoholSummary.days} day{alcoholSummary.days > 1 ? 's' : ''} ·{' '}
+              <b className="text-white">{alcoholSummary.kcal}</b> kcal · {alcoholSummary.grams} g
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            avg on drinking days: {alcoholSummary.avgKcal} kcal
+          </p>
         </Card>
       )}
 

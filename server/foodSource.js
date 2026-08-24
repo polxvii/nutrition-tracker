@@ -54,6 +54,8 @@ function normalize(p) {
     protein_g: Math.round(per100Of(n, 'proteins_100g', 'proteins_serving', servG) * 10) / 10,
     carbs_g: Math.round(per100Of(n, 'carbohydrates_100g', 'carbohydrates_serving', servG) * 10) / 10,
     fat_g: Math.round(per100Of(n, 'fat_100g', 'fat_serving', servG) * 10) / 10,
+    // Alcohol by volume comes back as grams-per-100 too (0 for non-alcoholic).
+    alcohol_g: Math.round(per100Of(n, 'alcohol_100g', 'alcohol_serving', servG) * 10) / 10,
   }
   if (!per100.calories && !per100.protein_g && !per100.carbs_g && !per100.fat_g) return null
   // `brands` may be a string ("A,B") or an array (Search-a-licious) — handle both.

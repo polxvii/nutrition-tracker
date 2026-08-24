@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS, UNITS } from './AddFoodForm'
 import { todayISODate } from '../lib/dateHelpers'
+import { kcalFromMacros } from '../lib/macros'
 import AddFood from './AddFood'
 import SwipeRow from './SwipeRow'
 
@@ -58,6 +59,7 @@ export default function EntryEditor({
   const initQty = servingG > 0 ? Math.round(origServ * 100) / 100 : 1
   const [qty, setQty] = useState(initQty)
   const [qtyText, setQtyText] = useState(String(initQty))
+  const [showAlc, setShowAlc] = useState(false) // reveal the alcohol field on a plain food
 
   const [f, setF] = useState({
     food_name: entry.food_name ?? '',
@@ -68,6 +70,7 @@ export default function EntryEditor({
     protein_g: round1(entry.protein_g),
     carbs_g: round1(entry.carbs_g),
     fat_g: round1(entry.fat_g),
+    alcohol_g: round1(entry.alcohol_g),
     date: todayISODate(new Date(entry.logged_at)),
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -83,6 +86,7 @@ export default function EntryEditor({
             protein_g: round1(c.protein_g),
             carbs_g: round1(c.carbs_g),
             fat_g: round1(c.fat_g),
+            alcohol_g: round1(c.alcohol_g),
           }
           return { ...v, _base: v } // fixed base so grams edits scale correctly
         })
@@ -108,15 +112,14 @@ export default function EntryEditor({
               protein_g: round1(num(base.protein_g) * r),
               carbs_g: round1(num(base.carbs_g) * r),
               fat_g: round1(num(base.fat_g) * r),
+              alcohol_g: round1(num(base.alcohol_g) * r),
             }
           }
           return { ...it, grams: value }
         }
         if (key === 'protein_g' || key === 'carbs_g' || key === 'fat_g') {
           const it2 = { ...it, [key]: value }
-          it2.calories = Math.round(
-            4 * num(it2.protein_g) + 4 * num(it2.carbs_g) + 9 * num(it2.fat_g)
-          )
+          it2.calories = kcalFromMacros(it2.protein_g, it2.carbs_g, it2.fat_g, it2.alcohol_g)
           return it2
         }
         return { ...it, [key]: value }
@@ -142,6 +145,7 @@ export default function EntryEditor({
       protein_g: num(c.protein_g),
       carbs_g: num(c.carbs_g),
       fat_g: num(c.fat_g),
+      ...(num(c.alcohol_g) ? { alcohol_g: num(c.alcohol_g) } : {}),
     })
   }
   // Save a sub-item as its own Saved food.
@@ -155,6 +159,7 @@ export default function EntryEditor({
       protein_g: num(c.protein_g),
       carbs_g: num(c.carbs_g),
       fat_g: num(c.fat_g),
+      ...(num(c.alcohol_g) ? { alcohol_g: num(c.alcohol_g) } : {}),
     })
     setSavedComps((prev) => new Set(prev).add(i))
   }
@@ -168,6 +173,7 @@ export default function EntryEditor({
       protein_g: num(c.protein_g),
       carbs_g: num(c.carbs_g),
       fat_g: num(c.fat_g),
+      ...(num(c.alcohol_g) ? { alcohol_g: num(c.alcohol_g) } : {}),
     }))
     onSaveMeal?.({ name: (f.food_name || '').trim() || 'Meal', items })
     setMealSaved(true)
@@ -194,6 +200,7 @@ export default function EntryEditor({
             protein_g: sm(it.protein_g),
             carbs_g: sm(it.carbs_g),
             fat_g: sm(it.fat_g),
+            alcohol_g: sm(it.alcohol_g),
             _base: {
               ...base,
               grams: s(base.grams),
@@ -201,6 +208,7 @@ export default function EntryEditor({
               protein_g: sm(base.protein_g),
               carbs_g: sm(base.carbs_g),
               fat_g: sm(base.fat_g),
+              alcohol_g: sm(base.alcohol_g),
             },
           }
         })
@@ -230,6 +238,7 @@ export default function EntryEditor({
         protein_g: round1(e.protein_g),
         carbs_g: round1(e.carbs_g),
         fat_g: round1(e.fat_g),
+        alcohol_g: round1(e.alcohol_g),
       }
       return { ...v, _base: v }
     })
@@ -244,15 +253,16 @@ export default function EntryEditor({
       protein_g: a.protein_g + num(it.protein_g),
       carbs_g: a.carbs_g + num(it.carbs_g),
       fat_g: a.fat_g + num(it.fat_g),
+      alcohol_g: a.alcohol_g + num(it.alcohol_g),
     }),
-    { grams: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    { grams: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, alcohol_g: 0 }
   )
 
-  // Editing a macro recomputes kcal from 4/4/9 (protein 4, carbs 4, fat 9),
-  // so calories reflect the adjusted P/C/F. Editing kcal directly still works.
+  // Editing a macro recomputes kcal from 4/4/9 (+7/g alcohol), so calories
+  // reflect the adjusted values. Editing kcal directly still works.
   const setMacro = (k) => (e) => {
     const next = { ...f, [k]: e.target.value }
-    next.calories = Math.round(4 * num(next.protein_g) + 4 * num(next.carbs_g) + 9 * num(next.fat_g))
+    next.calories = kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g)
     setF(next)
   }
 
@@ -274,6 +284,7 @@ export default function EntryEditor({
         protein_g: round1(num(entry.protein_g) * r),
         carbs_g: round1(num(entry.carbs_g) * r),
         fat_g: round1(num(entry.fat_g) * r),
+        alcohol_g: round1(num(entry.alcohol_g) * r),
       })
       // Keep the servings field in step with a grams edit. For a serving-based
       // food that's the real count (grams ÷ serving size); otherwise the ratio.
@@ -300,6 +311,7 @@ export default function EntryEditor({
       protein_g: round1(num(entry.protein_g) * m),
       carbs_g: round1(num(entry.carbs_g) * m),
       fat_g: round1(num(entry.fat_g) * m),
+      alcohol_g: round1(num(entry.alcohol_g) * m),
       grams:
         servingG > 0
           ? String(Math.round(servingG * next))
@@ -342,6 +354,11 @@ export default function EntryEditor({
         protein_g: round1(compTotals.protein_g),
         carbs_g: round1(compTotals.carbs_g),
         fat_g: round1(compTotals.fat_g),
+        // Send alcohol only if it's involved (keeps plain-food edits safe even
+        // before the alcohol_g column exists); null clears a prior value.
+        ...(compTotals.alcohol_g > 0 || num(entry.alcohol_g) > 0
+          ? { alcohol_g: compTotals.alcohol_g > 0 ? round1(compTotals.alcohol_g) : null }
+          : {}),
         components: comps.map((c) => ({
           name: (c.name || '').trim() || 'Item',
           grams: num(c.grams),
@@ -349,6 +366,7 @@ export default function EntryEditor({
           protein_g: num(c.protein_g),
           carbs_g: num(c.carbs_g),
           fat_g: num(c.fat_g),
+          ...(num(c.alcohol_g) ? { alcohol_g: num(c.alcohol_g) } : {}),
         })),
       }
     }
@@ -360,6 +378,9 @@ export default function EntryEditor({
       protein_g: num(f.protein_g),
       carbs_g: num(f.carbs_g),
       fat_g: num(f.fat_g),
+      ...(num(f.alcohol_g) > 0 || num(entry.alcohol_g) > 0
+        ? { alcohol_g: num(f.alcohol_g) || null }
+        : {}),
       // Preserve the serving size + count so the serving view survives an edit.
       ...(servingG > 0 ? { serving_g: servingG, servings: Math.round(num(qtyText) * 100) / 100 || origServ } : {}),
     }
@@ -395,6 +416,7 @@ export default function EntryEditor({
                 protein_g: c.protein_g,
                 carbs_g: c.carbs_g,
                 fat_g: c.fat_g,
+                alcohol_g: c.alcohol_g,
               }))
             )
           }
@@ -559,6 +581,9 @@ export default function EntryEditor({
             Total: <b className="text-white">{Math.round(compTotals.calories)}</b> kcal ·{' '}
             {Math.round(compTotals.protein_g)}P · {Math.round(compTotals.carbs_g)}C ·{' '}
             {Math.round(compTotals.fat_g)}F
+            {compTotals.alcohol_g > 0 && (
+              <span className="text-fuchsia-300"> · 🍷 {round1(compTotals.alcohol_g)}g</span>
+            )}
           </div>
           {onSaveMeal &&
             (mealSaved ? (
@@ -648,6 +673,19 @@ export default function EntryEditor({
               <Input type="number" value={f.fat_g} onChange={setMacro('fat_g')} className="px-1 text-center" />
             </Field>
           </div>
+          {showAlc || num(f.alcohol_g) ? (
+            <Field label="Alcohol (g)" hint="Pure alcohol — 7 kcal/g.">
+              <Input type="number" inputMode="decimal" value={f.alcohol_g} onChange={setMacro('alcohol_g')} />
+            </Field>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAlc(true)}
+              className="text-left text-xs text-slate-500 hover:text-slate-300"
+            >
+              ＋ alcohol (for drinks)
+            </button>
+          )}
         </div>
       )}
 

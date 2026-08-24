@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fileToAnalyzableImage } from '../lib/image'
 import { analyzePhoto } from '../lib/analyzeApi'
+import { kcalFromMacros } from '../lib/macros'
 import { Button, Field, Input, Select } from './ui'
 import { MEALS } from './AddFoodForm'
 
@@ -75,6 +76,7 @@ export default function PhotoLogger({
             protein_g: round1(it.protein_g),
             carbs_g: round1(it.carbs_g),
             fat_g: round1(it.fat_g),
+            alcohol_g: round1(it.alcohol_g),
           }
           // Keep the estimate as a fixed base so amount edits scale from it.
           return { name: it.name ?? '', ...v, _base: v }
@@ -123,16 +125,15 @@ export default function PhotoLogger({
               protein_g: round1(num(base.protein_g) * f),
               carbs_g: round1(num(base.carbs_g) * f),
               fat_g: round1(num(base.fat_g) * f),
+              alcohol_g: round1(num(base.alcohol_g) * f),
             }
           }
           return { ...it, grams: value }
         }
-        // Editing a macro recomputes kcal from 4/4/9 so calories track P/C/F.
+        // Editing a macro recomputes kcal from 4/4/9 (+7/g alcohol).
         if (key === 'protein_g' || key === 'carbs_g' || key === 'fat_g') {
           const it2 = { ...it, [key]: value }
-          it2.calories = Math.round(
-            4 * num(it2.protein_g) + 4 * num(it2.carbs_g) + 9 * num(it2.fat_g)
-          )
+          it2.calories = kcalFromMacros(it2.protein_g, it2.carbs_g, it2.fat_g, it2.alcohol_g)
           return it2
         }
         return { ...it, [key]: value }
@@ -161,6 +162,7 @@ export default function PhotoLogger({
             protein_g: sm(it.protein_g),
             carbs_g: sm(it.carbs_g),
             fat_g: sm(it.fat_g),
+            alcohol_g: sm(it.alcohol_g),
             _base: {
               ...base,
               grams: s(base.grams),
@@ -168,6 +170,7 @@ export default function PhotoLogger({
               protein_g: sm(base.protein_g),
               carbs_g: sm(base.carbs_g),
               fat_g: sm(base.fat_g),
+              alcohol_g: sm(base.alcohol_g),
             },
           }
         })
@@ -192,8 +195,9 @@ export default function PhotoLogger({
       protein: a.protein + num(it.protein_g),
       carbs: a.carbs + num(it.carbs_g),
       fat: a.fat + num(it.fat_g),
+      alcohol: a.alcohol + num(it.alcohol_g),
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    { calories: 0, protein: 0, carbs: 0, fat: 0, alcohol: 0 }
   )
 
   function submit() {
@@ -217,6 +221,7 @@ export default function PhotoLogger({
             protein_g: Math.round(totals.protein * k * 10) / 10,
             carbs_g: Math.round(totals.carbs * k * 10) / 10,
             fat_g: Math.round(totals.fat * k * 10) / 10,
+            alcohol_g: Math.round(totals.alcohol * k * 10) / 10,
           },
         }
       }
@@ -230,6 +235,7 @@ export default function PhotoLogger({
               protein_g: num(it.protein_g),
               carbs_g: num(it.carbs_g),
               fat_g: num(it.fat_g),
+              ...(num(it.alcohol_g) ? { alcohol_g: num(it.alcohol_g) } : {}),
             }))
           : null
       onSubmit(
@@ -242,6 +248,7 @@ export default function PhotoLogger({
             protein_g: round1(totals.protein),
             carbs_g: round1(totals.carbs),
             fat_g: round1(totals.fat),
+            ...(totals.alcohol > 0 ? { alcohol_g: round1(totals.alcohol) } : {}),
             components,
           },
         ],
@@ -258,6 +265,7 @@ export default function PhotoLogger({
         protein_g: num(it.protein_g),
         carbs_g: num(it.carbs_g),
         fat_g: num(it.fat_g),
+        ...(num(it.alcohol_g) ? { alcohol_g: num(it.alcohol_g) } : {}),
       })),
       meta
     )
@@ -453,6 +461,9 @@ export default function PhotoLogger({
             Total: <b className="text-white">{Math.round(totals.calories)}</b> kcal ·{' '}
             {Math.round(totals.protein)}P · {Math.round(totals.carbs)}C ·{' '}
             {Math.round(totals.fat)}F
+            {totals.alcohol > 0 && (
+              <span className="text-fuchsia-300"> · 🍷 {round1(totals.alcohol)}g</span>
+            )}
           </div>
 
           {items.length > 1 && (

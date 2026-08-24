@@ -65,6 +65,9 @@ alter table public.food_logs add column if not exists components jsonb;
 alter table public.food_logs add column if not exists servings numeric(6,2) default 1;
 -- serving_g stays NULL on all existing rows → they behave exactly as before.
 alter table public.food_logs add column if not exists serving_g numeric(7,1);
+-- alcohol_g: grams of pure alcohol (7 kcal/g). NULL/0 on all existing rows →
+-- nothing shows or changes; only surfaces when a drink actually carries it.
+alter table public.food_logs add column if not exists alcohol_g numeric(6,1);
 
 -- ---------------------------------------------------------------------
 --  frequent_foods : อาหารกินบ่อย (cache ไว้ log เร็ว)
@@ -224,6 +227,8 @@ alter table public.frequent_foods add column if not exists barcode text;
 create index if not exists frequent_foods_barcode_idx on public.frequent_foods (user_id, barcode);
 -- Serving size on the cache row so a re-scanned barcode still offers servings.
 alter table public.frequent_foods add column if not exists serving_g numeric(7,1);
+-- Alcohol carries onto saved foods / barcode cache too.
+alter table public.frequent_foods add column if not exists alcohol_g numeric(6,1);
 
 -- 3.2  user_api_keys — one row per stored key. `encrypted_key` is AES-256-GCM
 --      ciphertext (base64(iv).base64(ct)); the plaintext key is NEVER stored.

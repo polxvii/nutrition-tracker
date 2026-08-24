@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Field, Input, Select } from './ui'
+import { kcalFromMacros } from '../lib/macros'
 
 export const MEALS = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -20,18 +21,20 @@ const empty = {
   protein_g: '',
   carbs_g: '',
   fat_g: '',
+  alcohol_g: '',
 }
 
 export default function AddFoodForm({ onSubmit, onCancel, busy }) {
   const [f, setF] = useState(empty)
   const [asFrequent, setAsFrequent] = useState(false)
+  const [showAlc, setShowAlc] = useState(false) // reveal the alcohol field (drinks only)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
 
   const n = (v) => (Number.isNaN(Number(v)) ? 0 : Number(v))
-  // Editing a macro fills kcal from 4/4/9; editing kcal directly still works.
+  // Editing a macro fills kcal from 4/4/9 (+7/g alcohol); editing kcal directly still works.
   const setMacro = (k) => (e) => {
     const next = { ...f, [k]: e.target.value }
-    next.calories = String(Math.round(4 * n(next.protein_g) + 4 * n(next.carbs_g) + 9 * n(next.fat_g)))
+    next.calories = String(kcalFromMacros(next.protein_g, next.carbs_g, next.fat_g, next.alcohol_g))
     setF(next)
   }
 
@@ -48,10 +51,12 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
         protein_g: Number(f.protein_g) || 0,
         carbs_g: Number(f.carbs_g) || 0,
         fat_g: Number(f.fat_g) || 0,
+        ...(Number(f.alcohol_g) ? { alcohol_g: Number(f.alcohol_g) } : {}),
       },
       { asFrequent }
     )
     setF(empty)
+    setShowAlc(false)
   }
 
   return (
@@ -108,6 +113,20 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
           <Input type="number" inputMode="decimal" value={f.fat_g} onChange={setMacro('fat_g')} />
         </Field>
       </div>
+
+      {showAlc || Number(f.alcohol_g) ? (
+        <Field label="Alcohol (g)" hint="Pure alcohol — 7 kcal/g. Leave blank for non-drinks.">
+          <Input type="number" inputMode="decimal" value={f.alcohol_g} onChange={setMacro('alcohol_g')} placeholder="e.g. 14" />
+        </Field>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowAlc(true)}
+          className="text-left text-xs text-slate-500 hover:text-slate-300"
+        >
+          ＋ alcohol (for drinks)
+        </button>
+      )}
 
       <label className="flex items-center gap-2 text-sm text-slate-300">
         <input

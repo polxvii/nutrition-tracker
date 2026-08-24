@@ -29,12 +29,15 @@ function gramsFor(food, unit, amount) {
 export function scaleFood(food, unit, amount) {
   const f = gramsFor(food, unit, amount) / 100
   const r1 = (n) => Math.round((Number(n) || 0) * f * 10) / 10
-  return {
+  const out = {
     calories: Math.round(food.per100.calories * f),
     protein_g: r1(food.per100.protein_g),
     carbs_g: r1(food.per100.carbs_g),
     fat_g: r1(food.per100.fat_g),
   }
+  const alc = r1(food.per100.alcohol_g)
+  if (alc > 0) out.alcohol_g = alc // only attach for actual alcoholic products
+  return out
 }
 
 export async function searchFoods(query, { signal } = {}) {

@@ -72,6 +72,7 @@ Guidelines:
 - If the user provides a note/description, treat it as ground truth and prioritise it (stated amounts, ingredients, or cooking style override any visual guess).
 - If there is no photo, estimate from the text description alone. If amounts are unstated, assume typical Thai portions and lower the confidence.
 - Give per-component calories, protein, carbs, and fat in grams.
+- For alcoholic drinks, also estimate alcohol_g (grams of pure ethanol; e.g. a 330 ml 5% beer ≈ 13 g, a 150 ml 12% wine ≈ 14 g). Alcohol is 7 kcal/g, so make sure the component's calories include it. Set alcohol_g to 0 for anything non-alcoholic.
 - Also provide a short overall dish name in the "dish" field — the menu name a person would use for the whole meal (e.g. "ก๋วยเตี๋ยวน้ำตกเนื้อ", "ข้าวมันไก่"). Use the same language as the user's note when one is given; otherwise name it in Thai if it's a Thai dish.
 - Set overall confidence: "high" (clear photo, familiar dish, or a detailed description), "medium", or "low" (blurry, ambiguous, or portion hard to judge).
 - Respond ONLY with a JSON object matching the required schema. No commentary, no markdown.`
@@ -92,6 +93,7 @@ const RESPONSE_SCHEMA = {
           protein_g: { type: 'NUMBER' },
           carbs_g: { type: 'NUMBER' },
           fat_g: { type: 'NUMBER' },
+          alcohol_g: { type: 'NUMBER' },
         },
         required: ['name', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g'],
       },
@@ -197,8 +199,9 @@ async function callModel({ apiKey, model, body }) {
       protein_g: a.protein_g + (Number(it.protein_g) || 0),
       carbs_g: a.carbs_g + (Number(it.carbs_g) || 0),
       fat_g: a.fat_g + (Number(it.fat_g) || 0),
+      alcohol_g: a.alcohol_g + (Number(it.alcohol_g) || 0),
     }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, alcohol_g: 0 }
   )
   return { items, dish: (parsed.dish || '').trim(), confidence: parsed.confidence || 'low', totals }
 }
