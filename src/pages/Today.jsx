@@ -308,7 +308,7 @@ export default function Today() {
         meal_type: e.meal_type,
         food_name: e.food_name,
         grams: e.grams,
-        unit: 'g',
+        unit: e.unit || 'g', // drinks come through as 'ml'
         calories: e.calories,
         protein_g: e.protein_g,
         carbs_g: e.carbs_g,
@@ -318,6 +318,7 @@ export default function Today() {
       }
       // Only reference the components column for a real breakdown (a dish).
       if (e.components) row.components = e.components
+      if (Number(e.alcohol_g)) row.alcohol_g = Number(e.alcohol_g)
       return row
     })
     const { error } = await supabase.from('food_logs').insert(rows)
@@ -351,6 +352,7 @@ export default function Today() {
       protein_g: dish.protein_g,
       carbs_g: dish.carbs_g,
       fat_g: dish.fat_g,
+      ...(Number(dish.alcohol_g) ? { alcohol_g: Number(dish.alcohol_g) } : {}),
       components: dish.components?.length ? dish.components : null,
     })
     if (error) {

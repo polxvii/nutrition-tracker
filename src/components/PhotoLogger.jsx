@@ -88,9 +88,9 @@ export default function PhotoLogger({
             alcohol_g,
           }
           // Keep the estimate as a fixed base so amount edits scale from it.
-          // unit ('g'/'ml') rides alongside — it doesn't scale, just labels.
+          // unit ('g'/'ml') + abv ride alongside — they don't scale, just label.
           const unit = isDrink || it.unit === 'ml' ? 'ml' : 'g'
-          return { name: it.name ?? '', unit, ...v, _base: v }
+          return { name: it.name ?? '', unit, abv, ...v, _base: v }
         })
       )
       setConfidence(res.confidence)
@@ -427,6 +427,12 @@ export default function PhotoLogger({
                     />
                   ))}
                 </div>
+                {num(it.alcohol_g) > 0 && (
+                  <div className="text-[11px] text-fuchsia-300">
+                    🍷 {num(it.abv) > 0 ? `${round1(it.abv)}% ABV · ` : ''}
+                    {round1(it.alcohol_g)} g alcohol ({Math.round(num(it.alcohol_g) * 7)} kcal)
+                  </div>
+                )}
               </div>
             ))}
           </div>
