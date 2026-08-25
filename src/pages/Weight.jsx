@@ -259,12 +259,23 @@ export default function Weight() {
         b.burned += Number(l.calories) || 0
       } else {
         const kcal = Number(l.calories) || 0
+        const p = Number(l.protein_g) || 0
+        const c = Number(l.carbs_g) || 0
+        const fat = Number(l.fat_g) || 0
         b.eaten += kcal
-        b.protein += Number(l.protein_g) || 0
-        b.carbs += Number(l.carbs_g) || 0
-        b.fat += Number(l.fat_g) || 0
+        b.protein += p
+        b.carbs += c
+        b.fat += fat
         b.alcohol += Number(l.alcohol_g) || 0
-        if (l.meal_type) b.meals[l.meal_type] = (b.meals[l.meal_type] || 0) + kcal
+        // Per-meal totals carry macros too (not just kcal) so the "Calories by
+        // meal" card can show what each meal is heavy in.
+        if (l.meal_type) {
+          const ms = b.meals[l.meal_type] || (b.meals[l.meal_type] = { kcal: 0, protein: 0, carbs: 0, fat: 0 })
+          ms.kcal += kcal
+          ms.protein += p
+          ms.carbs += c
+          ms.fat += fat
+        }
       }
     }
     const rows = Object.values(map)
@@ -409,13 +420,25 @@ export default function Weight() {
     if (!daysLogged) return []
     const totals = {}
     for (const d of foodData) {
-      for (const [k, v] of Object.entries(d.meals || {})) totals[k] = (totals[k] || 0) + v
+      for (const [k, v] of Object.entries(d.meals || {})) {
+        const t = totals[k] || (totals[k] = { kcal: 0, protein: 0, carbs: 0, fat: 0 })
+        t.kcal += v.kcal
+        t.protein += v.protein
+        t.carbs += v.carbs
+        t.fat += v.fat
+      }
     }
-    return MEAL_SLOTS.map(([key, label]) => ({
-      key,
-      label,
-      avg: Math.round((totals[key] || 0) / daysLogged),
-    })).filter((m) => m.avg > 0)
+    return MEAL_SLOTS.map(([key, label]) => {
+      const t = totals[key]
+      return {
+        key,
+        label,
+        avg: t ? Math.round(t.kcal / daysLogged) : 0,
+        protein: t ? Math.round(t.protein / daysLogged) : 0,
+        carbs: t ? Math.round(t.carbs / daysLogged) : 0,
+        fat: t ? Math.round(t.fat / daysLogged) : 0,
+      }
+    }).filter((m) => m.avg > 0)
   }, [foodData, daysLogged])
   const mealMax = Math.max(1, ...mealAvg.map((m) => m.avg))
 
@@ -1090,6 +1113,9 @@ export default function Weight() {
                     className="h-full rounded-full bg-slate-400"
                     style={{ width: `${(m.avg / mealMax) * 100}%` }}
                   />
+                </div>
+                <div className="text-right text-[11px] tabular-nums text-slate-500">
+                  {m.protein}P · {m.carbs}C · {m.fat}F
                 </div>
               </div>
             ))}
