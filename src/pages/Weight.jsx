@@ -80,6 +80,9 @@ const TDEE_WINDOWS = [
   { days: 14, minWeighIns: 5, minSpan: 12 },
   { days: 28, minWeighIns: 8, minSpan: 28 },
 ]
+// Macro colours — match the log page (Today.jsx) so P/C/F read the same on
+// every screen: protein green, carbs blue, fat pink.
+const MACRO_HEX = { protein: '#22c55e', carbs: '#3b82f6', fat: '#FEC6DF' }
 const r1 = (n) => Math.round(n * 10) / 10
 // Weight values keep 2 decimals to match the scale (kg/wk rates stay at r1).
 const r2 = (n) => Math.round(n * 100) / 100
@@ -1108,16 +1111,17 @@ export default function Weight() {
             <h2 className="text-sm font-medium text-slate-300">Calories by meal</h2>
             <span className="text-xs text-slate-500">avg / logged day</span>
           </div>
-          {/* Legend — the stacked bar is split by each macro's kcal (4/4/9). */}
+          {/* Legend — the stacked bar is split by each macro's kcal (4/4/9).
+              Colours match the log page. */}
           <div className="flex gap-3 text-[11px] text-slate-400">
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-2 w-2 rounded-sm bg-green-500" />Protein
+              <i className="inline-block h-2 w-2 rounded-sm" style={{ background: MACRO_HEX.protein }} />Protein
             </span>
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-2 w-2 rounded-sm bg-blue-500" />Carbs
+              <i className="inline-block h-2 w-2 rounded-sm" style={{ background: MACRO_HEX.carbs }} />Carbs
             </span>
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-2 w-2 rounded-sm bg-amber-500" />Fat
+              <i className="inline-block h-2 w-2 rounded-sm" style={{ background: MACRO_HEX.fat }} />Fat
             </span>
           </div>
           <div className="space-y-2">
@@ -1133,9 +1137,9 @@ export default function Weight() {
                 {/* One stacked bar: total length ≈ meal kcal, segments = P/C/F
                     kcal. Compare size AND composition across meals at a glance. */}
                 <div className="flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div className="h-full bg-green-500" style={{ width: `${(m.pKcal / mealMax) * 100}%` }} />
-                  <div className="h-full bg-blue-500" style={{ width: `${(m.cKcal / mealMax) * 100}%` }} />
-                  <div className="h-full bg-amber-500" style={{ width: `${(m.fKcal / mealMax) * 100}%` }} />
+                  <div className="h-full" style={{ width: `${(m.pKcal / mealMax) * 100}%`, background: MACRO_HEX.protein }} />
+                  <div className="h-full" style={{ width: `${(m.cKcal / mealMax) * 100}%`, background: MACRO_HEX.carbs }} />
+                  <div className="h-full" style={{ width: `${(m.fKcal / mealMax) * 100}%`, background: MACRO_HEX.fat }} />
                 </div>
               </div>
             ))}
