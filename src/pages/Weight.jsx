@@ -430,17 +430,26 @@ export default function Weight() {
     }
     return MEAL_SLOTS.map(([key, label]) => {
       const t = totals[key]
+      const protein = t ? Math.round(t.protein / daysLogged) : 0
+      const carbs = t ? Math.round(t.carbs / daysLogged) : 0
+      const fat = t ? Math.round(t.fat / daysLogged) : 0
       return {
         key,
         label,
         avg: t ? Math.round(t.kcal / daysLogged) : 0,
-        protein: t ? Math.round(t.protein / daysLogged) : 0,
-        carbs: t ? Math.round(t.carbs / daysLogged) : 0,
-        fat: t ? Math.round(t.fat / daysLogged) : 0,
+        protein,
+        carbs,
+        fat,
+        // kcal each macro contributes (4/4/9) → the stacked-bar segment sizes.
+        pKcal: protein * 4,
+        cKcal: carbs * 4,
+        fKcal: fat * 9,
       }
     }).filter((m) => m.avg > 0)
   }, [foodData, daysLogged])
-  const mealMax = Math.max(1, ...mealAvg.map((m) => m.avg))
+  // Scale bars to the meal with the most macro-kcal, so one stacked bar shows
+  // both size (total length ≈ that meal's kcal) and composition (P/C/F split).
+  const mealMax = Math.max(1, ...mealAvg.map((m) => m.pKcal + m.cKcal + m.fKcal))
 
   // Adaptive check-in: measure GROSS maintenance from intake + the weight TREND
   // (OLS slope with a 95% CI) over the selected window. If the slope's CI
@@ -1099,6 +1108,18 @@ export default function Weight() {
             <h2 className="text-sm font-medium text-slate-300">Calories by meal</h2>
             <span className="text-xs text-slate-500">avg / logged day</span>
           </div>
+          {/* Legend — the stacked bar is split by each macro's kcal (4/4/9). */}
+          <div className="flex gap-3 text-[11px] text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block h-2 w-2 rounded-sm bg-green-500" />Protein
+            </span>
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block h-2 w-2 rounded-sm bg-blue-500" />Carbs
+            </span>
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block h-2 w-2 rounded-sm bg-amber-500" />Fat
+            </span>
+          </div>
           <div className="space-y-2">
             {mealAvg.map((m) => (
               <div key={m.key} className="space-y-1">
@@ -1106,16 +1127,15 @@ export default function Weight() {
                   <span className="text-slate-400">{m.label}</span>
                   <span className="tabular-nums text-slate-200">
                     <b className="text-sm font-semibold text-white">{m.avg}</b> kcal
+                    <span className="text-slate-500"> · {m.protein}P · {m.carbs}C · {m.fat}F</span>
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div
-                    className="h-full rounded-full bg-slate-400"
-                    style={{ width: `${(m.avg / mealMax) * 100}%` }}
-                  />
-                </div>
-                <div className="text-right text-[11px] tabular-nums text-slate-500">
-                  {m.protein}P · {m.carbs}C · {m.fat}F
+                {/* One stacked bar: total length ≈ meal kcal, segments = P/C/F
+                    kcal. Compare size AND composition across meals at a glance. */}
+                <div className="flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div className="h-full bg-green-500" style={{ width: `${(m.pKcal / mealMax) * 100}%` }} />
+                  <div className="h-full bg-blue-500" style={{ width: `${(m.cKcal / mealMax) * 100}%` }} />
+                  <div className="h-full bg-amber-500" style={{ width: `${(m.fKcal / mealMax) * 100}%` }} />
                 </div>
               </div>
             ))}
