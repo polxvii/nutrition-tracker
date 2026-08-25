@@ -51,7 +51,9 @@ function MacroRow({ label, gramKey, color, targets, onChange }) {
 
 // Editable calorie goal + macro split. P/C/F % must total ~100%. `bare` drops
 // the Card + title (for when a Collapsible already supplies the header).
-export default function TargetsEditor({ targets, onChange, onReset, calc, bare = false }) {
+// `showBaseline` hides the BMR / Maintenance fields (e.g. the check-in review,
+// where only the goal + macros are being adjusted).
+export default function TargetsEditor({ targets, onChange, onReset, calc, bare = false, showBaseline = true }) {
   if (!targets) return null
   const { sum } = macroPercents(targets)
   const ok = Math.abs(sum - 100) <= 1.5
@@ -85,29 +87,33 @@ export default function TargetsEditor({ targets, onChange, onReset, calc, bare =
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="BMR (kcal)">
-          <Input
-            type="number"
-            inputMode="numeric"
-            value={targets.bmr ?? ''}
-            onChange={(e) => onChange({ ...targets, bmr: e.target.value })}
-          />
-        </Field>
-        <Field label="Maintenance / TDEE">
-          <Input
-            type="number"
-            inputMode="numeric"
-            value={targets.tdee ?? ''}
-            onChange={(e) => onChange({ ...targets, tdee: e.target.value })}
-          />
-        </Field>
-      </div>
-      <p className="text-[11px] text-slate-500">
-        Auto-calculated from your body info — override if a device (smart scale
-        etc.) gives you different numbers. Maintenance drives the red “over
-        maintenance” tier.
-      </p>
+      {showBaseline && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="BMR (kcal)">
+              <Input
+                type="number"
+                inputMode="numeric"
+                value={targets.bmr ?? ''}
+                onChange={(e) => onChange({ ...targets, bmr: e.target.value })}
+              />
+            </Field>
+            <Field label="Maintenance / TDEE">
+              <Input
+                type="number"
+                inputMode="numeric"
+                value={targets.tdee ?? ''}
+                onChange={(e) => onChange({ ...targets, tdee: e.target.value })}
+              />
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Auto-calculated from your body info — override if a device (smart scale
+            etc.) gives you different numbers. Maintenance drives the red “over
+            maintenance” tier.
+          </p>
+        </>
+      )}
 
       <Field label="Calorie goal (kcal)">
         <Input

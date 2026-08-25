@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
 import { Button, Card, Collapsible, Field, Input } from '../components/ui'
 import BodyMeasurements from '../components/BodyMeasurements'
+import TargetsEditor from '../components/TargetsEditor'
 import { loadGoalHistory, goalForDate, recordGoalHistory } from '../lib/goalHistory'
 import { tierName, tierText, tierBg, tierHex } from '../lib/tiers'
 import { ALCOHOL_KCAL_PER_G } from '../lib/macros'
@@ -71,6 +72,14 @@ const RATE_KCAL = {
   recomp: { slow: -150, medium: -200, fast: -300 },
   maintain: { slow: 0, medium: 0, fast: 0 },
 }
+// Measured-TDEE window options. A shorter window reacts faster but the weight
+// trend is noisier (water weight) — its 95% CI will often straddle 0 and the
+// check-in stays "inconclusive", which is the honest outcome. Thresholds scale
+// with the window so each still needs enough weigh-ins spanning most of it.
+const TDEE_WINDOWS = [
+  { days: 14, minWeighIns: 5, minSpan: 12 },
+  { days: 28, minWeighIns: 8, minSpan: 28 },
+]
 const r1 = (n) => Math.round(n * 10) / 10
 // Weight values keep 2 decimals to match the scale (kg/wk rates stay at r1).
 const r2 = (n) => Math.round(n * 100) / 100
@@ -196,6 +205,9 @@ export default function Weight() {
   const [goalHist, setGoalHist] = useState([]) // goal snapshots, ascending by date
   const [preset, setPreset] = useState('30d') // must match a RANGES label
   const [showMaintDetail, setShowMaintDetail] = useState(false) // maintenance-avg breakdown
+  const [tdeeWin, setTdeeWin] = useState(28) // measured-TDEE window (days) — see TDEE_WINDOWS
+  const [reviewing, setReviewing] = useState(false) // check-in Apply → editable review
+  const [draft, setDraft] = useState(null) // editable {goal_calories,protein_g,carbs_g,fat_g}
   // Preset "Nd" = last N days *including today*, so it reads /N not /N+1.
   const [fromDate, setFromDate] = useState(isoDaysAgo(29))
   const [toDate, setToDate] = useState(todayISODate())
@@ -408,13 +420,15 @@ export default function Weight() {
   const mealMax = Math.max(1, ...mealAvg.map((m) => m.avg))
 
   // Adaptive check-in: measure GROSS maintenance from intake + the weight TREND
-  // (OLS slope with a 95% CI) over ≥28 days / ≥8 weigh-ins. If the slope's CI
+  // (OLS slope with a 95% CI) over the selected window. If the slope's CI
   // straddles 0 the direction is unclear → "keep collecting". Days logging under
   // half the goal are likely incomplete and excluded.
   const intakeFloor = goalCal > 0 ? goalCal * 0.5 : 500
+  const winCfg = TDEE_WINDOWS.find((w) => w.days === tdeeWin) || TDEE_WINDOWS[1]
 
   const checkIn = useMemo(() => {
-    const winCut = isoDaysAgo(60) // wide enough to hold a ≥28-day span
+    const cfg = TDEE_WINDOWS.find((w) => w.days === tdeeWin) || TDEE_WINDOWS[1]
+    const winCut = isoDaysAgo(cfg.days) // only weigh-ins inside the chosen window
     const wpts = weightLogs
       .filter((l) => l.logged_date >= winCut)
       .map((l) => ({ fullDate: l.logged_date, weight: Number(l.weight_kg) }))
@@ -423,8 +437,8 @@ export default function Weight() {
     const spanEnd = wpts[wpts.length - 1].fullDate
     const spanDays = Math.round((new Date(spanEnd) - new Date(spanStart)) / 86400000)
     const weighIns = wpts.length
-    // Needs enough data: ≥8 weigh-ins over ≥28 days (a full cycle smooths noise).
-    if (weighIns < 8 || spanDays < 28) {
+    // Needs enough data spanning most of the window (a longer span smooths noise).
+    if (weighIns < cfg.minWeighIns || spanDays < cfg.minSpan) {
       return { ready: false, needMore: true, weighIns, spanDays }
     }
     const trend = weeklyTrend(wpts) // OLS on raw points (x = days → time-correct)
@@ -434,7 +448,7 @@ export default function Weight() {
     const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
     const excluded = allDays.length - fdays.length
     const covPct = spanDays ? Math.round((fdays.length / spanDays) * 100) : 0
-    if (fdays.length < 8) {
+    if (fdays.length < cfg.minWeighIns) {
       return { ready: false, lowLog: true, logged: fdays.length, spanDays, covPct }
     }
     const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length) // gross
@@ -454,7 +468,7 @@ export default function Weight() {
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
     const suggested = Math.max(bmr, Math.round((tdee + offset) / 10) * 10)
     return { ready: true, tdee, avgIntake, rateWk, ciLoWk, ciHiWk, suggested, spanDays, logged: fdays.length, excluded, weighIns, covPct }
-  }, [weightLogs, foodByDay, profile, intakeFloor])
+  }, [weightLogs, foodByDay, profile, intakeFloor, tdeeWin])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
   // whole page describes one range): net intake vs goal, and the predicted
@@ -652,30 +666,67 @@ export default function Weight() {
     return { targetW, remaining: r2(remaining), rateWk: r1(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
   }, [profile?.goal_weight_kg, projCurWeight, checkIn, rate, allRateWk])
 
-  async function applyGoal(newCal) {
+  // Open the editable review, seeded from the suggested kcal. Protein + fat keep
+  // the current goal (protein stays anchored to bodyweight); carbs fill the rest
+  // — a sensible starting split the user can then tweak before applying.
+  function openReview(newCal) {
     const protein = profile?.goal_protein_g || 0
     const fat = profile?.goal_fat_g || 0
     const carbs = Math.max(0, Math.round((newCal - protein * 4 - fat * 9) / 4))
+    setDraft({ goal_calories: newCal, protein_g: protein, carbs_g: carbs, fat_g: fat })
+    setReviewing(true)
+  }
+
+  // Apply exactly what's shown in the review (kcal + P/C/F, all editable) and
+  // snapshot it so days from today on are judged against the new goal.
+  async function applyGoalTargets(t) {
+    const cal = Math.round(Number(t.goal_calories) || 0)
+    const protein = Math.round(Number(t.protein_g) || 0)
+    const carbs = Math.round(Number(t.carbs_g) || 0)
+    const fat = Math.round(Number(t.fat_g) || 0)
+    if (!(cal > 0)) return
     setApplying(true)
     const { error } = await supabase
       .from('profiles')
-      .update({ goal_calories: newCal, goal_carbs_g: carbs })
+      .update({ goal_calories: cal, goal_protein_g: protein, goal_carbs_g: carbs, goal_fat_g: fat })
       .eq('id', user.id)
     setApplying(false)
     if (error) {
       alert(error.message)
       return
     }
-    // Snapshot the new goal so days from today on are judged against it.
     await recordGoalHistory(user.id, {
-      goal_calories: newCal,
+      goal_calories: cal,
       goal_protein_g: protein,
       goal_carbs_g: carbs,
       goal_fat_g: fat,
       tdee: profile?.tdee,
     })
+    setReviewing(false)
+    setDraft(null)
     await refreshProfile()
   }
+
+  // 14d / 28d window switch for the measured-TDEE check-in (shared by both the
+  // ready + not-ready cards). Switching re-runs the estimate over that window.
+  const winToggle = (
+    <div className="flex gap-1">
+      {TDEE_WINDOWS.map((w) => (
+        <button
+          key={w.days}
+          onClick={() => {
+            setTdeeWin(w.days)
+            setReviewing(false) // a new window = a new suggestion; close any open review
+          }}
+          className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+            tdeeWin === w.days ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
+          }`}
+        >
+          {w.days}d
+        </button>
+      ))}
+    </div>
+  )
 
   const axis = { stroke: '#64748b', fontSize: 11 }
   const tooltipStyle = {
@@ -1049,7 +1100,10 @@ export default function Weight() {
       {/* Weekly check-in — measured TDEE + adaptive goal suggestion */}
       {checkIn.ready ? (
         <Card className="space-y-2">
-          <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
+            {winToggle}
+          </div>
           <p className="text-xs text-slate-500">
             Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} and{' '}
             {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days.
@@ -1102,6 +1156,36 @@ export default function Weight() {
             <p className="text-sm text-green-400">
               ✅ Your goal matches the data — no change needed.
             </p>
+          ) : reviewing && draft ? (
+            <div className="space-y-3 rounded-xl border border-slate-700/60 bg-slate-800/40 p-3">
+              <p className="text-sm text-slate-300">
+                Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
+                {goalCal > 0 && (
+                  <span className="text-slate-500">
+                    {' '}
+                    ({checkIn.suggested > goalCal ? '+' : ''}
+                    {checkIn.suggested - goalCal})
+                  </span>
+                )}
+                . Protein &amp; fat carry over, carbs fill the rest — adjust anything, then apply.
+              </p>
+              <TargetsEditor bare showBaseline={false} targets={draft} onChange={setDraft} />
+              <div className="flex gap-2">
+                <Button className="flex-1" disabled={applying} onClick={() => applyGoalTargets(draft)}>
+                  {applying ? 'Applying…' : 'Apply goal'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={applying}
+                  onClick={() => {
+                    setReviewing(false)
+                    setDraft(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
               <p className="text-sm text-slate-300">
@@ -1114,22 +1198,28 @@ export default function Weight() {
                   </span>
                 )}
               </p>
-              <Button className="w-full" disabled={applying} onClick={() => applyGoal(checkIn.suggested)}>
-                {applying ? 'Applying…' : `Apply ${checkIn.suggested} kcal`}
+              <Button className="w-full" disabled={applying} onClick={() => openReview(checkIn.suggested)}>
+                Review &amp; apply
               </Button>
-              <p className="text-[11px] text-slate-500">Protein &amp; fat kept; carbs adjusted to fit.</p>
+              <p className="text-[11px] text-slate-500">
+                See the suggested protein / carbs / fat and tweak them before saving.
+              </p>
             </>
           )}
         </Card>
       ) : (
         <Card>
-          <h2 className="mb-1 text-sm font-medium text-slate-300">Weekly check-in</h2>
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
+            {winToggle}
+          </div>
           {checkIn.needMore ? (
             <p className="text-xs text-slate-500">
-              Needs ≥ 8 weigh-ins over ≥ 28 days for a reliable trend (a full cycle smooths water
-              weight). You have {checkIn.weighIns} weigh-in{checkIn.weighIns === 1 ? '' : 's'} over{' '}
-              {checkIn.spanDays} day{checkIn.spanDays === 1 ? '' : 's'} — keep weighing in (any
-              spacing is fine).
+              Needs ≥ {winCfg.minWeighIns} weigh-ins over ≥ {winCfg.minSpan} days for a reliable
+              trend (a longer span smooths water weight). You have {checkIn.weighIns} weigh-in
+              {checkIn.weighIns === 1 ? '' : 's'} over {checkIn.spanDays} day
+              {checkIn.spanDays === 1 ? '' : 's'} in this window — keep weighing in (any spacing is
+              fine).
             </p>
           ) : checkIn.inconclusive ? (
             <p className="text-xs text-amber-400">
@@ -1152,9 +1242,9 @@ export default function Weight() {
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Unlocks with ≥ 8 weigh-ins over ≥ 28 days and food logged on most of those days. It
-              reads your weight trend (OLS slope + 95% CI) + gross intake to measure your real
-              maintenance.
+              Unlocks with ≥ {winCfg.minWeighIns} weigh-ins over ≥ {winCfg.minSpan} days and food
+              logged on most of those days. It reads your weight trend (OLS slope + 95% CI) + gross
+              intake to measure your real maintenance.
             </p>
           )}
         </Card>
