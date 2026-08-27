@@ -762,6 +762,18 @@ export default function Today() {
               if (!g.length) return null
               const isEx = key === 'exercise'
               const sub = g.reduce((s, l) => s + num(l.calories), 0)
+              // Meal-level P/C/F subtotal (food groups only) so you can see what
+              // each meal is made of, matching the per-item lines below.
+              const subMacro = isEx
+                ? null
+                : g.reduce(
+                    (a, l) => ({
+                      p: a.p + num(l.protein_g),
+                      c: a.c + num(l.carbs_g),
+                      f: a.f + num(l.fat_g),
+                    }),
+                    { p: 0, c: 0, f: 0 }
+                  )
               return (
                 <div key={key}>
                   <div className="mb-1 flex items-center justify-between px-1">
@@ -779,6 +791,12 @@ export default function Today() {
                       )}
                     </div>
                     <span className="text-xs text-slate-500">
+                      {subMacro && (
+                        <span>
+                          {Math.round(subMacro.p)}P · {Math.round(subMacro.c)}C ·{' '}
+                          {Math.round(subMacro.f)}F ·{' '}
+                        </span>
+                      )}
                       {isEx ? '−' : ''}
                       {Math.round(sub)} kcal
                     </span>
