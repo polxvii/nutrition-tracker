@@ -19,6 +19,19 @@ export function tolBand(goal, mode, daily) {
   return mode === 'kcal' ? goal * 0.05 : Math.max(goal * 0.05, 5)
 }
 
+// kcal band adapts to how aggressive the goal is. A flat 5% of goal can swallow
+// most of a gentle deficit (e.g. a 200-kcal deficit vs a 108-kcal band → you'd
+// stay "green" while eating away 60% of it). So cap the band at 30% of the
+// deficit (maint − goal), floored at 2% of goal and never above 5%. Maintain /
+// bulk goals (no deficit) keep the full 5% slack.
+export function kcalBand(goal, maint, daily) {
+  if (!daily || !(goal > 0)) return 0
+  const cap = goal * 0.05
+  const deficit = (Number(maint) || 0) - goal
+  if (deficit <= 0) return cap
+  return Math.max(goal * 0.02, Math.min(cap, deficit * 0.3))
+}
+
 // Macros have no maintenance to map red to, so a second % threshold flags a big
 // miss: carbs/fat >25% OVER goal, protein >25% UNDER goal (muscle risk).
 const MACRO_RED_OVER = 1.25
@@ -36,8 +49,9 @@ export function tierName(value, goal, maint, mode, daily) {
   }
   if (mode === 'kcal') {
     const m = Number(maint) || 0
-    if (m > 0 && v > m + band) return 'red'
-    return v > g + band ? 'amber' : 'green'
+    const kb = kcalBand(g, m, daily) // deficit-aware, not the flat 5%
+    if (m > 0 && v > m + kb) return 'red'
+    return v > g + kb ? 'amber' : 'green'
   }
   // budget (carbs/fat): amber once over goal, red once well over.
   if (v > g * MACRO_RED_OVER) return 'red'
