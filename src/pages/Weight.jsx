@@ -24,6 +24,7 @@ import { ALCOHOL_KCAL_PER_G } from '../lib/macros'
 
 const RANGES = [
   { days: 7, label: '7d' },
+  { days: 15, label: '15d' },
   { days: 30, label: '30d' },
   { days: 90, label: '90d' },
 ]

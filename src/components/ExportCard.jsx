@@ -9,8 +9,14 @@ const isoDaysAgo = (n) => {
   d.setDate(d.getDate() - (n - 1))
   return todayISODate(d)
 }
+const yesterdayISO = () => {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return todayISODate(d)
+}
 const PRESETS = [
-  { key: '1d', label: '1 day', days: 1 },
+  { key: '1d', label: 'Today', days: 1 },
+  { key: 'yesterday', label: 'Yesterday' }, // single day; handled in effective()
   { key: '7d', label: '7 days', days: 7 },
   { key: '15d', label: '15 days', days: 15 },
   { key: '30d', label: '30 days', days: 30 },
@@ -35,6 +41,10 @@ export default function ExportCard() {
   // The effective date window for the chosen range (null = open-ended).
   function effective() {
     if (rangeKey === 'custom') return { from, to }
+    if (rangeKey === 'yesterday') {
+      const y = yesterdayISO()
+      return { from: y, to: y }
+    }
     const p = PRESETS.find((x) => x.key === rangeKey)
     if (p.days == null) return { from: null, to: null } // all time
     return { from: isoDaysAgo(p.days), to: today }
