@@ -72,13 +72,15 @@ const RATE_KCAL = {
   recomp: { slow: -150, medium: -200, fast: -300 },
   maintain: { slow: 0, medium: 0, fast: 0 },
 }
-// Measured-TDEE window options. A shorter window reacts faster but the weight
-// trend is noisier (water weight) — its 95% CI will often straddle 0 and the
-// check-in stays "inconclusive", which is the honest outcome. Thresholds scale
-// with the window so each still needs enough weigh-ins spanning most of it.
+// Measured-TDEE window options. Weigh-ins are pulled from the last `days` days.
+// A shorter window reacts faster but the trend is noisier (water weight) — its
+// 95% CI will often straddle 0 and the check-in stays "inconclusive", the honest
+// outcome. `minSpan` is the spread (first↔last weigh-in) needed for a stable
+// slope; it sits well below `days` so the gate is actually reachable inside the
+// window (needing a weigh-in near the window's start, not on its exact edge).
 const TDEE_WINDOWS = [
-  { days: 14, minWeighIns: 5, minSpan: 12 },
-  { days: 28, minWeighIns: 8, minSpan: 28 },
+  { days: 14, minWeighIns: 4, minSpan: 8 },
+  { days: 28, minWeighIns: 6, minSpan: 14 },
 ]
 // Macro colours — match the log page (Today.jsx) so P/C/F read the same on
 // every screen: protein green, carbs blue, fat pink.
@@ -698,7 +700,9 @@ export default function Weight() {
     const weeks = remaining / rateWk
     const dt = new Date()
     dt.setDate(dt.getDate() + Math.round(weeks * 7))
-    return { targetW, remaining: r2(remaining), rateWk: r1(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
+    // 2 decimals — a slow trend like -0.04 kg/wk must not round to a flat "0"
+    // while still projecting a real date.
+    return { targetW, remaining: r2(remaining), rateWk: r2(rateWk), weeks: Math.round(weeks * 10) / 10, date: dt }
   }, [profile?.goal_weight_kg, projCurWeight, checkIn, rate, allRateWk])
 
   // Open the editable review, seeded from the suggested kcal. Protein + fat keep
@@ -1265,11 +1269,11 @@ export default function Weight() {
           </div>
           {checkIn.needMore ? (
             <p className="text-xs text-slate-500">
-              Needs ≥ {winCfg.minWeighIns} weigh-ins over ≥ {winCfg.minSpan} days for a reliable
-              trend (a longer span smooths water weight). You have {checkIn.weighIns} weigh-in
-              {checkIn.weighIns === 1 ? '' : 's'} over {checkIn.spanDays} day
-              {checkIn.spanDays === 1 ? '' : 's'} in this window — keep weighing in (any spacing is
-              fine).
+              Needs ≥ {winCfg.minWeighIns} weigh-ins spread across ≥ {winCfg.minSpan} days within the
+              last {winCfg.days} (the spread, first to last — not how often — is what steadies the
+              trend). You have {checkIn.weighIns} weigh-in{checkIn.weighIns === 1 ? '' : 's'} spanning{' '}
+              {checkIn.spanDays} day{checkIn.spanDays === 1 ? '' : 's'} so far — keep weighing in over
+              the coming days and it'll unlock.
             </p>
           ) : checkIn.inconclusive ? (
             <p className="text-xs text-amber-400">
@@ -1292,9 +1296,9 @@ export default function Weight() {
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Unlocks with ≥ {winCfg.minWeighIns} weigh-ins over ≥ {winCfg.minSpan} days and food
-              logged on most of those days. It reads your weight trend (OLS slope + 95% CI) + gross
-              intake to measure your real maintenance.
+              Unlocks with ≥ {winCfg.minWeighIns} weigh-ins spread across ≥ {winCfg.minSpan} days
+              (within the last {winCfg.days}) and food logged on most of them. It reads your weight
+              trend (OLS slope + 95% CI) + gross intake to measure your real maintenance.
             </p>
           )}
         </Card>
