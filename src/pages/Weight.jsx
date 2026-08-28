@@ -94,6 +94,16 @@ const isoDaysAgo = (n) => {
   d.setDate(d.getDate() - n)
   return todayISODate(d)
 }
+// A preset's date window: `days` full days ending today, or ending yesterday
+// when today is excluded (today's log is often incomplete → skews averages).
+// Excluding today shifts the whole window back a day so the day count is kept.
+const rangeFor = (days, includeToday) => {
+  const end = new Date()
+  if (!includeToday) end.setDate(end.getDate() - 1)
+  const from = new Date(end)
+  from.setDate(from.getDate() - (days - 1))
+  return { from: todayISODate(from), to: todayISODate(end) }
+}
 
 // Least-squares slope (kg/day) over dated weight points → kg/week. Requires the
 // points to span at least minSpanDays, so a weekly rate isn't extrapolated from
@@ -210,6 +220,7 @@ export default function Weight() {
   const [foodByDay, setFoodByDay] = useState([])
   const [goalHist, setGoalHist] = useState([]) // goal snapshots, ascending by date
   const [preset, setPreset] = useState('30d') // must match a RANGES label
+  const [includeToday, setIncludeToday] = useState(true) // exclude today's partial log from averages
   const [showMaintDetail, setShowMaintDetail] = useState(false) // maintenance-avg breakdown
   const [tdeeWin, setTdeeWin] = useState(28) // measured-TDEE window (days) — see TDEE_WINDOWS
   const [reviewing, setReviewing] = useState(false) // check-in Apply → editable review
@@ -790,8 +801,9 @@ export default function Weight() {
                 key={rg.days}
                 onClick={() => {
                   setPreset(rg.label)
-                  setFromDate(isoDaysAgo(rg.days - 1))
-                  setToDate(todayISODate())
+                  const r = rangeFor(rg.days, includeToday)
+                  setFromDate(r.from)
+                  setToDate(r.to)
                 }}
                 className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
                   preset === rg.label ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
@@ -810,7 +822,7 @@ export default function Weight() {
             </button>
           </div>
         </div>
-        {preset === 'custom' && (
+        {preset === 'custom' ? (
           <div className="mt-2 flex items-center gap-2">
             <Input
               type="date"
@@ -828,6 +840,30 @@ export default function Weight() {
               onChange={(e) => e.target.value && setToDate(e.target.value)}
               className="flex-1"
             />
+          </div>
+        ) : (
+          // Exclude today so a half-logged current day doesn't drag the averages
+          // down. Shifts the window back a day, keeping the same day count.
+          <div className="mt-2 flex items-center justify-end">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <input
+                type="checkbox"
+                checked={includeToday}
+                onChange={() => {
+                  const inc = !includeToday
+                  setIncludeToday(inc)
+                  const rg = RANGES.find((r) => r.label === preset)
+                  if (rg) {
+                    const r = rangeFor(rg.days, inc)
+                    setFromDate(r.from)
+                    setToDate(r.to)
+                  }
+                }}
+                className="h-3.5 w-3.5 accent-green-500"
+              />
+              Include today
+              {!includeToday && <span className="text-slate-500">· ends {toDate}</span>}
+            </label>
           </div>
         )}
       </header>
