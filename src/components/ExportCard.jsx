@@ -62,7 +62,7 @@ export default function ExportCard() {
     setResult(null)
     let query = supabase
       .from('food_logs')
-      .select('logged_at,meal_type,food_name,grams,unit,calories,protein_g,carbs_g,fat_g,source')
+      .select('logged_at,meal_type,food_name,grams,unit,calories,protein_g,carbs_g,fat_g,source,components')
       .order('logged_at', { ascending: true })
     if (f) query = query.gte('logged_at', f + 'T00:00:00')
     if (t) query = query.lte('logged_at', t + 'T23:59:59')
@@ -83,29 +83,36 @@ export default function ExportCard() {
     const p2 = (n) => String(n).padStart(2, '0')
     const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}`
     const rangeLabel = f ? `${f} to ${t || today}` : 'All time'
-    const header = ['date', 'time', 'meal', 'food', 'grams', 'unit', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'source']
+    const header = ['date', 'time', 'meal', 'dish', 'food', 'grams', 'unit', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'source']
     // Range + export time go at the TOP of the file (not the filename), then a
     // blank line, then the table.
     const lines = [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, '', header.join(',')]
     for (const l of rows) {
       const d = new Date(l.logged_at)
-      lines.push(
-        [
-          todayISODate(d),
-          d.toTimeString().slice(0, 5),
-          l.meal_type || '',
-          l.food_name || '',
-          l.grams ?? '',
-          l.unit || '',
-          l.calories ?? '',
-          l.protein_g ?? '',
-          l.carbs_g ?? '',
-          l.fat_g ?? '',
-          l.source || '',
-        ]
-          .map(esc)
-          .join(',')
-      )
+      const date = todayISODate(d)
+      const time = d.toTimeString().slice(0, 5)
+      const comps = Array.isArray(l.components) ? l.components : null
+      // A dish logged as one row carries its items in `components` — expand them
+      // into one row each (dish = the parent name) so the CSV shows the same
+      // breakdown as the app, instead of a single collapsed row. Their kcal sum
+      // to the dish, so totals stay correct. Components are always in grams.
+      if (comps && comps.length && l.source !== 'exercise') {
+        for (const c of comps) {
+          lines.push(
+            [date, time, l.meal_type || '', l.food_name || '', c.name || '', c.grams ?? '', 'g',
+             c.calories ?? '', c.protein_g ?? '', c.carbs_g ?? '', c.fat_g ?? '', l.source || '']
+              .map(esc)
+              .join(',')
+          )
+        }
+      } else {
+        lines.push(
+          [date, time, l.meal_type || '', '', l.food_name || '', l.grams ?? '', l.unit || '',
+           l.calories ?? '', l.protein_g ?? '', l.carbs_g ?? '', l.fat_g ?? '', l.source || '']
+            .map(esc)
+            .join(',')
+        )
+      }
     }
     const filename = `nutrition-log_exported-${stamp}.csv`
     // BOM so Excel opens UTF-8 (Thai names) correctly.
@@ -188,7 +195,10 @@ export default function ExportCard() {
         </div>
       )}
 
-      <p className="text-[11px] text-slate-500">One row per logged item; opens in Excel / Sheets (UTF-8).</p>
+      <p className="text-[11px] text-slate-500">
+        One row per item — dishes expand into their parts (see the “dish” column). Opens in
+        Excel / Sheets (UTF-8).
+      </p>
     </Collapsible>
   )
 }
