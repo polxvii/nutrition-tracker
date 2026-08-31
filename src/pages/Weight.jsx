@@ -4,6 +4,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Line,
   ComposedChart,
   ReferenceLine,
@@ -86,6 +87,9 @@ const TDEE_WINDOWS = [
 // Macro colours — match the log page (Today.jsx) so P/C/F read the same on
 // every screen: protein green, carbs blue, fat pink.
 const MACRO_HEX = { protein: '#22c55e', carbs: '#3b82f6', fat: '#FEC6DF' }
+// A day that clips the capped Y-axis gets a darker red + a ▲ on top, so it
+// reads as "off the top", not a flat bar exactly at the ceiling.
+const CLIP_RED = '#991b1b'
 const r1 = (n) => Math.round(n * 10) / 10
 // Weight values keep 2 decimals to match the scale (kg/wk rates stay at r1).
 const r2 = (n) => Math.round(n * 100) / 100
@@ -796,6 +800,15 @@ export default function Weight() {
     </div>
   )
 
+  // ▲ centred on top of a bar that clips the axis (value over kcalAxis.top).
+  const renderCapArrow = (props) => {
+    const { x, y, width, value } = props
+    if (!kcalAxis || !(value > kcalAxis.top)) return null
+    const cx = x + width / 2
+    const w = Math.min((width || 8) * 0.5, 5)
+    return <path d={`M ${cx - w},${y + 2 + w} L ${cx + w},${y + 2 + w} L ${cx},${y + 2} Z`} fill="#fecaca" />
+  }
+
   const axis = { stroke: '#64748b', fontSize: 11 }
   const tooltipStyle = {
     background: '#0f172a',
@@ -1038,12 +1051,18 @@ export default function Weight() {
                 <Bar dataKey="kcal" name="kcal" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {foodData.map((d, i) => (
                     // colour against THIS day's goal/maintenance (history-aware),
-                    // with the per-day tolerance band (daily=true)
+                    // with the per-day tolerance band (daily=true); a day that
+                    // clips the capped axis gets the darker off-scale red.
                     <Cell
                       key={i}
-                      fill={tierHex(d.kcal, d.dayGoal || goalCal, d.dayMaint || maint, 'kcal', true)}
+                      fill={
+                        kcalAxis && d.kcal > kcalAxis.top
+                          ? CLIP_RED
+                          : tierHex(d.kcal, d.dayGoal || goalCal, d.dayMaint || maint, 'kcal', true)
+                      }
                     />
                   ))}
+                  <LabelList dataKey="kcal" content={renderCapArrow} />
                 </Bar>
                 {/* Rolling 7-day intake — trend through the daily noise. Only
                     meaningful once the range is wider than a week. */}
@@ -1068,7 +1087,9 @@ export default function Weight() {
               <span className="text-amber-400">amber</span> over goal ·{' '}
               <span className="text-red-400">red</span> over maintenance
               {showRoll7 && <> · <span className="text-slate-200">white line</span> = 7-day avg</>}
-              {kcalAxis?.clipped && <> · tall days capped — tap a bar for the exact number</>}
+              {kcalAxis?.clipped && (
+                <> · <span className="text-red-300">▲ dark red</span> = over the top, tap for the real number</>
+              )}
             </p>
           )}
           {goalChangedInRange && (
