@@ -801,12 +801,16 @@ export default function Weight() {
   )
 
   // ▲ centred on top of a bar that clips the axis (value over kcalAxis.top).
+  // The bar overflows the domain, so its `y` sits ABOVE the plot and would be
+  // clipped away — clamp the marker back just inside the top of the plot area
+  // (chart top margin ≈ 8) so it shows right at the ceiling.
   const renderCapArrow = (props) => {
     const { x, y, width, value } = props
     if (!kcalAxis || !(value > kcalAxis.top)) return null
     const cx = x + width / 2
     const w = Math.min((width || 8) * 0.5, 5)
-    return <path d={`M ${cx - w},${y + 2 + w} L ${cx + w},${y + 2 + w} L ${cx},${y + 2} Z`} fill="#fecaca" />
+    const top = Math.max(y, 8) + 1
+    return <path d={`M ${cx - w},${top + w} L ${cx + w},${top + w} L ${cx},${top} Z`} fill="#fecaca" />
   }
 
   const axis = { stroke: '#64748b', fontSize: 11 }
