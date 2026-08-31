@@ -551,6 +551,23 @@ export default function Weight() {
   // maintenance from one that's a real surplus.
   const maint = profile?.tdee || 0
 
+  // Adherence Y-axis. Auto-scaling to the max let one buffet day (~6000) flatten
+  // the goal/maintenance band into the bottom third. Cap the axis ~40% over the
+  // higher reference line so normal days fill it and the goal/maint lines
+  // separate; taller days clip at the top (still red, exact kcal in the tooltip).
+  // Ticks step on a round number so gridlines aren't coarse.
+  const kcalAxis = useMemo(() => {
+    const ref = Math.max(goalCal, maint)
+    if (ref <= 0) return null // no targets → let recharts auto-scale
+    const dataMax = foodData.reduce((m, d) => Math.max(m, d.kcal), 0)
+    const desired = Math.max(Math.min(dataMax, ref * 1.4), ref * 1.1)
+    const step = desired <= 2000 ? 250 : desired <= 4000 ? 500 : 1000
+    const top = Math.ceil(desired / step) * step
+    const ticks = []
+    for (let v = 0; v <= top; v += step) ticks.push(v)
+    return { top, ticks, clipped: dataMax > top }
+  }, [foodData, goalCal, maint])
+
   // Per-day (history-aware) averages so the summary matches the per-day bars,
   // and a flag for when the goal changed inside the range.
   const periodGoal = daysLogged
@@ -1001,7 +1018,12 @@ export default function Weight() {
               <ComposedChart data={foodData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={20} />
-                <YAxis {...axis} />
+                <YAxis
+                  {...axis}
+                  domain={kcalAxis ? [0, kcalAxis.top] : undefined}
+                  ticks={kcalAxis ? kcalAxis.ticks : undefined}
+                  allowDataOverflow={!!kcalAxis}
+                />
                 <Tooltip
                   content={<BarTooltip goalCal={goalCal} maint={maint} />}
                   cursor={{ fill: '#1e293b55' }}
@@ -1046,6 +1068,7 @@ export default function Weight() {
               <span className="text-amber-400">amber</span> over goal ·{' '}
               <span className="text-red-400">red</span> over maintenance
               {showRoll7 && <> · <span className="text-slate-200">white line</span> = 7-day avg</>}
+              {kcalAxis?.clipped && <> · tall days capped — tap a bar for the exact number</>}
             </p>
           )}
           {goalChangedInRange && (
