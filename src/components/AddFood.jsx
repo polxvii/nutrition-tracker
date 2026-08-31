@@ -691,6 +691,27 @@ export default function AddFood({
           {baseG ? ` · ${Math.round(baseG * N)}${pickUnit}` : ''}
         </div>
 
+        {/* A logged dish carries its items — show the breakdown (scaled by the
+            chosen servings) so you can see what's inside before adding. */}
+        {savedPick.components?.length > 0 && (
+          <div className="space-y-1 rounded-lg border border-slate-700/60 bg-slate-800/40 p-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              🍱 {savedPick.components.length} items
+            </div>
+            {savedPick.components.map((c, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate text-slate-300">
+                  {c.name || 'Item'}
+                  {c.grams != null ? <span className="text-slate-500"> · {Math.round(Number(c.grams) * N)}g</span> : ''}
+                </span>
+                <span className="shrink-0 tabular-nums text-slate-400">
+                  {Math.round(Number(c.calories || 0) * N)} kcal
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button className="flex-1" onClick={addSaved} disabled={busy}>
             {busy ? 'Adding…' : 'Add to log'}
