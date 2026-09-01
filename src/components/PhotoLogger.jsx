@@ -37,6 +37,7 @@ export default function PhotoLogger({
   const [combine, setCombine] = useState(true) // log as one dish vs N items
   const [serv, setServ] = useState(1) // serving multiplier — scales all items at once
   const [servText, setServText] = useState('1')
+  const [zoom, setZoom] = useState(null) // previewUrl shown full-screen in the lightbox
 
   const MAX_IMAGES = 6
 
@@ -288,6 +289,24 @@ export default function PhotoLogger({
 
   return (
     <div className="space-y-3">
+      {/* Full-screen preview — tap a photo to inspect it before saving. */}
+      {zoom && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setZoom(null)}
+          role="dialog"
+          aria-label="Photo preview"
+        >
+          <img src={zoom} alt="full photo" className="max-h-full max-w-full rounded-lg object-contain" />
+          <button
+            onClick={() => setZoom(null)}
+            className="absolute right-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-base leading-none text-white"
+            aria-label="Close preview"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {hint && (
         <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">{hint}</p>
       )}
@@ -310,7 +329,8 @@ export default function PhotoLogger({
                 <img
                   src={im.previewUrl}
                   alt={`photo ${i + 1}`}
-                  className="h-24 w-full rounded-lg object-cover"
+                  onClick={() => setZoom(im.previewUrl)}
+                  className="h-24 w-full cursor-zoom-in rounded-lg object-cover"
                 />
                 <button
                   onClick={() => removeImage(i)}
