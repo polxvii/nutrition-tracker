@@ -29,6 +29,7 @@ const DATA_TYPES = [
   { key: 'food', label: 'Food log' },
   { key: 'weight', label: 'Weight' },
   { key: 'body', label: 'Measurements' },
+  { key: 'all', label: 'All' }, // all three, one file with a section each
 ]
 const SITES = ['waist', 'chest', 'arms', 'thighs', 'hips'] // body_measurements keys
 
@@ -131,11 +132,27 @@ export default function ExportCard() {
     return { header, lines, count: lines.length, slug: 'measurements' }
   }
 
+  // "All" → every table in one file, each as its own titled section (they have
+  // different columns, so they can't share one header).
+  async function buildAll(f, t) {
+    const [food, weight, body] = await Promise.all([buildFood(f, t), buildWeight(f, t), buildBody(f, t)])
+    const bad = [food, weight, body].find((r) => r.error)
+    if (bad) return { error: bad.error }
+    const section = (title, r) => ['', `== ${title} ==`, r.header.join(','), ...r.lines]
+    const lines = [
+      ...section('FOOD LOG', food),
+      ...section('WEIGHT', weight),
+      ...section('MEASUREMENTS', body),
+    ]
+    return { lines, count: food.count + weight.count + body.count, slug: 'all', combined: true }
+  }
+
   async function exportNow() {
     const { from: f, to: t } = effective()
     setBusy(true)
     setResult(null)
-    const build = dataType === 'weight' ? buildWeight : dataType === 'body' ? buildBody : buildFood
+    const build =
+      dataType === 'weight' ? buildWeight : dataType === 'body' ? buildBody : dataType === 'all' ? buildAll : buildFood
     const res = await build(f, t)
     if (res.error) {
       setBusy(false)
@@ -152,8 +169,11 @@ export default function ExportCard() {
     const p2 = (n) => String(n).padStart(2, '0')
     const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}`
     const rangeLabel = f ? `${f} to ${t || today}` : 'All time'
-    // Range + export time at the TOP, a blank line, then the table.
-    const lines = [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, '', res.header.join(','), ...res.lines]
+    // Range + export time at the TOP, then the table (combined files carry their
+    // own per-section headers, so no single header line).
+    const lines = res.combined
+      ? [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, ...res.lines]
+      : [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, '', res.header.join(','), ...res.lines]
     const filename = `nutrition-${res.slug}_exported-${stamp}.csv`
     // BOM so Excel opens UTF-8 (Thai names) correctly.
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
@@ -258,7 +278,9 @@ export default function ExportCard() {
           ? 'One row per item — dishes expand into their parts (see the “dish” column).'
           : dataType === 'weight'
             ? 'One row per weigh-in (kg).'
-            : 'One row per day; a column per site (cm).'}{' '}
+            : dataType === 'body'
+              ? 'One row per day; a column per site (cm).'
+              : 'All three tables in one file, each under its own == SECTION == heading.'}{' '}
         Opens in Excel / Sheets (UTF-8).
       </p>
     </Collapsible>
