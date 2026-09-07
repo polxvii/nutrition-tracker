@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { dayRange, prettyDate, todayISODate } from '../lib/dateHelpers'
 import { useSwipe } from '../lib/useSwipe'
+import { useLongPress } from '../lib/useLongPress'
 import { mealForNow } from '../lib/mealWindows'
 import { loadGoalHistory, goalForDate } from '../lib/goalHistory'
 import { tierHex, tolBand } from '../lib/tiers'
@@ -53,6 +54,66 @@ const shiftDate = (dateStr, days) => {
   return todayISODate(d)
 }
 
+// One diary row. Long-press enters multi-select; then a plain tap toggles the
+// row instead of opening the editor. Kept as its own component so the long-press
+// hook has a stable place to live (hooks can't run inside a .map).
+function LogRow({ l, isEx, selectMode, selected, onOpen, onToggle, onEnterSelect }) {
+  const lp = useLongPress(onEnterSelect, {
+    onClick: () => (selectMode ? onToggle() : onOpen()),
+    enabled: !selectMode, // hold only to ENTER select; in select mode a tap toggles
+  })
+  return (
+    <div
+      className={`flex items-center gap-2 bg-slate-900 px-3 py-2.5 ${
+        selectMode ? 'rounded-xl' : ''
+      } ${selected ? 'ring-2 ring-inset ring-green-500' : ''}`}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {selectMode && (
+        <span
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] leading-none ${
+            selected ? 'border-green-500 bg-green-500 text-slate-900' : 'border-slate-500 text-transparent'
+          }`}
+        >
+          ✓
+        </span>
+      )}
+      <button
+        {...lp}
+        className="min-w-0 flex-1 select-none text-left [-webkit-touch-callout:none]"
+      >
+        <div className="truncate text-sm text-white">
+          {isEx ? '🏃 ' : ''}
+          {l.food_name}
+        </div>
+        {!isEx && (
+          <div className="text-xs text-slate-500">
+            {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C · {Math.round(num(l.fat_g))}F
+            {num(l.alcohol_g) > 0 && (
+              <span className="text-fuchsia-300"> · 🍷 {Math.round(num(l.alcohol_g) * 10) / 10}g</span>
+            )}
+            {amountLabel(l)}
+            {l.components?.length ? ` · 🍱 ${l.components.length} items` : ''}
+          </div>
+        )}
+      </button>
+      <div
+        className="ml-3 flex items-center"
+        onClick={selectMode ? onToggle : undefined}
+      >
+        <span
+          className={`whitespace-nowrap text-sm font-medium tabular-nums ${
+            isEx ? 'text-green-400' : 'text-slate-200'
+          }`}
+        >
+          {isEx ? '−' : ''}
+          {Math.round(num(l.calories))} kcal
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export default function Today() {
   const { user, profile } = useAuth()
   const [params, setParams] = useSearchParams()
@@ -72,6 +133,11 @@ export default function Today() {
   const [goalHist, setGoalHist] = useState([]) // goal snapshots (ascending by date)
   const [copyingEntry, setCopyingEntry] = useState(null) // Copy-swipe confirm sheet
   const [mealName, setMealName] = useState('')
+  // Multi-select for bulk change-meal / change-date / delete.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selIds, setSelIds] = useState(() => new Set())
+  const [bulkAction, setBulkAction] = useState(null) // 'meal' | 'date' | null
+  const [bulkDate, setBulkDate] = useState(todayISODate())
   const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
   const [busy, setBusy] = useState(false)
 
@@ -527,7 +593,80 @@ export default function Today() {
     await load()
   }
 
-  const swipeEnabled = !(showAdd || showExercise || editingEntry || mealPicker)
+  // ---- multi-select ----
+  const enterSelect = (id) => {
+    setSelectMode(true)
+    setSelIds(new Set([id]))
+  }
+  const toggleSel = (id) =>
+    setSelIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  const exitSelect = () => {
+    setSelectMode(false)
+    setSelIds(new Set())
+    setBulkAction(null)
+  }
+  const selectAllVisible = () => setSelIds(new Set(logs.map((l) => l.id)))
+
+  async function bulkDelete() {
+    const ids = [...selIds]
+    if (!ids.length) return
+    if (!window.confirm(`Delete ${ids.length} item${ids.length > 1 ? 's' : ''}?`)) return
+    setBusy(true)
+    setLogs((prev) => prev.filter((l) => !selIds.has(l.id)))
+    const { error } = await supabase.from('food_logs').delete().in('id', ids)
+    setBusy(false)
+    exitSelect()
+    if (error) {
+      alert(error.message)
+      await load()
+    }
+  }
+
+  async function bulkSetMeal(mealValue) {
+    // Only food rows have a meal; exercise entries are left as is.
+    const ids = logs.filter((l) => selIds.has(l.id) && l.source !== 'exercise').map((l) => l.id)
+    if (!ids.length) {
+      setBulkAction(null)
+      return
+    }
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').update({ meal_type: mealValue }).in('id', ids)
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    exitSelect()
+    await load()
+  }
+
+  async function applyBulkDate(date) {
+    const ids = [...selIds]
+    if (!ids.length || !date) return
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').update({ logged_at: timestampFor(date) }).in('id', ids)
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    exitSelect()
+    await load()
+  }
+
+  // Leaving the day (or any reload of another date) drops the selection so it
+  // can't act on rows you can no longer see.
+  useEffect(() => {
+    setSelectMode(false)
+    setSelIds(new Set())
+    setBulkAction(null)
+  }, [selectedDate])
+
+  const swipeEnabled = !(showAdd || showExercise || editingEntry || mealPicker || selectMode)
 
   return (
     <div className="mx-auto max-w-md space-y-4 p-4" {...(swipeEnabled ? daySwipe : {})}>
@@ -739,7 +878,9 @@ export default function Today() {
             {isToday ? "Today's log" : 'Log'}
           </h2>
           {logs.length > 0 && (
-            <span className="text-[11px] text-slate-500">tap to edit · swipe to copy / delete</span>
+            <span className="text-[11px] text-slate-500">
+              {selectMode ? 'tap rows to select' : 'tap edit · hold to multi-select · swipe copy/delete'}
+            </span>
           )}
         </div>
         {loading ? (
@@ -805,41 +946,19 @@ export default function Today() {
                     {g.map((l) => (
                       <SwipeRow
                         key={l.id}
+                        disabled={selectMode}
                         onDuplicate={() => setCopyingEntry(l)}
                         onDelete={() => deleteLog(l.id)}
                       >
-                      <div className="flex items-center justify-between bg-slate-900 px-3 py-2.5">
-                        <button
-                          onClick={() => setEditingEntry(l)}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <div className="truncate text-sm text-white">
-                            {isEx ? '🏃 ' : ''}
-                            {l.food_name}
-                          </div>
-                          {!isEx && (
-                            <div className="text-xs text-slate-500">
-                              {Math.round(num(l.protein_g))}P · {Math.round(num(l.carbs_g))}C ·{' '}
-                              {Math.round(num(l.fat_g))}F
-                              {num(l.alcohol_g) > 0 && (
-                                <span className="text-fuchsia-300"> · 🍷 {Math.round(num(l.alcohol_g) * 10) / 10}g</span>
-                              )}
-                              {amountLabel(l)}
-                              {l.components?.length ? ` · 🍱 ${l.components.length} items` : ''}
-                            </div>
-                          )}
-                        </button>
-                        <div className="ml-3 flex items-center">
-                          <span
-                            className={`whitespace-nowrap text-sm font-medium tabular-nums ${
-                              isEx ? 'text-green-400' : 'text-slate-200'
-                            }`}
-                          >
-                            {isEx ? '−' : ''}
-                            {Math.round(num(l.calories))} kcal
-                          </span>
-                        </div>
-                      </div>
+                        <LogRow
+                          l={l}
+                          isEx={isEx}
+                          selectMode={selectMode}
+                          selected={selIds.has(l.id)}
+                          onOpen={() => setEditingEntry(l)}
+                          onToggle={() => toggleSel(l.id)}
+                          onEnterSelect={() => enterSelect(l.id)}
+                        />
                       </SwipeRow>
                     ))}
                   </div>
@@ -996,6 +1115,125 @@ export default function Today() {
         </div>
       )}
 
+      {/* Multi-select action bar (sits above the bottom nav). */}
+      {selectMode && (
+        <div className="fixed inset-x-0 bottom-16 z-40 px-4">
+          <div className="mx-auto max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-2 shadow-xl backdrop-blur">
+            <div className="mb-2 flex items-center justify-between px-1 text-sm">
+              <button onClick={exitSelect} className="text-slate-400 hover:text-white">
+                ✕ Cancel
+              </button>
+              <span className="font-medium text-white">{selIds.size} selected</span>
+              <button onClick={selectAllVisible} className="text-green-400 hover:text-green-300">
+                Select all
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="ghost"
+                className="text-sm"
+                disabled={selIds.size === 0}
+                onClick={() => setBulkAction('meal')}
+              >
+                Meal
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-sm"
+                disabled={selIds.size === 0}
+                onClick={() => {
+                  setBulkDate(selectedDate)
+                  setBulkAction('date')
+                }}
+              >
+                Date
+              </Button>
+              <Button
+                variant="danger"
+                className="text-sm"
+                disabled={selIds.size === 0 || busy}
+                onClick={bulkDelete}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk: move selected items to a meal (exercise entries are skipped). */}
+      {bulkAction === 'meal' &&
+        (() => {
+          const sel = logs.filter((l) => selIds.has(l.id))
+          const foodN = sel.filter((l) => l.source !== 'exercise').length
+          const hasEx = sel.some((l) => l.source === 'exercise')
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3"
+              onClick={() => setBulkAction(null)}
+            >
+              <div
+                className="mb-2 w-full max-w-md space-y-3 rounded-2xl bg-slate-900 p-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-sm font-medium text-slate-200">
+                  Move {foodN} item{foodN === 1 ? '' : 's'} to…
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {MEALS.map((m) => (
+                    <Button
+                      key={m.value}
+                      variant="ghost"
+                      disabled={busy || foodN === 0}
+                      onClick={() => bulkSetMeal(m.value)}
+                    >
+                      {m.label}
+                    </Button>
+                  ))}
+                </div>
+                {hasEx && (
+                  <p className="text-[11px] text-slate-500">
+                    Exercise entries have no meal — they'll be left as is.
+                  </p>
+                )}
+                <Button variant="ghost" className="w-full" onClick={() => setBulkAction(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )
+        })()}
+
+      {/* Bulk: move selected items to another date. */}
+      {bulkAction === 'date' && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3"
+          onClick={() => setBulkAction(null)}
+        >
+          <div
+            className="mb-2 w-full max-w-md space-y-3 rounded-2xl bg-slate-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-sm font-medium text-slate-200">
+              Move {selIds.size} item{selIds.size === 1 ? '' : 's'} to a date
+            </div>
+            <Input
+              type="date"
+              value={bulkDate}
+              max={todayISODate()}
+              onChange={(e) => e.target.value && setBulkDate(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button className="flex-1" disabled={busy} onClick={() => applyBulkDate(bulkDate)}>
+                {busy ? 'Moving…' : 'Move'}
+              </Button>
+              <Button variant="ghost" onClick={() => setBulkAction(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7,7 +7,9 @@ import { useRef } from 'react'
 //
 // Actions default to Copy / Delete (the diary rows), but any row can pass its
 // own `actions` = [{ label, onClick, className }]. Each button is 64px wide.
-export default function SwipeRow({ actions, onDuplicate, onDelete, children }) {
+// `disabled` keeps the exact same DOM (so the row doesn't remount) but drops the
+// swipe handlers + action buttons — used while multi-select is active.
+export default function SwipeRow({ actions, onDuplicate, onDelete, disabled = false, children }) {
   const acts = actions || [
     { label: 'Copy', onClick: onDuplicate, className: 'bg-slate-700 active:bg-slate-600' },
     { label: 'Delete', onClick: onDelete, className: 'bg-red-600 active:bg-red-700' },
@@ -61,27 +63,28 @@ export default function SwipeRow({ actions, onDuplicate, onDelete, children }) {
   return (
     <div className="relative overflow-hidden rounded-xl">
       <div className="absolute inset-y-0 right-0 flex">
-        {acts.map((a, i) => (
-          <button
-            key={i}
-            onClick={() => {
-              close()
-              a.onClick?.()
-            }}
-            className={`flex w-16 items-center justify-center text-xs font-medium text-white ${
-              a.className || 'bg-slate-700 active:bg-slate-600'
-            }`}
-          >
-            {a.label}
-          </button>
-        ))}
+        {!disabled &&
+          acts.map((a, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                close()
+                a.onClick?.()
+              }}
+              className={`flex w-16 items-center justify-center text-xs font-medium text-white ${
+                a.className || 'bg-slate-700 active:bg-slate-600'
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
       </div>
       <div
         ref={el}
         className="relative bg-slate-900"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        onTouchStart={disabled ? undefined : onTouchStart}
+        onTouchMove={disabled ? undefined : onTouchMove}
+        onTouchEnd={disabled ? undefined : onTouchEnd}
       >
         {children}
       </div>
