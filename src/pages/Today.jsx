@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -54,20 +54,37 @@ const shiftDate = (dateStr, days) => {
   return todayISODate(d)
 }
 
-// One diary row. Long-press enters multi-select; then a plain tap toggles the
-// row instead of opening the editor. Kept as its own component so the long-press
-// hook has a stable place to live (hooks can't run inside a .map).
+// One diary row. The WHOLE row is the tap target. Long-press (normal mode only)
+// enters multi-select; in select mode a plain tap toggles the row. Kept as its
+// own component so the long-press hook has a stable home (hooks can't run in a
+// .map). The hold is disabled in select mode so a tap just toggles.
 function LogRow({ l, isEx, selectMode, selected, onOpen, onToggle, onEnterSelect }) {
-  const lp = useLongPress(onEnterSelect, {
-    onClick: () => (selectMode ? onToggle() : onOpen()),
-    enabled: !selectMode, // hold only to ENTER select; in select mode a tap toggles
+  const held = useRef(false)
+  const hold = useLongPress(() => {
+    held.current = true
+    onEnterSelect()
   })
+  // Normal mode: hold to select, tap to open (but swallow the tap that a fired
+  // hold emits). Select mode: no hold — a plain tap toggles.
+  const rowProps = selectMode
+    ? { onClick: onToggle }
+    : {
+        ...hold,
+        onClick: () => {
+          if (held.current) {
+            held.current = false
+            return
+          }
+          onOpen()
+        },
+      }
   return (
     <div
-      className={`flex items-center gap-2 bg-slate-900 px-3 py-2.5 ${
+      {...rowProps}
+      onContextMenu={(e) => e.preventDefault()}
+      className={`flex cursor-pointer select-none items-center gap-2 bg-slate-900 px-3 py-2.5 [-webkit-touch-callout:none] ${
         selectMode ? 'rounded-xl' : ''
       } ${selected ? 'ring-2 ring-inset ring-green-500' : ''}`}
-      onContextMenu={(e) => e.preventDefault()}
     >
       {selectMode && (
         <span
@@ -78,10 +95,7 @@ function LogRow({ l, isEx, selectMode, selected, onOpen, onToggle, onEnterSelect
           ✓
         </span>
       )}
-      <button
-        {...lp}
-        className="min-w-0 flex-1 select-none text-left [-webkit-touch-callout:none]"
-      >
+      <div className="min-w-0 flex-1 text-left">
         <div className="truncate text-sm text-white">
           {isEx ? '🏃 ' : ''}
           {l.food_name}
@@ -96,20 +110,15 @@ function LogRow({ l, isEx, selectMode, selected, onOpen, onToggle, onEnterSelect
             {l.components?.length ? ` · 🍱 ${l.components.length} items` : ''}
           </div>
         )}
-      </button>
-      <div
-        className="ml-3 flex items-center"
-        onClick={selectMode ? onToggle : undefined}
-      >
-        <span
-          className={`whitespace-nowrap text-sm font-medium tabular-nums ${
-            isEx ? 'text-green-400' : 'text-slate-200'
-          }`}
-        >
-          {isEx ? '−' : ''}
-          {Math.round(num(l.calories))} kcal
-        </span>
       </div>
+      <span
+        className={`ml-3 whitespace-nowrap text-sm font-medium tabular-nums ${
+          isEx ? 'text-green-400' : 'text-slate-200'
+        }`}
+      >
+        {isEx ? '−' : ''}
+        {Math.round(num(l.calories))} kcal
+      </span>
     </div>
   )
 }
@@ -669,7 +678,10 @@ export default function Today() {
   const swipeEnabled = !(showAdd || showExercise || editingEntry || mealPicker || selectMode)
 
   return (
-    <div className="mx-auto max-w-md space-y-4 p-4" {...(swipeEnabled ? daySwipe : {})}>
+    <div
+      className={`mx-auto max-w-md space-y-4 p-4 ${selectMode ? 'pb-44' : ''}`}
+      {...(swipeEnabled ? daySwipe : {})}
+    >
       {/* Date navigation */}
       <header className="flex items-center justify-between">
         <button
@@ -1115,18 +1127,29 @@ export default function Today() {
         </div>
       )}
 
-      {/* Multi-select action bar (sits above the bottom nav). */}
+      {/* Multi-select action bar — pinned to the very bottom (over the nav, which
+          isn't needed mid-selection). The list gets bottom padding so nothing
+          hides behind it. */}
       {selectMode && (
-        <div className="fixed inset-x-0 bottom-16 z-40 px-4">
-          <div className="mx-auto max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-2 shadow-xl backdrop-blur">
-            <div className="mb-2 flex items-center justify-between px-1 text-sm">
-              <button onClick={exitSelect} className="text-slate-400 hover:text-white">
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-700 bg-slate-900/95 backdrop-blur"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="mx-auto max-w-md space-y-2 p-3">
+            <div className="flex items-center justify-between text-sm">
+              <button onClick={exitSelect} className="px-1 font-medium text-slate-300 hover:text-white">
                 ✕ Cancel
               </button>
               <span className="font-medium text-white">{selIds.size} selected</span>
-              <button onClick={selectAllVisible} className="text-green-400 hover:text-green-300">
-                Select all
-              </button>
+              {logs.length > 0 && selIds.size === logs.length ? (
+                <button onClick={() => setSelIds(new Set())} className="px-1 text-slate-300 hover:text-white">
+                  Clear
+                </button>
+              ) : (
+                <button onClick={selectAllVisible} className="px-1 text-green-400 hover:text-green-300">
+                  Select all
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <Button
