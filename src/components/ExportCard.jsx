@@ -23,14 +23,15 @@ const PRESETS = [
   { key: 'all', label: 'All time', days: null },
   { key: 'custom', label: 'Custom', days: undefined },
 ]
-// What you can export. Weight + measurements are keyed by logged_date (not a
-// timestamp like food), so the same range presets apply by date.
+// What you can export (multi-select). Weight + measurements are keyed by
+// logged_date (not a timestamp like food), so the same range presets apply by
+// date. Picking >1 writes them into one file, each under its own == SECTION ==.
 const DATA_TYPES = [
   { key: 'food', label: 'Food log' },
   { key: 'weight', label: 'Weight' },
   { key: 'body', label: 'Measurements' },
-  { key: 'all', label: 'All' }, // all three, one file with a section each
 ]
+const TYPE_TITLE = { food: 'FOOD LOG', weight: 'WEIGHT', body: 'MEASUREMENTS' }
 const SITES = ['waist', 'chest', 'arms', 'thighs', 'hips'] // body_measurements keys
 
 // CSV-escape a cell (quote if it has a comma / quote / newline).
@@ -41,7 +42,7 @@ const esc = (v) => {
 
 export default function ExportCard() {
   const today = todayISODate()
-  const [dataType, setDataType] = useState('food') // food | weight | body
+  const [types, setTypes] = useState(() => new Set(['food'])) // one or more of food|weight|body
   const [rangeKey, setRangeKey] = useState('7d')
   const [from, setFrom] = useState(isoDaysAgo(7))
   const [to, setTo] = useState(today)
@@ -64,6 +65,14 @@ export default function ExportCard() {
   const chooseRange = (key) => {
     setRangeKey(key)
     setResult(null) // clear the previous result when the range changes
+  }
+  const toggleType = (key) => {
+    setResult(null)
+    setTypes((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
   }
 
   // Each builder fetches its table for the window and returns CSV pieces:
@@ -132,34 +141,22 @@ export default function ExportCard() {
     return { header, lines, count: lines.length, slug: 'measurements' }
   }
 
-  // "All" → every table in one file, each as its own titled section (they have
-  // different columns, so they can't share one header).
-  async function buildAll(f, t) {
-    const [food, weight, body] = await Promise.all([buildFood(f, t), buildWeight(f, t), buildBody(f, t)])
-    const bad = [food, weight, body].find((r) => r.error)
-    if (bad) return { error: bad.error }
-    const section = (title, r) => ['', `== ${title} ==`, r.header.join(','), ...r.lines]
-    const lines = [
-      ...section('FOOD LOG', food),
-      ...section('WEIGHT', weight),
-      ...section('MEASUREMENTS', body),
-    ]
-    return { lines, count: food.count + weight.count + body.count, slug: 'all', combined: true }
-  }
-
   async function exportNow() {
     const { from: f, to: t } = effective()
+    const chosen = DATA_TYPES.map((d) => d.key).filter((k) => types.has(k))
+    if (!chosen.length) return
     setBusy(true)
     setResult(null)
-    const build =
-      dataType === 'weight' ? buildWeight : dataType === 'body' ? buildBody : dataType === 'all' ? buildAll : buildFood
-    const res = await build(f, t)
-    if (res.error) {
+    const builders = { food: buildFood, weight: buildWeight, body: buildBody }
+    const results = await Promise.all(chosen.map((k) => builders[k](f, t)))
+    const bad = results.find((r) => r.error)
+    if (bad) {
       setBusy(false)
-      setResult({ error: res.error })
+      setResult({ error: bad.error })
       return
     }
-    if (!res.count) {
+    const totalCount = results.reduce((s, r) => s + r.count, 0)
+    if (!totalCount) {
       setBusy(false)
       setResult({ empty: true })
       return
@@ -169,12 +166,21 @@ export default function ExportCard() {
     const p2 = (n) => String(n).padStart(2, '0')
     const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}`
     const rangeLabel = f ? `${f} to ${t || today}` : 'All time'
-    // Range + export time at the TOP, then the table (combined files carry their
-    // own per-section headers, so no single header line).
-    const lines = res.combined
-      ? [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, ...res.lines]
-      : [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`, '', res.header.join(','), ...res.lines]
-    const filename = `nutrition-${res.slug}_exported-${stamp}.csv`
+    const head = [`Range,${esc(rangeLabel)}`, `Exported,${stamp}`]
+    // One type → a plain table. Several → each under its own == SECTION == (they
+    // have different columns, so they can't share one header row).
+    let lines
+    let slug
+    if (chosen.length === 1) {
+      const r = results[0]
+      lines = [...head, '', r.header.join(','), ...r.lines]
+      slug = r.slug
+    } else {
+      const section = (k, r) => ['', `== ${TYPE_TITLE[k]} ==`, r.header.join(','), ...r.lines]
+      lines = [...head, ...chosen.flatMap((k, i) => section(k, results[i]))]
+      slug = chosen.length === 3 ? 'all' : chosen.join('-')
+    }
+    const filename = `nutrition-${slug}_exported-${stamp}.csv`
     // BOM so Excel opens UTF-8 (Thai names) correctly.
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -186,24 +192,24 @@ export default function ExportCard() {
     a.remove()
     URL.revokeObjectURL(url)
     setBusy(false)
-    setResult({ rows: res.count, from: f, to: t, filename })
+    setResult({ rows: totalCount, from: f, to: t, filename })
   }
 
   return (
     <Collapsible title="📤 Export data" subtitle="Download your log, weight or measurements as CSV">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">1. What to export</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        1. What to export <span className="font-normal normal-case text-slate-500">· pick one or more</span>
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {DATA_TYPES.map((d) => (
           <button
             key={d.key}
-            onClick={() => {
-              setDataType(d.key)
-              setResult(null)
-            }}
-            className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
-              dataType === d.key ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            onClick={() => toggleType(d.key)}
+            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium ${
+              types.has(d.key) ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
           >
+            <span className={types.has(d.key) ? '' : 'text-transparent'}>✓</span>
             {d.label}
           </button>
         ))}
@@ -257,8 +263,8 @@ export default function ExportCard() {
       </p>
 
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">3. Export</div>
-      <Button className="w-full" disabled={busy} onClick={exportNow}>
-        {busy ? 'Exporting…' : 'Export CSV'}
+      <Button className="w-full" disabled={busy || types.size === 0} onClick={exportNow}>
+        {busy ? 'Exporting…' : types.size === 0 ? 'Pick what to export' : 'Export CSV'}
       </Button>
 
       {result?.error && <p className="text-sm text-red-400">Export failed: {result.error}</p>}
@@ -274,13 +280,13 @@ export default function ExportCard() {
       )}
 
       <p className="text-[11px] text-slate-500">
-        {dataType === 'food'
-          ? 'One row per item — dishes expand into their parts (see the “dish” column).'
-          : dataType === 'weight'
+        {types.size > 1
+          ? 'Each table in one file, under its own == SECTION == heading (they have different columns).'
+          : types.has('weight')
             ? 'One row per weigh-in (kg).'
-            : dataType === 'body'
+            : types.has('body')
               ? 'One row per day; a column per site (cm).'
-              : 'All three tables in one file, each under its own == SECTION == heading.'}{' '}
+              : 'One row per item — dishes expand into their parts (see the “dish” column).'}{' '}
         Opens in Excel / Sheets (UTF-8).
       </p>
     </Collapsible>

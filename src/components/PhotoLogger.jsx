@@ -41,9 +41,7 @@ export default function PhotoLogger({
 
   const MAX_IMAGES = 6
 
-  async function pickFiles(e) {
-    const files = Array.from(e.target.files || [])
-    e.target.value = '' // allow re-picking the same file later
+  async function addImageFiles(files) {
     if (!files.length) return
     setError(null)
     setItems(null)
@@ -57,6 +55,25 @@ export default function PhotoLogger({
     } catch {
       setError('Could not read that image.')
     }
+  }
+
+  async function pickFiles(e) {
+    const files = Array.from(e.target.files || [])
+    e.target.value = '' // allow re-picking the same file later
+    await addImageFiles(files)
+  }
+
+  // Paste an image into the description box → attach it like an upload (handy on
+  // desktop: screenshot a menu / label and paste straight in). Text paste is
+  // untouched when the clipboard has no image.
+  function onPasteNote(e) {
+    const imgs = Array.from(e.clipboardData?.items || [])
+      .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+      .map((it) => it.getAsFile())
+      .filter(Boolean)
+    if (!imgs.length) return
+    e.preventDefault()
+    addImageFiles(imgs)
   }
   const removeImage = (i) => setImages((prev) => prev.filter((_, idx) => idx !== i))
 
@@ -310,10 +327,11 @@ export default function PhotoLogger({
       {hint && (
         <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">{hint}</p>
       )}
-      <Field label="Describe the meal">
+      <Field label="Describe the meal" hint="Type it — or paste an image here to attach it.">
         <Input
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          onPaste={onPasteNote}
           placeholder="e.g. grilled chicken 150g + 1 scoop rice + fried egg"
         />
       </Field>
