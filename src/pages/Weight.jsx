@@ -83,6 +83,8 @@ const RATE_KCAL = {
 const TDEE_WINDOWS = [
   { days: 14, minWeighIns: 4, minSpan: 8 },
   { days: 28, minWeighIns: 6, minSpan: 14 },
+  { days: 56, minWeighIns: 8, minSpan: 30 },
+  { days: 90, minWeighIns: 10, minSpan: 45 },
 ]
 // Macro colours — match the log page (Today.jsx) so P/C/F read the same on
 // every screen: protein green, carbs blue, fat pink.
@@ -505,23 +507,56 @@ export default function Weight() {
       return { ready: false, lowLog: true, logged: fdays.length, spanDays, covPct }
     }
     const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length) // gross
-    // If the slope's 95% CI straddles 0, we can't tell gaining from losing.
-    if (ciLoWk < 0 && ciHiWk > 0) {
-      return { ready: false, inconclusive: true, rateWk, ciLoWk, ciHiWk, weighIns, spanDays, covPct, logged: fdays.length }
-    }
     const tdee = Math.round(avgIntake - (rateWk / 7) * KCAL_PER_KG)
-    // Sanity: below BMR is impossible; wildly off the profile estimate = too noisy.
+    // Reject an impossible / far-off point estimate (too little or bad data).
     const bmr = profile?.bmr || 1200
     const est = profile?.tdee || 0
     if (tdee < bmr || (est > 0 && (tdee < est * 0.6 || tdee > est * 1.6))) {
       return { ready: false, unreliable: true }
     }
+    // 95% uncertainty on maintenance = weight-trend slope error + intake sampling
+    // error, combined in quadrature (independent). The trend margin per day ×
+    // 7700 kcal/kg is usually the widest; intake adds its sample-mean SE. We ALWAYS
+    // show the range — a point value hides how uncertain a near-maintenance read is.
+    const marginWk = (ciHiWk - ciLoWk) / 2
+    const weightMargin = (marginWk / 7) * KCAL_PER_KG
+    const nI = fdays.length
+    const sdI =
+      nI > 1 ? Math.sqrt(fdays.reduce((s, d) => s + (d.kcal - avgIntake) ** 2, 0) / (nI - 1)) : 0
+    const intakeMargin = nI > 1 ? tCrit(nI - 1) * (sdI / Math.sqrt(nI)) : 0
+    const maintMargin = Math.round(Math.sqrt(weightMargin ** 2 + intakeMargin ** 2))
+    const maintLo = tdee - maintMargin
+    const maintHi = tdee + maintMargin
+    const widest = weightMargin >= intakeMargin ? 'weight trend' : 'intake'
+    const widestMargin = Math.round(Math.max(weightMargin, intakeMargin))
+    // Direction resolved once the slope CI clears 0 — a SEPARATE question from
+    // whether the target sits inside the maintenance range.
+    const directionKnown = !(ciLoWk < 0 && ciHiWk > 0)
+    // Target vs the maintenance RANGE (not the point): inside → can't yet decide.
+    const targetVerdict =
+      !(goalCal > 0) ? 'none' : goalCal < maintLo ? 'deficit' : goalCal > maintHi ? 'surplus' : 'unclear'
+    // Rough extra weeks to shrink the range until the target sits clearly in/out.
+    // Slope SE falls ~ span^-1.5 as weigh-ins + span grow together; approximate.
+    let weeksToNarrow = null
+    if (targetVerdict === 'unclear') {
+      const gap = Math.abs(tdee - goalCal)
+      if (gap > 0 && maintMargin > gap) {
+        const grow = Math.pow(maintMargin / gap, 2 / 3)
+        weeksToNarrow = Math.min(16, Math.max(1, Math.round((spanDays * (grow - 1)) / 7)))
+      }
+    }
     const gt = profile?.goal_type || 'recomp'
     const gr = profile?.goal_rate || 'medium'
     const offset = (RATE_KCAL[gt] || RATE_KCAL.recomp)[gr] ?? 0
     const suggested = Math.max(bmr, Math.round((tdee + offset) / 10) * 10)
-    return { ready: true, tdee, avgIntake, rateWk, ciLoWk, ciHiWk, suggested, spanDays, logged: fdays.length, excluded, weighIns, covPct }
-  }, [weightLogs, foodByDay, profile, intakeFloor, tdeeWin])
+    return {
+      ready: true,
+      tdee, maintLo, maintHi, maintMargin, widest, widestMargin,
+      avgIntake, rateWk, ciLoWk, ciHiWk, directionKnown,
+      targetVerdict, weeksToNarrow, suggested,
+      spanDays, logged: fdays.length, excluded, weighIns, covPct,
+    }
+  }, [weightLogs, foodByDay, profile, intakeFloor, tdeeWin, goalCal])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
   // whole page describes one range): net intake vs goal, and the predicted
@@ -1238,113 +1273,119 @@ export default function Weight() {
 
       {/* Weekly check-in — measured TDEE + adaptive goal suggestion */}
       {checkIn.ready ? (
-        <Card className="space-y-2">
+        <Card className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-slate-300">Weekly check-in</h2>
             {winToggle}
           </div>
-          <p className="text-xs text-slate-500">
-            Based on {checkIn.logged} logged day{checkIn.logged > 1 ? 's' : ''} and{' '}
-            {checkIn.weighIns} weigh-ins over {checkIn.spanDays} days.
-            {checkIn.excluded > 0 &&
-              ` (${checkIn.excluded} under-logged day${checkIn.excluded > 1 ? 's' : ''} skipped)`}
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">{checkIn.tdee}</div>
-              <div className="text-xs text-slate-500">est. maintenance</div>
+
+          {/* Estimated maintenance — ALWAYS with a 95% range (never a lone point). */}
+          <div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">Estimated maintenance</div>
+            <div className="text-2xl font-bold text-white">
+              {checkIn.tdee.toLocaleString()}
+              <span className="ml-1 text-sm font-normal text-slate-400">kcal/day</span>
             </div>
-            <div className="rounded-lg bg-slate-800 py-2">
-              <div className="text-lg font-bold text-white">{goalCal || '—'}</div>
-              <div className="text-xs text-slate-500">current goal</div>
+            <div className="text-xs text-slate-400">
+              95% range {checkIn.maintLo.toLocaleString()}–{checkIn.maintHi.toLocaleString()}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              From {checkIn.logged} logged day{checkIn.logged === 1 ? '' : 's'} · {checkIn.weighIns} weigh-ins
+              {checkIn.excluded > 0 ? ` · ${checkIn.excluded} skipped` : ''}
             </div>
           </div>
 
-          {/* Show the basis so the number isn't a black box. */}
-          <p className="text-xs text-slate-400">
-            From <b className="text-slate-200">{checkIn.avgIntake}</b> kcal avg gross intake and
-            weight{' '}
-            <b className="text-slate-200">
+          {/* Target vs the maintenance RANGE (not the point). Inside → can't decide. */}
+          {checkIn.targetVerdict === 'unclear' ? (
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5 text-xs leading-relaxed text-amber-200/90">
+              Your target ({goalCal.toLocaleString()}) falls inside this range — we can't yet tell
+              whether you're in a deficit. Widest source: {checkIn.widest} (±{checkIn.widestMargin}).
+              {checkIn.weeksToNarrow
+                ? ` Needs ~${checkIn.weeksToNarrow} more week${checkIn.weeksToNarrow === 1 ? '' : 's'} of both logs to narrow.`
+                : ' Keep logging both to narrow it.'}
+            </div>
+          ) : checkIn.targetVerdict !== 'none' ? (
+            <p className="text-sm text-slate-300">
+              Your target ({goalCal.toLocaleString()}) is{' '}
+              <b className={checkIn.targetVerdict === 'deficit' ? 'text-green-400' : 'text-amber-400'}>
+                {Math.abs(checkIn.tdee - goalCal)} kcal/day{' '}
+                {checkIn.targetVerdict === 'deficit' ? 'below' : 'above'}
+              </b>{' '}
+              estimated maintenance — a {checkIn.targetVerdict}.
+              {!checkIn.directionKnown && ' (weight-trend direction still fuzzy)'}
+            </p>
+          ) : null}
+
+          {/* Basis + coverage so the numbers aren't a black box. */}
+          <p className="text-[11px] text-slate-500">
+            From <b className="text-slate-300">{checkIn.avgIntake}</b> kcal avg intake and weight{' '}
+            <b className="text-slate-300">
               {checkIn.rateWk > 0 ? '+' : ''}
               {r1(checkIn.rateWk)}
             </b>{' '}
-            kg/wk over the span. This is your total maintenance (activity included).
-          </p>
-          <p className="text-[11px] text-slate-400">
-            Trend{' '}
-            <b className="text-slate-200">
-              {checkIn.rateWk > 0 ? '+' : ''}
-              {r1(checkIn.rateWk)}
-            </b>{' '}
-            kg/wk (95% CI {r1(checkIn.ciLoWk)} … {r1(checkIn.ciHiWk)})
+            kg/wk (95% CI {r1(checkIn.ciLoWk)}…{r1(checkIn.ciHiWk)}). Total maintenance, activity included.
           </p>
           <p className={`text-[11px] ${checkIn.covPct < 80 ? 'text-amber-400' : 'text-slate-500'}`}>
             Logging coverage {checkIn.covPct}% ({checkIn.logged}/{checkIn.spanDays} days)
-            {checkIn.covPct < 80 ? ' — under-logged days bias this LOW; trust it less.' : ''}
+            {checkIn.covPct < 80 ? ' — gaps bias this; trust it less.' : ''}
           </p>
-          {profile?.tdee > 0 && Math.abs(checkIn.tdee - profile.tdee) >= 150 && (
-            <p className="text-[11px] text-slate-500">
-              Your profile estimate was {profile.tdee}. The measured number is{' '}
-              {checkIn.tdee < profile.tdee ? 'lower' : 'higher'} — usually because the activity
-              setting over/under-shot, or some food/drinks aren't logged. The measured trend beats
-              the formula only if your logging is complete.
-            </p>
-          )}
 
-          {goalCal > 0 && Math.abs(checkIn.suggested - goalCal) <= 30 ? (
-            <p className="text-sm text-green-400">
-              ✅ Your goal matches the data — no change needed.
-            </p>
-          ) : reviewing && draft ? (
-            <div className="space-y-3 rounded-xl border border-slate-700/60 bg-slate-800/40 p-3">
-              <p className="text-sm text-slate-300">
-                Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
-                {goalCal > 0 && (
-                  <span className="text-slate-500">
-                    {' '}
-                    ({checkIn.suggested > goalCal ? '+' : ''}
-                    {checkIn.suggested - goalCal})
-                  </span>
-                )}
-                . Protein &amp; fat carry over, carbs fill the rest — adjust anything, then apply.
-              </p>
-              <TargetsEditor bare showBaseline={false} targets={draft} onChange={setDraft} />
-              <div className="flex gap-2">
-                <Button className="flex-1" disabled={applying} onClick={() => applyGoalTargets(draft)}>
-                  {applying ? 'Applying…' : 'Apply goal'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  disabled={applying}
-                  onClick={() => {
-                    setReviewing(false)
-                    setDraft(null)
-                  }}
-                >
-                  Cancel
-                </Button>
+          {/* Adjust — only when the target is clearly off maintenance. A range that
+              straddles the target can't justify a change yet. */}
+          {checkIn.targetVerdict !== 'unclear' &&
+            checkIn.targetVerdict !== 'none' &&
+            (goalCal > 0 && Math.abs(checkIn.suggested - goalCal) <= 30 ? (
+              <p className="text-sm text-green-400">✅ Your goal matches the data — no change needed.</p>
+            ) : reviewing && draft ? (
+              <div className="space-y-3 rounded-xl border border-slate-700/60 bg-slate-800/40 p-3">
+                <p className="text-sm text-slate-300">
+                  Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
+                  {goalCal > 0 && (
+                    <span className="text-slate-500">
+                      {' '}
+                      ({checkIn.suggested > goalCal ? '+' : ''}
+                      {checkIn.suggested - goalCal})
+                    </span>
+                  )}
+                  . Protein &amp; fat carry over, carbs fill the rest — adjust anything, then apply.
+                </p>
+                <TargetsEditor bare showBaseline={false} targets={draft} onChange={setDraft} />
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={applying} onClick={() => applyGoalTargets(draft)}>
+                    {applying ? 'Applying…' : 'Apply goal'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={applying}
+                    onClick={() => {
+                      setReviewing(false)
+                      setDraft(null)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm text-slate-300">
-                Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
-                {goalCal > 0 && (
-                  <span className="text-slate-500">
-                    {' '}
-                    ({checkIn.suggested > goalCal ? '+' : ''}
-                    {checkIn.suggested - goalCal})
-                  </span>
-                )}
-              </p>
-              <Button className="w-full" disabled={applying} onClick={() => openReview(checkIn.suggested)}>
-                Review &amp; apply
-              </Button>
-              <p className="text-[11px] text-slate-500">
-                See the suggested protein / carbs / fat and tweak them before saving.
-              </p>
-            </>
-          )}
+            ) : (
+              <>
+                <p className="text-sm text-slate-300">
+                  Suggested goal: <b className="text-white">{checkIn.suggested}</b> kcal
+                  {goalCal > 0 && (
+                    <span className="text-slate-500">
+                      {' '}
+                      ({checkIn.suggested > goalCal ? '+' : ''}
+                      {checkIn.suggested - goalCal})
+                    </span>
+                  )}
+                </p>
+                <Button className="w-full" disabled={applying} onClick={() => openReview(checkIn.suggested)}>
+                  Review &amp; apply
+                </Button>
+                <p className="text-[11px] text-slate-500">
+                  See the suggested protein / carbs / fat and tweak them before saving.
+                </p>
+              </>
+            ))}
         </Card>
       ) : (
         <Card>
@@ -1359,13 +1400,6 @@ export default function Weight() {
               trend). You have {checkIn.weighIns} weigh-in{checkIn.weighIns === 1 ? '' : 's'} spanning{' '}
               {checkIn.spanDays} day{checkIn.spanDays === 1 ? '' : 's'} so far — keep weighing in over
               the coming days and it'll unlock.
-            </p>
-          ) : checkIn.inconclusive ? (
-            <p className="text-xs text-amber-400">
-              Not conclusive yet — the trend is {checkIn.rateWk > 0 ? '+' : ''}
-              {r1(checkIn.rateWk)} kg/wk but its 95% CI ({r1(checkIn.ciLoWk)} … {r1(checkIn.ciHiWk)})
-              still straddles 0, so we can't tell gaining from losing. Keep logging — the interval
-              will narrow.
             </p>
           ) : checkIn.unreliable ? (
             <p className="text-xs text-slate-500">
