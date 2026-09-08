@@ -171,6 +171,32 @@ function weeklyTrend(points) {
   return { rateWk, ciLoWk: rateWk - marginWk, ciHiWk: rateWk + marginWk, n }
 }
 
+// Median of a numeric array (non-mutating).
+function medianOf(arr) {
+  const s = [...arr].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+}
+
+// Split day rows into kept / excluded by the Iglewicz–Hoaglin modified z-score
+// on `kcal`: |0.6745·(x − median) / MAD| > 3.5. Uses median + MAD (not mean/SD,
+// which the outlier itself inflates — and whose z ceiling is (n−1)/√n, so a
+// 3-SD rule barely fires at small n). MAD = 0 (≥half the days identical) → no
+// trim, to avoid dividing by zero.
+function madOutlierSplit(days) {
+  if (days.length < 3) return { kept: days, excluded: [] }
+  const median = medianOf(days.map((d) => d.kcal))
+  const mad = medianOf(days.map((d) => Math.abs(d.kcal - median)))
+  if (mad === 0) return { kept: days, excluded: [] }
+  const kept = []
+  const excluded = []
+  for (const d of days) {
+    const mz = Math.abs((0.6745 * (d.kcal - median)) / mad)
+    ;(mz > 3.5 ? excluded : kept).push(d)
+  }
+  return { kept, excluded }
+}
+
 // Recomp-aware read on the weight trend for the current goal.
 function trendVerdict(rate, goalType) {
   if (rate == null) return null
@@ -229,6 +255,7 @@ export default function Weight() {
   const [includeToday, setIncludeToday] = useState(true) // exclude today's partial log from averages
   const [showMaintDetail, setShowMaintDetail] = useState(false) // maintenance-avg breakdown
   const [tdeeWin, setTdeeWin] = useState(28) // measured-TDEE window (days) — see TDEE_WINDOWS
+  const [excludeOutliers, setExcludeOutliers] = useState(true) // MAD-trim intake outliers in the check-in
   const [reviewing, setReviewing] = useState(false) // check-in Apply → editable review
   const [draft, setDraft] = useState(null) // editable {goal_calories,protein_g,carbs_g,fat_g}
   // Preset "Nd" = last N days *including today*, so it reads /N not /N+1.
@@ -501,12 +528,24 @@ export default function Weight() {
     const { rateWk, ciLoWk, ciHiWk } = trend
     const allDays = foodByDay.filter((d) => d.date >= spanStart && d.date <= spanEnd)
     const fdays = allDays.filter((d) => d.eaten >= intakeFloor)
-    const excluded = allDays.length - fdays.length
+    // Under-logged days (below the completeness floor) — shown with their values,
+    // NOT just counted, since dropping a genuinely-low day biases maintenance up.
+    const underLogged = allDays
+      .filter((d) => d.eaten < intakeFloor)
+      .map((d) => ({ date: d.date, kcal: Math.round(d.eaten) }))
     const covPct = spanDays ? Math.round((fdays.length / spanDays) * 100) : 0
     if (fdays.length < cfg.minWeighIns) {
-      return { ready: false, lowLog: true, logged: fdays.length, spanDays, covPct }
+      return { ready: false, lowLog: true, logged: fdays.length, spanDays, covPct, underLogged }
     }
-    const avgIntake = Math.round(fdays.reduce((s, d) => s + d.kcal, 0) / fdays.length) // gross
+    // Robustly drop intake outliers (modified z-score on median + MAD) so one
+    // buffet day doesn't inflate the habitual average. Weight is NOT trimmed — a
+    // bouncy weigh-in is real noise the OLS + CI already handle.
+    const { kept, excluded: outlierDays } = excludeOutliers
+      ? madOutlierSplit(fdays)
+      : { kept: fdays, excluded: [] }
+    const outliers = outlierDays.map((d) => ({ date: d.date, kcal: Math.round(d.kcal) }))
+    const usedDays = kept.length ? kept : fdays // safety: never end up empty
+    const avgIntake = Math.round(usedDays.reduce((s, d) => s + d.kcal, 0) / usedDays.length) // gross
     const tdee = Math.round(avgIntake - (rateWk / 7) * KCAL_PER_KG)
     // Reject an impossible / far-off point estimate (too little or bad data).
     const bmr = profile?.bmr || 1200
@@ -520,9 +559,9 @@ export default function Weight() {
     // show the range — a point value hides how uncertain a near-maintenance read is.
     const marginWk = (ciHiWk - ciLoWk) / 2
     const weightMargin = (marginWk / 7) * KCAL_PER_KG
-    const nI = fdays.length
+    const nI = usedDays.length
     const sdI =
-      nI > 1 ? Math.sqrt(fdays.reduce((s, d) => s + (d.kcal - avgIntake) ** 2, 0) / (nI - 1)) : 0
+      nI > 1 ? Math.sqrt(usedDays.reduce((s, d) => s + (d.kcal - avgIntake) ** 2, 0) / (nI - 1)) : 0
     const intakeMargin = nI > 1 ? tCrit(nI - 1) * (sdI / Math.sqrt(nI)) : 0
     const maintMargin = Math.round(Math.sqrt(weightMargin ** 2 + intakeMargin ** 2))
     const maintLo = tdee - maintMargin
@@ -554,9 +593,10 @@ export default function Weight() {
       tdee, maintLo, maintHi, maintMargin, widest, widestMargin,
       avgIntake, rateWk, ciLoWk, ciHiWk, directionKnown,
       targetVerdict, weeksToNarrow, suggested,
-      spanDays, logged: fdays.length, excluded, weighIns, covPct,
+      spanDays, logged: fdays.length, used: usedDays.length, weighIns, covPct,
+      outliers, underLogged,
     }
-  }, [weightLogs, foodByDay, profile, intakeFloor, tdeeWin, goalCal])
+  }, [weightLogs, foodByDay, profile, intakeFloor, tdeeWin, goalCal, excludeOutliers])
 
   // Energy balance over the *selected period* (same window as Adherence, so the
   // whole page describes one range): net intake vs goal, and the predicted
@@ -578,7 +618,10 @@ export default function Weight() {
     const vsMaint = totalMaint > 0 ? Math.round(totalNet - totalMaint) : null
     const predictedKg = vsMaint != null ? Math.round((vsMaint / KCAL_PER_KG) * 100) / 100 : null
     const maint = totalMaint > 0 ? Math.round(totalMaint / n) : curMaint // avg, for display
-    return { ready: true, n, vsGoal, vsMaint, predictedKg, maint }
+    // ALL logged days (no outlier trim) — the buffet day really happened, so this
+    // card reports it. Labelled distinctly from the check-in's "habitual" number.
+    const avgIntake = Math.round(totalNet / n)
+    return { ready: true, n, vsGoal, vsMaint, predictedKg, maint, avgIntake }
   }, [foodData, goalCal, intakeFloor, profile])
 
   // Human label for the selected range, shown on the energy-balance card.
@@ -963,6 +1006,9 @@ export default function Weight() {
           <p className="text-xs text-slate-500">
             Gross intake over {periodRecap.n} logged day{periodRecap.n > 1 ? 's' : ''} · {rangeText}.
           </p>
+          <p className="text-[11px] text-slate-500">
+            Includes all logged days ({periodRecap.avgIntake.toLocaleString()} avg) — outliers kept, since they really happened.
+          </p>
           {periodRecap.vsGoal != null && (
             <p className="text-sm text-slate-300">
               vs your goal:{' '}
@@ -1290,9 +1336,36 @@ export default function Weight() {
               95% range {checkIn.maintLo.toLocaleString()}–{checkIn.maintHi.toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-500">
-              From {checkIn.logged} logged day{checkIn.logged === 1 ? '' : 's'} · {checkIn.weighIns} weigh-ins
-              {checkIn.excluded > 0 ? ` · ${checkIn.excluded} skipped` : ''}
+              {excludeOutliers && checkIn.outliers.length > 0 ? 'Habitual intake, outliers excluded' : 'All logged days'}{' '}
+              ({checkIn.avgIntake.toLocaleString()} avg) · {checkIn.used} day{checkIn.used === 1 ? '' : 's'} used ·{' '}
+              {checkIn.weighIns} weigh-ins
             </div>
+          </div>
+
+          {/* Outlier toggle + exactly which days were dropped, with their values —
+              so an exclusion is always visible, never silent. */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <input
+                type="checkbox"
+                checked={excludeOutliers}
+                onChange={(e) => setExcludeOutliers(e.target.checked)}
+                className="h-3.5 w-3.5 accent-green-500"
+              />
+              Exclude intake outliers (modified z-score)
+            </label>
+            {excludeOutliers && checkIn.outliers.length > 0 && (
+              <p className="text-[11px] text-slate-500">
+                {checkIn.outliers.length} outlier{checkIn.outliers.length === 1 ? '' : 's'} excluded:{' '}
+                {checkIn.outliers.map((o) => `${shortDate(o.date)} (${o.kcal.toLocaleString()} kcal)`).join(', ')}
+              </p>
+            )}
+            {checkIn.underLogged.length > 0 && (
+              <p className="text-[11px] text-slate-500">
+                {checkIn.underLogged.length} under-logged skipped:{' '}
+                {checkIn.underLogged.map((o) => `${shortDate(o.date)} (${o.kcal.toLocaleString()})`).join(', ')}
+              </p>
+            )}
           </div>
 
           {/* Target vs the maintenance RANGE (not the point). Inside → can't decide. */}
