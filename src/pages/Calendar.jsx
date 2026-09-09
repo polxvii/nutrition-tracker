@@ -24,6 +24,7 @@ export default function Calendar() {
   const [streak, setStreak] = useState(0)
   const [goalHist, setGoalHist] = useState([]) // goal snapshots (ascending by date)
   const [loading, setLoading] = useState(true)
+  const [includeToday, setIncludeToday] = useState(true) // drop today's partial log from the summary
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -123,8 +124,15 @@ export default function Calendar() {
   // Gross model: colour by food eaten only (goal/maintenance already include
   // activity). Exercise is shown as info (🔥), not subtracted.
   const netOf = (b) => b.cal
-  // Month summary over days with food logged.
-  const logged = Object.values(byDate).filter((b) => b.cal > 0)
+  // Month summary over days with food logged. When viewing the current month you
+  // can drop today (its log is usually partial → drags the averages down). Only
+  // affects the summary card — the grid still shows today's real number.
+  const isThisMonth = cursor.y === now.getFullYear() && cursor.m === now.getMonth()
+  const excludeToday = isThisMonth && !includeToday
+  const loggedEntries = Object.entries(byDate).filter(
+    ([k, b]) => b.cal > 0 && !(excludeToday && k === today)
+  )
+  const logged = loggedEntries.map(([, b]) => b)
   const nLogged = logged.length
   const avg = nLogged
     ? {
@@ -139,7 +147,6 @@ export default function Calendar() {
   // entries rather than the value-only `logged` array.
   const goalOn = (k) => goalForDate(goalHist, k)?.goal_calories ?? goalCal
   const maintOn = (k) => goalForDate(goalHist, k)?.tdee ?? tdee
-  const loggedEntries = Object.entries(byDate).filter(([, b]) => b.cal > 0)
   const onTarget =
     goalCal > 0 || goalHist.length
       ? loggedEntries.filter(([k, b]) => goalOn(k) > 0 && netOf(b) <= goalOn(k)).length
@@ -302,6 +309,17 @@ export default function Calendar() {
               {nLogged}/{daysInMonth} days logged
             </span>
           </div>
+          {isThisMonth && (
+            <label className="flex items-center justify-end gap-1.5 text-[11px] text-slate-400">
+              <input
+                type="checkbox"
+                checked={includeToday}
+                onChange={(e) => setIncludeToday(e.target.checked)}
+                className="h-3.5 w-3.5 accent-green-500"
+              />
+              Include today{!includeToday && byDate[today]?.cal > 0 ? ' · excluded' : ''}
+            </label>
+          )}
 
           {avg && (
             <>
