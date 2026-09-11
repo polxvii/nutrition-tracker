@@ -667,6 +667,44 @@ export default function Today() {
     await load()
   }
 
+  // Duplicate the selected entries onto `date` (originals stay). Each keeps its
+  // own meal + full details (macros, breakdown, serving info) — a faithful copy.
+  async function bulkCopy(date) {
+    if (!date) return
+    const at = timestampFor(date)
+    const rows = logs
+      .filter((l) => selIds.has(l.id))
+      .map((l) => ({
+        user_id: user.id,
+        logged_at: at,
+        meal_type: l.meal_type,
+        food_name: l.food_name,
+        source: l.source,
+        grams: l.grams,
+        unit: l.unit,
+        calories: l.calories,
+        protein_g: l.protein_g,
+        carbs_g: l.carbs_g,
+        fat_g: l.fat_g,
+        ...(l.alcohol_g != null ? { alcohol_g: l.alcohol_g } : {}),
+        ...(l.components != null ? { components: l.components } : {}),
+        ...(l.serving_g != null ? { serving_g: l.serving_g } : {}),
+        ...(l.servings != null ? { servings: l.servings } : {}),
+        ...(l.photo_url != null ? { photo_url: l.photo_url } : {}),
+        ...(l.user_note != null ? { user_note: l.user_note } : {}),
+      }))
+    if (!rows.length) return
+    setBusy(true)
+    const { error } = await supabase.from('food_logs').insert(rows)
+    setBusy(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    exitSelect()
+    await load()
+  }
+
   // Leaving the day (or any reload of another date) drops the selection so it
   // can't act on rows you can no longer see.
   useEffect(() => {
@@ -1151,7 +1189,7 @@ export default function Today() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="ghost"
                 className="text-sm"
@@ -1170,6 +1208,17 @@ export default function Today() {
                 }}
               >
                 Date
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-sm"
+                disabled={selIds.size === 0}
+                onClick={() => {
+                  setBulkDate(selectedDate)
+                  setBulkAction('copy')
+                }}
+              >
+                Copy
               </Button>
               <Button
                 variant="danger"
@@ -1249,6 +1298,40 @@ export default function Today() {
             <div className="flex gap-2">
               <Button className="flex-1" disabled={busy} onClick={() => applyBulkDate(bulkDate)}>
                 {busy ? 'Moving…' : 'Move'}
+              </Button>
+              <Button variant="ghost" onClick={() => setBulkAction(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk: copy selected items to a date (originals stay). */}
+      {bulkAction === 'copy' && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3"
+          onClick={() => setBulkAction(null)}
+        >
+          <div
+            className="mb-2 w-full max-w-md space-y-3 rounded-2xl bg-slate-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-sm font-medium text-slate-200">
+              Copy {selIds.size} item{selIds.size === 1 ? '' : 's'} to a date
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Duplicates them (originals stay). Each keeps its own meal + details.
+            </p>
+            <Input
+              type="date"
+              value={bulkDate}
+              max={todayISODate()}
+              onChange={(e) => e.target.value && setBulkDate(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button className="flex-1" disabled={busy} onClick={() => bulkCopy(bulkDate)}>
+                {busy ? 'Copying…' : 'Copy'}
               </Button>
               <Button variant="ghost" onClick={() => setBulkAction(null)}>
                 Cancel
