@@ -1189,10 +1189,10 @@ export default function Today() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <Button
                 variant="ghost"
-                className="text-sm"
+                className="px-2 text-sm"
                 disabled={selIds.size === 0}
                 onClick={() => setBulkAction('meal')}
               >
@@ -1200,7 +1200,7 @@ export default function Today() {
               </Button>
               <Button
                 variant="ghost"
-                className="text-sm"
+                className="px-2 text-sm"
                 disabled={selIds.size === 0}
                 onClick={() => {
                   setBulkDate(selectedDate)
@@ -1211,7 +1211,7 @@ export default function Today() {
               </Button>
               <Button
                 variant="ghost"
-                className="text-sm"
+                className="px-2 text-sm"
                 disabled={selIds.size === 0}
                 onClick={() => {
                   setBulkDate(selectedDate)
@@ -1222,7 +1222,7 @@ export default function Today() {
               </Button>
               <Button
                 variant="danger"
-                className="text-sm"
+                className="px-2 text-sm"
                 disabled={selIds.size === 0 || busy}
                 onClick={bulkDelete}
               >
