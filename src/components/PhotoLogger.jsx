@@ -39,7 +39,7 @@ export default function PhotoLogger({
   const [servText, setServText] = useState('1')
   const [zoom, setZoom] = useState(null) // previewUrl shown full-screen in the lightbox
 
-  const MAX_IMAGES = 6
+  const MAX_IMAGES = 12
 
   async function addImageFiles(files) {
     if (!files.length) return
