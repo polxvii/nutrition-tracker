@@ -14,7 +14,7 @@ import AddFood from '../components/AddFood'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
 import SwipeRow from '../components/SwipeRow'
-import { Button, Card, Input, Skeleton } from '../components/ui'
+import { Button, Card, Input, Select, Skeleton } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -145,8 +145,9 @@ export default function Today() {
   // Multi-select for bulk change-meal / change-date / delete.
   const [selectMode, setSelectMode] = useState(false)
   const [selIds, setSelIds] = useState(() => new Set())
-  const [bulkAction, setBulkAction] = useState(null) // 'meal' | 'date' | null
+  const [bulkAction, setBulkAction] = useState(null) // 'meal' | 'date' | 'copy' | null
   const [bulkDate, setBulkDate] = useState(todayISODate())
+  const [bulkCopyMeal, setBulkCopyMeal] = useState('') // '' = keep each item's own meal
   const [recentExercises, setRecentExercises] = useState([]) // quick-pick chips
   const [busy, setBusy] = useState(false)
 
@@ -668,8 +669,9 @@ export default function Today() {
   }
 
   // Duplicate the selected entries onto `date` (originals stay). Each keeps its
-  // own meal + full details (macros, breakdown, serving info) — a faithful copy.
-  async function bulkCopy(date) {
+  // full details (macros, breakdown, serving info) — a faithful copy. Meal is the
+  // item's own by default, or `mealOverride` for food rows (exercise has none).
+  async function bulkCopy(date, mealOverride) {
     if (!date) return
     const at = timestampFor(date)
     const rows = logs
@@ -677,7 +679,7 @@ export default function Today() {
       .map((l) => ({
         user_id: user.id,
         logged_at: at,
-        meal_type: l.meal_type,
+        meal_type: mealOverride && l.source !== 'exercise' ? mealOverride : l.meal_type,
         food_name: l.food_name,
         source: l.source,
         grams: l.grams,
@@ -1215,6 +1217,7 @@ export default function Today() {
                 disabled={selIds.size === 0}
                 onClick={() => {
                   setBulkDate(selectedDate)
+                  setBulkCopyMeal('')
                   setBulkAction('copy')
                 }}
               >
@@ -1318,19 +1321,38 @@ export default function Today() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-sm font-medium text-slate-200">
-              Copy {selIds.size} item{selIds.size === 1 ? '' : 's'} to a date
+              Copy {selIds.size} item{selIds.size === 1 ? '' : 's'}
             </div>
-            <p className="text-[11px] text-slate-500">
-              Duplicates them (originals stay). Each keeps its own meal + details.
-            </p>
-            <Input
-              type="date"
-              value={bulkDate}
-              max={todayISODate()}
-              onChange={(e) => e.target.value && setBulkDate(e.target.value)}
-            />
+            <p className="text-[11px] text-slate-500">Duplicates them (originals stay).</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-slate-400">
+                Date
+                <Input
+                  type="date"
+                  value={bulkDate}
+                  max={todayISODate()}
+                  onChange={(e) => e.target.value && setBulkDate(e.target.value)}
+                  className="mt-0.5"
+                />
+              </label>
+              <label className="text-xs text-slate-400">
+                Meal
+                <Select
+                  value={bulkCopyMeal}
+                  onChange={(e) => setBulkCopyMeal(e.target.value)}
+                  className="mt-0.5"
+                >
+                  <option value="">Keep original</option>
+                  {MEALS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
             <div className="flex gap-2">
-              <Button className="flex-1" disabled={busy} onClick={() => bulkCopy(bulkDate)}>
+              <Button className="flex-1" disabled={busy} onClick={() => bulkCopy(bulkDate, bulkCopyMeal)}>
                 {busy ? 'Copying…' : 'Copy'}
               </Button>
               <Button variant="ghost" onClick={() => setBulkAction(null)}>
