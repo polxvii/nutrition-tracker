@@ -1324,33 +1324,31 @@ export default function Today() {
               Copy {selIds.size} item{selIds.size === 1 ? '' : 's'}
             </div>
             <p className="text-[11px] text-slate-500">Duplicates them (originals stay).</p>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs text-slate-400">
-                Date
-                <Input
-                  type="date"
-                  value={bulkDate}
-                  max={todayISODate()}
-                  onChange={(e) => e.target.value && setBulkDate(e.target.value)}
-                  className="mt-0.5"
-                />
-              </label>
-              <label className="text-xs text-slate-400">
-                Meal
-                <Select
-                  value={bulkCopyMeal}
-                  onChange={(e) => setBulkCopyMeal(e.target.value)}
-                  className="mt-0.5"
-                >
-                  <option value="">Keep original</option>
-                  {MEALS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            </div>
+            <label className="block text-xs text-slate-400">
+              Date
+              <Input
+                type="date"
+                value={bulkDate}
+                max={todayISODate()}
+                onChange={(e) => e.target.value && setBulkDate(e.target.value)}
+                className="mt-0.5"
+              />
+            </label>
+            <label className="block text-xs text-slate-400">
+              Meal
+              <Select
+                value={bulkCopyMeal}
+                onChange={(e) => setBulkCopyMeal(e.target.value)}
+                className="mt-0.5"
+              >
+                <option value="">Keep original</option>
+                {MEALS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
             <div className="flex gap-2">
               <Button className="flex-1" disabled={busy} onClick={() => bulkCopy(bulkDate, bulkCopyMeal)}>
                 {busy ? 'Copying…' : 'Copy'}
