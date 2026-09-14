@@ -14,7 +14,7 @@ import AddFood from '../components/AddFood'
 import ExerciseForm from '../components/ExerciseForm'
 import EntryEditor from '../components/EntryEditor'
 import SwipeRow from '../components/SwipeRow'
-import { Button, Card, Input, Select, Skeleton } from '../components/ui'
+import { Button, Card, Field, Input, Select, Skeleton } from '../components/ui'
 
 const num = (v) => {
   const n = Number(v)
@@ -1324,23 +1324,16 @@ export default function Today() {
               Copy {selIds.size} item{selIds.size === 1 ? '' : 's'}
             </div>
             <p className="text-[11px] text-slate-500">Duplicates them (originals stay).</p>
-            <label className="block text-xs text-slate-400">
-              Date
+            <Field label="Date">
               <Input
                 type="date"
                 value={bulkDate}
                 max={todayISODate()}
                 onChange={(e) => e.target.value && setBulkDate(e.target.value)}
-                className="mt-0.5"
               />
-            </label>
-            <label className="block text-xs text-slate-400">
-              Meal
-              <Select
-                value={bulkCopyMeal}
-                onChange={(e) => setBulkCopyMeal(e.target.value)}
-                className="mt-0.5"
-              >
+            </Field>
+            <Field label="Meal">
+              <Select value={bulkCopyMeal} onChange={(e) => setBulkCopyMeal(e.target.value)}>
                 <option value="">Keep original</option>
                 {MEALS.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -1348,7 +1341,7 @@ export default function Today() {
                   </option>
                 ))}
               </Select>
-            </label>
+            </Field>
             <div className="flex gap-2">
               <Button className="flex-1" disabled={busy} onClick={() => bulkCopy(bulkDate, bulkCopyMeal)}>
                 {busy ? 'Copying…' : 'Copy'}
