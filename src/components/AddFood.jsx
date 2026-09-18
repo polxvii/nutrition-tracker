@@ -90,6 +90,9 @@ export default function AddFood({
   // Saved food being logged with a per-log serving multiplier (does NOT change
   // the saved record — reopening always starts back at ×1).
   const [savedPick, setSavedPick] = useState(null)
+  // Saved meal (combo) queued for a confirm step — pick the meal slot + review
+  // its items before logging (the list's ＋ still logs instantly for a quick add).
+  const [mealPick, setMealPick] = useState(null)
   const [savedServ, setSavedServ] = useState(1)
   const [savedServText, setSavedServText] = useState('1')
   const [savedGramsText, setSavedGramsText] = useState('') // synced to savedServ via per-serving grams
@@ -724,6 +727,80 @@ export default function AddFood({
     )
   }
 
+  // Confirm sheet for a saved meal (combo): choose the meal slot + review its
+  // items before logging. Mirrors the saved-food serving picker; the meals
+  // list's ＋ still logs instantly for a quick add.
+  if (mealPick) {
+    const items = mealPick.items || []
+    const tot = items.reduce(
+      (a, it) => ({
+        calories: a.calories + (Number(it.calories) || 0),
+        protein_g: a.protein_g + (Number(it.protein_g) || 0),
+        carbs_g: a.carbs_g + (Number(it.carbs_g) || 0),
+        fat_g: a.fat_g + (Number(it.fat_g) || 0),
+      }),
+      { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    )
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="min-w-0 truncate text-sm font-medium text-white">{mealPick.name}</span>
+          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setMealPick(null)}>
+            ‹ Back
+          </button>
+        </div>
+
+        <Field label="Meal">
+          <Select value={meal} onChange={(e) => setMeal(e.target.value)}>
+            {MEALS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <div className="text-center text-sm text-slate-300">
+          <b className="text-white">{r(tot.calories)}</b> kcal · {r1(tot.protein_g)}P · {r1(tot.carbs_g)}C ·{' '}
+          {r1(tot.fat_g)}F
+        </div>
+
+        {items.length > 0 && (
+          <div className="space-y-1 rounded-lg border border-slate-700/60 bg-slate-800/40 p-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              🍱 {items.length} items
+            </div>
+            {items.map((it, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate text-slate-300">
+                  {it.food_name || 'Item'}
+                  {it.grams != null ? <span className="text-slate-500"> · {r(it.grams)}g</span> : ''}
+                </span>
+                <span className="shrink-0 tabular-nums text-slate-400">{r(it.calories)} kcal</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            onClick={() => {
+              logMeal(mealPick)
+              setMealPick(null)
+            }}
+            disabled={busy}
+          >
+            {busy ? 'Adding…' : 'Add to log'}
+          </Button>
+          <Button variant="ghost" onClick={() => setMealPick(null)}>
+            Back
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // Edit a saved (frequent) food. Checked BEFORE the saved-list view so opening
   // the editor from that list actually swaps to it (the list no longer wins).
   if (editingSaved) {
@@ -841,7 +918,9 @@ export default function AddFood({
           </p>
         ) : (
           <>
-          <p className="text-[11px] text-slate-500">Tap to add · swipe a row left to edit / delete</p>
+          <p className="text-[11px] text-slate-500">
+            Tap a name to pick the meal · ＋ adds now · swipe a row to edit / delete
+          </p>
           <div className="space-y-1">
             {meals.map((m) => {
               const kcal = (m.items || []).reduce((s, it) => s + (Number(it.calories) || 0), 0)
@@ -856,7 +935,7 @@ export default function AddFood({
                   ]}
                 >
                   <div className="flex items-center gap-2 bg-slate-800 px-3 py-2">
-                    <button onClick={() => logMeal(m)} className="min-w-0 flex-1 text-left">
+                    <button onClick={() => setMealPick(m)} className="min-w-0 flex-1 text-left">
                       <div className="truncate text-sm text-white">{m.name}</div>
                       <div className="text-xs text-slate-500">
                         {(m.items || []).length} items · {r(kcal)} kcal
