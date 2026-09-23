@@ -38,6 +38,7 @@ export default function PhotoLogger({
   const [serv, setServ] = useState(1) // serving multiplier — scales all items at once
   const [servText, setServText] = useState('1')
   const [zoom, setZoom] = useState(null) // previewUrl shown full-screen in the lightbox
+  const [preparing, setPreparing] = useState(0) // images still being decoded/downscaled
 
   const MAX_IMAGES = 12
 
@@ -45,15 +46,26 @@ export default function PhotoLogger({
     if (!files.length) return
     setError(null)
     setItems(null)
-    try {
-      const added = []
-      for (const file of files) {
+    // Only take as many as there's room for, then decode them one at a time and
+    // append each as it finishes — so thumbnails appear progressively instead of
+    // the screen freezing until every image is done.
+    const room = Math.max(0, MAX_IMAGES - images.length)
+    const batch = files.slice(0, room)
+    if (!batch.length) return
+    setPreparing((n) => n + batch.length)
+    for (const file of batch) {
+      try {
         const img = await fileToAnalyzableImage(file)
-        added.push({ base64: img.base64, mediaType: img.mediaType, previewUrl: img.previewUrl })
+        setImages((prev) =>
+          prev.length >= MAX_IMAGES
+            ? prev
+            : [...prev, { base64: img.base64, mediaType: img.mediaType, previewUrl: img.previewUrl }]
+        )
+      } catch {
+        setError('Could not read that image.')
+      } finally {
+        setPreparing((n) => Math.max(0, n - 1))
       }
-      setImages((prev) => [...prev, ...added].slice(0, MAX_IMAGES))
-    } catch {
-      setError('Could not read that image.')
     }
   }
 
@@ -340,7 +352,7 @@ export default function PhotoLogger({
         <div className="text-xs text-slate-400">
           Add photos (optional — more angles / dishes = better accuracy)
         </div>
-        {images.length > 0 && (
+        {(images.length > 0 || preparing > 0) && (
           <div className="grid grid-cols-3 gap-2">
             {images.map((im, i) => (
               <div key={i} className="relative">
@@ -357,6 +369,15 @@ export default function PhotoLogger({
                 >
                   ✕
                 </button>
+              </div>
+            ))}
+            {/* Placeholder tiles for images still being processed. */}
+            {Array.from({ length: preparing }).map((_, i) => (
+              <div
+                key={`p${i}`}
+                className="flex h-24 w-full animate-pulse items-center justify-center rounded-lg bg-slate-800 text-xs text-slate-500"
+              >
+                …
               </div>
             ))}
           </div>
@@ -390,9 +411,9 @@ export default function PhotoLogger({
           <Button
             className="flex-1"
             onClick={analyze}
-            disabled={(!images.length && !note.trim()) || analyzing}
+            disabled={(!images.length && !note.trim()) || analyzing || preparing > 0}
           >
-            {analyzing ? 'Analyzing…' : '✨ Analyze'}
+            {analyzing ? 'Analyzing…' : preparing > 0 ? 'Preparing…' : '✨ Analyze'}
           </Button>
           <Button variant="ghost" onClick={onCancel}>
             Cancel
