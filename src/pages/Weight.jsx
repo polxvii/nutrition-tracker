@@ -422,6 +422,21 @@ export default function Weight() {
     return [Math.floor(lo - 1), Math.ceil(hi + 1)]
   })()
 
+  // Lowest / highest weigh-in in the selected period (raw daily weight, not the
+  // EWMA trend) — surfaced under the chart so the range's swing is legible.
+  const weightExtremes = weightData.length
+    ? weightData.reduce(
+        (acc, p) => ({
+          lo: p.weight < acc.lo.weight ? p : acc.lo,
+          hi: p.weight > acc.hi.weight ? p : acc.hi,
+        }),
+        { lo: weightData[0], hi: weightData[0] }
+      )
+    : null
+  // Weigh-ins inside the selected period, for the history list (which follows
+  // the same range toggle as the chart instead of listing every date).
+  const weighInsInPeriod = weightLogs.filter((l) => inPeriod(l.logged_date))
+
   // Adherence over the range.
   const foodData = useMemo(() => {
     const rows = foodByDay.filter((d) => inPeriod(d.date)).map((d) => {
@@ -1590,6 +1605,14 @@ export default function Weight() {
               </>
             )}
           </p>
+          {weightExtremes && (
+            <p className="text-center text-[11px] text-slate-500">
+              ↓ Low <b className="text-slate-300">{weightExtremes.lo.weight.toFixed(2)}</b>{' '}
+              <span className="text-slate-600">({weightExtremes.lo.date})</span> · ↑ High{' '}
+              <b className="text-slate-300">{weightExtremes.hi.weight.toFixed(2)}</b>{' '}
+              <span className="text-slate-600">({weightExtremes.hi.date})</span> kg
+            </p>
+          )}
           </>
         ) : (
           <p className="text-center text-sm text-slate-500">Log at least 2 weigh-ins to see your trend.</p>
@@ -1626,14 +1649,18 @@ export default function Weight() {
           )}
         </div>
 
-        {/* history · ALL weigh-ins (not just the period), tap a row to edit */}
+        {/* history · weigh-ins within the selected range, tap a row to edit */}
         {weightLogs.length > 0 && (
           <div className="space-y-1 border-t border-slate-800 pt-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              History · tap to edit · all dates
+              History · tap to edit ·{' '}
+              {preset === 'custom' ? `${fromDate} → ${toDate}` : `last ${preset.replace('d', ' days')}`}
             </div>
+            {weighInsInPeriod.length === 0 ? (
+              <p className="py-1 text-sm text-slate-500">No weigh-ins in this range.</p>
+            ) : (
             <div className="max-h-72 space-y-1 overflow-y-auto pr-0.5">
-              {weightLogs
+              {weighInsInPeriod
                 .slice()
                 .reverse()
                 .map((l) => (
@@ -1660,6 +1687,7 @@ export default function Weight() {
                   </div>
                 ))}
             </div>
+            )}
           </div>
         )}
       </Collapsible>
