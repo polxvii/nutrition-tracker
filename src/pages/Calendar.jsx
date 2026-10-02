@@ -21,7 +21,6 @@ export default function Calendar() {
   const [cursor, setCursor] = useState({ y: now.getFullYear(), m: now.getMonth() })
   const [byDate, setByDate] = useState({})
   const [monthWeight, setMonthWeight] = useState(null)
-  const [streak, setStreak] = useState(0)
   const [goalHist, setGoalHist] = useState([]) // goal snapshots (ascending by date)
   const [loading, setLoading] = useState(true)
   const [includeToday, setIncludeToday] = useState(true) // drop today's partial log from the summary
@@ -76,30 +75,6 @@ export default function Calendar() {
     load()
   }, [load])
 
-  // Current logging streak — consecutive days with food, ending today (or
-  // yesterday if today isn't logged yet). Independent of the viewed month.
-  useEffect(() => {
-    ;(async () => {
-      const since = new Date()
-      since.setDate(since.getDate() - 90)
-      const { data } = await supabase
-        .from('food_logs')
-        .select('logged_at')
-        .neq('source', 'exercise')
-        .gte('logged_at', since.toISOString())
-      const days = new Set((data ?? []).map((l) => todayISODate(new Date(l.logged_at))))
-      const d = new Date()
-      if (!days.has(todayISODate(d))) d.setDate(d.getDate() - 1)
-      let s = 0
-      while (days.has(todayISODate(d))) {
-        s++
-        d.setDate(d.getDate() - 1)
-      }
-      setStreak(s)
-    })()
-    // Streak is global (not tied to the viewed month); compute once per mount.
-  }, [])
-
   useEffect(() => {
     loadGoalHistory().then(setGoalHist)
   }, [])
@@ -134,6 +109,10 @@ export default function Calendar() {
   )
   const logged = loggedEntries.map(([, b]) => b)
   const nLogged = logged.length
+  // Workout days this month = days with any logged exercise. A tally (not an
+  // average), so today's workout always counts regardless of the include-today
+  // toggle, which only affects the intake averages.
+  const workoutDays = Object.values(byDate).filter((b) => b.burned > 0).length
   const avg = nLogged
     ? {
         cal: Math.round(logged.reduce((s, b) => s + netOf(b), 0) / nLogged),
@@ -301,7 +280,7 @@ export default function Calendar() {
         </span>
       </div>
 
-      {(avg || streak > 0 || monthWeight) && (
+      {(avg || workoutDays > 0 || monthWeight) && (
         <Card className={`space-y-2 transition-opacity ${loading ? 'opacity-40' : ''}`}>
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-slate-300">Month summary</span>
@@ -377,7 +356,7 @@ export default function Calendar() {
 
           <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-xs">
             <span className="text-slate-400">
-              🔥 Streak <b className="text-white">{streak}</b> day{streak === 1 ? '' : 's'}
+              🏃 <b className="text-white">{workoutDays}</b> workout day{workoutDays === 1 ? '' : 's'}
             </span>
             {monthWeight && (
               <span className="text-slate-400">
