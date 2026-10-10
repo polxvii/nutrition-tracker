@@ -35,7 +35,7 @@ export default function Calendar() {
     const [foodRes, wRes] = await Promise.all([
       supabase
         .from('food_logs')
-        .select('logged_at,source,calories,protein_g,carbs_g,fat_g')
+        .select('logged_at,source,calories,protein_g,carbs_g,fat_g,alcohol_g')
         .gte('logged_at', start.toISOString())
         .lt('logged_at', end.toISOString()),
       supabase
@@ -57,7 +57,7 @@ export default function Calendar() {
     const map = {}
     for (const l of data ?? []) {
       const key = todayISODate(new Date(l.logged_at)) // local day
-      const b = map[key] || (map[key] = { cal: 0, p: 0, c: 0, f: 0, burned: 0 })
+      const b = map[key] || (map[key] = { cal: 0, p: 0, c: 0, f: 0, burned: 0, alc: 0 })
       if (l.source === 'exercise') {
         b.burned += num(l.calories) // exercise = calories back (net = eaten − burned)
       } else {
@@ -65,6 +65,7 @@ export default function Calendar() {
         b.p += num(l.protein_g)
         b.c += num(l.carbs_g)
         b.f += num(l.fat_g)
+        b.alc += num(l.alcohol_g)
       }
     }
     setByDate(map)
@@ -231,6 +232,7 @@ export default function Calendar() {
                         <span className="text-[8px] leading-tight text-slate-500">
                           {Math.round(b.p)}·{Math.round(b.c)}·{Math.round(b.f)}
                           {b.burned > 0 && <span className="text-amber-500"> 🔥</span>}
+                          {b.alc > 0 && <span className="text-fuchsia-300"> 🍷</span>}
                         </span>
                       </>
                     ) : b && b.burned > 0 ? (
@@ -266,7 +268,7 @@ export default function Calendar() {
       </div>
 
       <p className="text-center text-[11px] text-slate-500">
-        kcal eaten · P·C·F (g) · 🔥 = exercise (info) — tap a day to view / log
+        kcal eaten · P·C·F (g) · 🔥 = exercise · 🍷 = alcohol — tap a day to view / log
       </p>
       <div className="flex justify-center gap-3 text-[10px] text-slate-500">
         <span className="flex items-center gap-1">
