@@ -328,7 +328,7 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, images, imag
   // which reads like a quota error or an app bug.
   if (/overload|unavailable|try again later|temporarily|503/i.test(lastErr?.message || '')) {
     throw httpError(
-      "Google's free AI is busy right now (shared free-tier capacity is overloaded — not your quota). Try again in a minute, or add the food manually / by search.",
+      "Google's free AI is down right now — its shared capacity is overloaded (not your keys or quota, so adding more keys won't help). It can stay busy for a while during peak hours, so log this manually or by search and try AI again later.",
       503
     )
   }

@@ -30,6 +30,7 @@ export default function PhotoLogger({
   const [meal, setMeal] = useState(defaultMeal)
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState(null)
+  const [serviceDown, setServiceDown] = useState(false) // 503 = Google's AI is overloaded, not a user error
   const [items, setItems] = useState(null)
   const [confidence, setConfidence] = useState(null)
   const [asFrequent, setAsFrequent] = useState(false)
@@ -93,6 +94,7 @@ export default function PhotoLogger({
     if (!images.length && !note.trim()) return
     setAnalyzing(true)
     setError(null)
+    setServiceDown(false)
     try {
       const res = await analyzePhoto({
         images: images.map(({ base64, mediaType }) => ({ base64, mediaType })),
@@ -130,6 +132,10 @@ export default function PhotoLogger({
       const joined = (res.items || []).slice(0, 2).map((it) => it.name).filter(Boolean).join(' + ')
       setDish((res.dish || '').trim() || note.trim() || joined)
     } catch (err) {
+      // 503 = Google's shared free AI is overloaded (not the user's fault / keys
+      // / quota). Flag it so the message renders as a service notice, not a red
+      // "you did something wrong" error.
+      setServiceDown(err.status === 503)
       setError(
         err.code === 'no_key'
           ? 'No Gemini key yet. Add your own key in Settings → “AI — your Gemini key” to use analysis.'
@@ -421,7 +427,14 @@ export default function PhotoLogger({
         </div>
       )}
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error &&
+        (serviceDown ? (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+            🚧 {error}
+          </p>
+        ) : (
+          <p className="text-sm text-red-400">{error}</p>
+        ))}
 
       {items && (
         <div className="space-y-3">
