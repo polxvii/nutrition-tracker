@@ -322,5 +322,15 @@ export async function analyzeFood({ apiKey, apiKeys, model, models, images, imag
       429
     )
   }
+  // All models came back "overloaded" / "unavailable" — Google's shared free
+  // tier is saturated (NOT your quota). This spikes during US daytime, which is
+  // night-time in Asia. Say so plainly instead of surfacing the raw API string,
+  // which reads like a quota error or an app bug.
+  if (/overload|unavailable|try again later|temporarily|503/i.test(lastErr?.message || '')) {
+    throw httpError(
+      "Google's free AI is busy right now (shared free-tier capacity is overloaded — not your quota). Try again in a minute, or add the food manually / by search.",
+      503
+    )
+  }
   throw lastErr || httpError('Analysis failed. Try again.', 502)
 }
