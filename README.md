@@ -1,118 +1,31 @@
-# 🥗 Nutrition Tracker (Stage 1 — MVP)
+# 🥗 Nutrition Tracker
 
-PWA nutrition tracker สำหรับ body recomposition (เพิ่มกล้าม + ลดไขมัน)
-ติดหน้าจอ iPhone ได้ และ sync ทุก device ผ่าน Supabase
+PWA บันทึกโภชนาการสำหรับ body recomposition (เพิ่มกล้าม + ลดไขมัน) — ติดหน้าจอ iPhone ได้ sync ทุกเครื่องผ่าน Supabase
+Live: <https://nutrition-tracker-as3.pages.dev>
 
-**Stack:** React + Vite + Tailwind CSS v4 + vite-plugin-pwa + Supabase + Recharts
+**Stack:** React 18 · Vite 6 · Tailwind CSS v4 · vite-plugin-pwa · Supabase (Auth + Postgres/RLS) · Cloudflare Pages + Functions · Google Gemini (BYOK) · Open Food Facts · Recharts
 
----
+## 📚 เอกสาร
+- **[docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)** — ทุกอย่างของโปรเจค (feature, DB, logic, env, gotchas)
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — diagram ทั้งหมด (หรือเปิด [docs/architecture.html](docs/architecture.html))
+- **[docs/ACCOUNT_MIGRATION.md](docs/ACCOUNT_MIGRATION.md)** — ย้าย GitHub / Cloudflare / Supabase / Gemini account
+- [CLAUDE.md](CLAUDE.md) — กติกาสำหรับ Claude Code
+- [nutrition-tracker-blueprint.md](nutrition-tracker-blueprint.md) — แผนตั้งต้น (ประวัติ บางส่วนล้าสมัย)
 
-## ✅ สิ่งที่ทำใน Stage 1
-
-- Setup React + Vite + Tailwind + PWA (Add to Home Screen บน iPhone)
-- Supabase auth (email/password) + 4 ตาราง + Row-Level Security
-- คำนวณ BMR / TDEE / เป้าแคลอรี่ / macro อัตโนมัติ
-- หน้า Login, Onboarding, Today, Weight, Settings + bottom navigation
-
----
-
-## 🚀 เริ่มใช้งาน (local)
-
-### 1. ติดตั้ง dependencies
+## 🚀 รันในเครื่อง
 
 ```bash
 npm install
+cp .env.example .env    # เติม VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, KEY_ENCRYPTION_SECRET
+npm run dev             # http://localhost:5173 — /api/* เสิร์ฟโดย dev middleware ใน vite.config.js
+npm run build           # ตรวจก่อน push ทุกครั้ง
 ```
 
-### 2. ตั้งค่า Supabase
+Database: รัน [`supabase/schema.sql`](supabase/schema.sql) ทั้งไฟล์ใน Supabase SQL Editor (รันซ้ำได้)
 
-1. สร้างโปรเจคที่ [supabase.com](https://supabase.com) (ฟรี)
-2. เปิด **SQL Editor → New query** แล้ววาง/รันไฟล์ [`supabase/schema.sql`](supabase/schema.sql) ทั้งไฟล์
-   → จะได้ตาราง `profiles`, `food_logs`, `frequent_foods`, `weight_logs` พร้อม RLS
-3. ไปที่ **Project Settings → API** คัดลอก **Project URL** และ **anon public key**
-4. คัดลอกไฟล์ env แล้วเติมค่า:
+## 🌐 Deploy
+push `main` → Cloudflare Pages build (`npm run build` → `dist`) + deploy `functions/api/*` อัตโนมัติ
+env ที่ต้องตั้งใน Cloudflare: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `KEY_ENCRYPTION_SECRET` (Secret) — รายละเอียดใน docs
 
-```bash
-cp .env.example .env
-```
-
-```
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhb....
-```
-
-> **แนะนำ:** ตอนพัฒนา ให้ปิด email confirmation ก่อน
-> Supabase → **Authentication → Sign In / Providers → Email** → ปิด "Confirm email"
-> (จะได้สมัครแล้วเข้าใช้ได้เลยโดยไม่ต้องยืนยันอีเมล)
-
-### 3. รัน dev server
-
-```bash
-npm run dev
-```
-
-เปิด http://localhost:5173 → สมัครสมาชิก → กรอก Onboarding → เริ่ม log ได้เลย
-
----
-
-## 📱 ทดสอบ PWA / ติดหน้าจอ iPhone
-
-Service worker จะทำงานเฉพาะตอน **build** (ปิดใน dev เพื่อไม่ให้ cache กวน):
-
-```bash
-npm run build
-npm run preview
-```
-
-บน iPhone (Safari) เปิด URL → ปุ่ม **Share** → **Add to Home Screen**
-> การติดหน้าจอจริงบน iPhone ต้องเสิร์ฟผ่าน **HTTPS** — ตอน deploy (Vercel ฯลฯ) จะได้ HTTPS อัตโนมัติ
-
----
-
-## 🧮 สูตรคำนวณ (ดู `src/lib/nutrition.js`)
-
-| ขั้น | สูตร |
-|---|---|
-| BMR (มี body fat) | Katch-McArdle: `LBM = w×(1−bf/100)`, `BMR = 370 + 21.6×LBM` |
-| BMR (ไม่มี) | Mifflin-St Jeor |
-| TDEE | `BMR × activity factor` (1.2 / 1.375 / 1.55 / 1.725 / 1.9) |
-| เป้าแคลอรี่ | recomp `−200` · cut `−15/20/25%` · bulk `+5/10/15%` · maintain เท่าเดิม (ไม่ต่ำกว่า BMR) |
-| โปรตีน | recomp/cut 2.2 · bulk 1.8 · maintain 1.7 g/kg |
-| ไขมัน | `w×0.8 g` (ไม่ต่ำกว่า 25% ของแคลอรี่) |
-| คาร์บ | ส่วนที่เหลือ |
-
----
-
-## 📁 โครงสร้าง
-
-```
-src/
-  lib/         supabase client, nutrition math, date helpers
-  contexts/    AuthContext (session + profile)
-  components/  ui, BottomNav, ProgressRing, MacroBar, ProfileFields, ...
-  pages/       Login, Onboarding, Today, Weight, Settings
-supabase/
-  schema.sql   ← รันใน Supabase SQL Editor
-```
-
-## 📸 Stage 2 — AI photo logging
-
-ถ่ายรูปอาหาร → Claude Vision ประเมิน macro แยกส่วน → แก้ portion ได้ → log
-
-**สถาปัตยกรรม:** รูปถูกย่อในเครื่อง → ส่งไป `POST /api/analyze` (serverless, **key อยู่ฝั่ง server เท่านั้น**) → Google Gemini Vision → คืน JSON ตาม schema
-- Local dev: จัดการโดย Vite plugin ใน `vite.config.js`
-- Production: Cloudflare Pages Function ที่ [functions/api/analyze.js](functions/api/analyze.js)
-- Logic กลาง: [server/analyzeFood.js](server/analyzeFood.js) — เปลี่ยน provider ได้ที่ไฟล์นี้ไฟล์เดียว
-
-### ตั้งค่า (ทำครั้งเดียว) — ใช้ Gemini free tier
-1. เอา API key **ฟรี** จาก [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (Google account ส่วนตัว, ไม่ต้องผูกบัตร)
-2. **Local:** ใส่ใน `.env` (บรรทัด `GEMINI_API_KEY=...` — **ห้ามมี** prefix `VITE_` เด็ดขาด ไม่งั้น key หลุดไป client) แล้ว **restart** `npm run dev`
-3. **Production (Cloudflare):** Workers & Pages → โปรเจค → Settings → **Environment variables** → เพิ่ม `GEMINI_API_KEY` (เป็น secret) ทั้ง Production + Preview → redeploy
-
-> โมเดล default = `gemini-flash-latest` (alias ที่ Google ชี้ไปโมเดล flash ล่าสุดเสมอ) — เปลี่ยนได้ด้วย env `GEMINI_MODEL` เช่น `gemini-3.5-flash`
-> เป็นบัญชี Google ส่วนตัว แยกจาก Claude Enterprise ขององค์กรโดยสิ้นเชิง
-> **ยังไม่ทำ:** เก็บรูปลง Supabase Storage (`photo_url` ยังเป็น null) — วิเคราะห์อย่างเดียว ไม่เซฟรูป
-
-## 🔜 ถัดไป (Stage 3+)
-barcode/USDA search, analytics dashboard (adaptive TDEE, weight trend), เก็บรูปลง Storage
-ดูรายละเอียดใน `nutrition-tracker-blueprint.md`
+## 📱 ติดหน้าจอ iPhone
+Safari เปิด URL → Share → **Add to Home Screen** · deploy แล้วไม่เห็นของใหม่ = cache ของ PWA → ปิดเปิดแอป / hard refresh

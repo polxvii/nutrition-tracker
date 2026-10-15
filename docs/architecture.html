@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nutrition Tracker — Architecture</title>
+<style>
+  body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+  header { padding: 24px 32px; background: #0f172a; color: #f8fafc; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; color: #94a3b8; font-size: 13px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px 24px 48px; }
+  section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  pre.mermaid { background: transparent; margin: 0; text-align: center; }
+  .notes { margin-top: 12px; font-size: 13px; color: #475569; }
+  .notes p { margin: 4px 0; }
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nutrition Tracker — Architecture</h1>
+  <p>Generated 2026-10-15 from docs/ARCHITECTURE.md · edit the .md, then run <code>node docs/build-diagrams.mjs</code></p>
+</header>
+<main>
+
+  <section>
+    <h2>1. System context — ทุกอย่างคุยกับอะไร</h2>
+    <pre class="mermaid">flowchart LR
+  user(["User — iPhone / browser PWA"])
+
+  subgraph CF["Cloudflare Pages"]
+    static["Static bundle&lt;br/&gt;React + Vite + service worker"]
+    fn["Pages Functions&lt;br/&gt;/api/analyze · /api/keys · /api/food"]
+  end
+
+  subgraph SB["Supabase (ref uqtzfwnqsjwwryehjlna)"]
+    auth["Auth&lt;br/&gt;email + password"]
+    db[("Postgres&lt;br/&gt;RLS on every table")]
+  end
+
+  gemini["Google Gemini&lt;br/&gt;free tier · BYOK keys"]
+  off["Open Food Facts&lt;br/&gt;search + barcode"]
+  gh["GitHub&lt;br/&gt;polxvii/nutrition-tracker"]
+  gha["GitHub Actions&lt;br/&gt;keepalive (daily 03:17 UTC)"]
+
+  user --&gt;|HTTPS| static
+  user --&gt;|"supabase-js: sign in, JWT"| auth
+  user --&gt;|"supabase-js: CRUD own rows"| db
+  user --&gt;|"fetch + Bearer JWT"| fn
+  fn --&gt;|"verify JWT, read own keys"| SB
+  fn --&gt;|generateContent| gemini
+  fn --&gt;|"search / product"| off
+  gh --&gt;|"push main = build + deploy"| CF
+  gha --&gt;|"REST ping + auth health"| SB</pre>
+    <div class="notes"><p>• Browser คุยกับ Supabase <b>ตรง</b> สำหรับข้อมูลทั่วไป (RLS คุมสิทธิ์) — ไม่ผ่าน Functions</p><p>• Functions ใช้เฉพาะงานที่ต้องมีความลับฝั่ง server (ถอดรหัส Gemini key) หรือเลี่ยง CORS (Open Food Facts)</p><p>• Functions เรียก Supabase ด้วย <b>JWT ของผู้ใช้เอง</b> (ไม่มี service_role) → RLS ยังคุมอยู่</p></div>
+  </section>
+
+  <section>
+    <h2>2. Build + deploy pipeline</h2>
+    <pre class="mermaid">flowchart LR
+  dev["Local dev&lt;br/&gt;npm run dev&lt;br/&gt;(Vite + dev API middleware)"]
+  check["npm run build&lt;br/&gt;must pass"]
+  push["git push origin main"]
+  cfb["Cloudflare build&lt;br/&gt;npm run build → dist/&lt;br/&gt;functions/ auto-deployed"]
+  live["nutrition-tracker-as3.pages.dev"]
+  sw["Service worker&lt;br/&gt;registerType autoUpdate"]
+  phone["Installed PWA&lt;br/&gt;(may serve old bundle until SW updates)"]
+
+  dev --&gt; check --&gt; push --&gt; cfb --&gt; live --&gt; sw --&gt; phone</pre>
+    
+  </section>
+
+  <section>
+    <h2>3. Frontend map — routes, pages, components</h2>
+    <pre class="mermaid">flowchart LR
+  mainjsx["main.jsx&lt;br/&gt;BrowserRouter + AuthProvider"] --&gt; app["App.jsx"]
+  app --&gt;|"no session"| login["Login&lt;br/&gt;sign in / sign up · remember me"]
+  app --&gt;|"profile has no goal_calories"| onb["Onboarding&lt;br/&gt;ProfileFields → computeTargets"]
+  app --&gt;|"signed in + onboarded"| shell["App shell + BottomNav"]
+
+  shell --&gt; today["/  — Today (Log)"]
+  shell --&gt; cal["/calendar — Calendar"]
+  shell --&gt; prog["/weight — Progress"]
+  shell --&gt; set["/settings — Settings"]
+
+  today --&gt; addfood["AddFood (full screen)"]
+  addfood --&gt; photo["PhotoLogger (AI)"]
+  addfood --&gt; scan["BarcodeScanner (lazy)"]
+  addfood --&gt; manual["AddFoodForm (manual)"]
+  addfood --&gt; savedv["Saved foods / Saved meals&lt;br/&gt;FrequentEditor · MealEditor"]
+  today --&gt; entry["EntryEditor&lt;br/&gt;dish components · servings · copy"]
+  today --&gt; exf["ExerciseForm"]
+  today --&gt; bulk["Multi-select bulk bar&lt;br/&gt;Meal · Date · Copy · Delete"]
+
+  prog --&gt; checkin["Weekly check-in&lt;br/&gt;→ TargetsEditor (review &amp; apply)"]
+  prog --&gt; bm["BodyMeasurements"]
+
+  set --&gt; pf["ProfileFields + TargetsEditor"]
+  set --&gt; gh["GoalHistoryCard"]
+  set --&gt; mw["MealWindowsCard"]
+  set --&gt; ex["ExportCard (CSV)"]
+  set --&gt; keys["ApiKeyManager (BYOK)"]</pre>
+    <div class="notes"><p>Shared libs: <code>lib/tiers.js</code> (สี green/amber/red ทุกหน้า) · <code>lib/goalHistory.js</code> (เป้าตามวัน) · <code>lib/nutrition.js</code> (BMR/TDEE/macro) · <code>lib/macros.js</code> (alcohol) · <code>lib/mealWindows.js</code> (meal ตามเวลา) · <code>components/ui.jsx</code> (Button/Card/Field/Input/Select/Collapsible)</p></div>
+  </section>
+
+  <section>
+    <h2>4. AI meal analysis — sequence (BYOK)</h2>
+    <pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as PhotoLogger (browser)
+  participant F as /api/analyze (Pages Function)
+  participant B as server/byok.js
+  participant S as Supabase
+  participant A as server/analyzeFood.js
+  participant G as Gemini API
+
+  U-&gt;&gt;U: downscale photos (createImageBitmap, 900px JPEG q0.8)
+  U-&gt;&gt;F: POST images + note, Bearer JWT
+  F-&gt;&gt;B: analyzeForUser()
+  B-&gt;&gt;S: GET /auth/v1/user (verify JWT)
+  B-&gt;&gt;B: rate limit 15 req/min/user
+  B-&gt;&gt;S: GET user_api_keys (RLS, user JWT)
+  B-&gt;&gt;B: AES-256-GCM decrypt (KEY_ENCRYPTION_SECRET)
+  B-&gt;&gt;A: analyzeFood(keys, images, note)
+  loop each model (outer) x each key (inner), skip pairs cooling down
+    A-&gt;&gt;G: generateContent (22s timeout, 40s total budget)
+    G--&gt;&gt;A: 200 JSON, or 429 quota, or 503 overload, or 4xx
+  end
+  A--&gt;&gt;B: items, dish, confidence, model
+  B-&gt;&gt;S: PATCH key: last_used_at, status=active
+  B--&gt;&gt;F: result
+  F--&gt;&gt;U: JSON → editable estimate → log
+  Note over B,S: on failure markStatus: 429 = exhausted, bad key = invalid
+  Note over U: 503 overload shows amber "AI is down" notice</pre>
+    
+  </section>
+
+  <section>
+    <h2>5. Adding a Gemini key — sequence</h2>
+    <pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as ApiKeyManager (browser)
+  participant F as /api/keys (Pages Function)
+  participant B as server/byok.js
+  participant G as Gemini API
+  participant S as Supabase
+
+  U-&gt;&gt;F: POST key + label, Bearer JWT
+  F-&gt;&gt;B: addKeyForUser()
+  B-&gt;&gt;S: verify JWT
+  B-&gt;&gt;G: tiny ping on 2 models
+  G--&gt;&gt;B: 200 = active, 429 = exhausted (still valid), 400/401/403 = rejected
+  B-&gt;&gt;B: encrypt key (AES-256-GCM)
+  B-&gt;&gt;S: INSERT user_api_keys (DB trigger: user max 1, admin max 10)
+  B--&gt;&gt;U: id, key_last4, status
+  Note over U,S: list + delete keys go browser → Supabase directly (RLS)</pre>
+    
+  </section>
+
+  <section>
+    <h2>6. Food search + barcode flow</h2>
+    <pre class="mermaid">flowchart TB
+  q["User types in Add food search"] --&gt; local["Local matches&lt;br/&gt;saved + recent + full history&lt;br/&gt;+ names inside dish components"]
+  q --&gt; api["GET /api/food?q=…"]
+  api --&gt; sal["OFF Search-a-licious"]
+  sal --&gt;|fails| legacy["OFF legacy cgi/search.pl"]
+
+  b["Barcode scanned"] --&gt; cache{"In personal cache?&lt;br/&gt;frequent_foods.barcode"}
+  cache --&gt;|yes| pick["Amount picker&lt;br/&gt;servings ⇄ grams"]
+  cache --&gt;|no| prod["GET /api/food?code=…&lt;br/&gt;OFF v2 product"]
+  prod --&gt;|found| pick
+  prod --&gt;|"not found"| ai["Open AI view&lt;br/&gt;read the label"]
+  pick --&gt; log["Insert food_logs&lt;br/&gt;(+ cache barcode row)"]
+  ai --&gt; log</pre>
+    
+  </section>
+
+  <section>
+    <h2>7. Database — ER diagram</h2>
+    <pre class="mermaid">erDiagram
+  AUTH_USERS ||--|| PROFILES : "id = id"
+  AUTH_USERS ||--o{ FOOD_LOGS : logs
+  AUTH_USERS ||--o{ FREQUENT_FOODS : saves
+  AUTH_USERS ||--o{ SAVED_MEALS : combos
+  AUTH_USERS ||--o{ WEIGHT_LOGS : weighs
+  AUTH_USERS ||--o{ BODY_MEASUREMENTS : measures
+  AUTH_USERS ||--o{ GOAL_HISTORY : "goal periods"
+  AUTH_USERS ||--o{ USER_API_KEYS : "BYOK keys"
+
+  PROFILES {
+    uuid id PK
+    text email
+    int age
+    numeric weight_kg
+    numeric height_cm
+    text sex
+    numeric body_fat_pct
+    text activity_level
+    text goal_type "recomp cut bulk maintain"
+    text goal_rate "slow medium fast"
+    int bmr
+    int tdee
+    int goal_calories
+    int goal_protein_g
+    int goal_carbs_g
+    int goal_fat_g
+    numeric goal_weight_kg
+    text role "user or admin, set by SQL only"
+    jsonb meal_windows
+  }
+  FOOD_LOGS {
+    uuid id PK
+    uuid user_id FK
+    timestamptz logged_at
+    text meal_type "breakfast lunch dinner night snack"
+    text food_name
+    text source "manual frequent ai barcode search meal exercise"
+    numeric grams
+    text unit "g or ml"
+    numeric calories
+    numeric protein_g
+    numeric carbs_g
+    numeric fat_g
+    numeric alcohol_g
+    jsonb components "dish breakdown"
+    numeric servings
+    numeric serving_g
+    text ai_confidence
+  }
+  FREQUENT_FOODS {
+    uuid id PK
+    uuid user_id FK
+    text food_name "unique per user"
+    numeric default_grams
+    text unit
+    numeric calories
+    numeric protein_g
+    numeric carbs_g
+    numeric fat_g
+    numeric alcohol_g
+    numeric serving_g
+    text barcode "set = barcode cache row"
+    int times_used
+  }
+  SAVED_MEALS {
+    uuid id PK
+    uuid user_id FK
+    text name
+    jsonb items
+  }
+  WEIGHT_LOGS {
+    uuid id PK
+    uuid user_id FK
+    date logged_date "unique per user"
+    numeric weight_kg
+  }
+  BODY_MEASUREMENTS {
+    uuid id PK
+    uuid user_id FK
+    date logged_date "unique per user"
+    jsonb measurements "waist chest arms thighs hips"
+  }
+  GOAL_HISTORY {
+    uuid id PK
+    uuid user_id FK
+    date effective_from "unique per user"
+    int goal_calories
+    int goal_protein_g
+    int goal_carbs_g
+    int goal_fat_g
+    int tdee
+  }
+  USER_API_KEYS {
+    uuid id PK
+    uuid user_id FK
+    text provider "gemini"
+    text encrypted_key "base64 iv . base64 ct"
+    text key_last4
+    text key_label
+    text status "active exhausted invalid"
+    timestamptz last_used_at
+  }</pre>
+    <div class="notes"><p>ทุกตาราง: RLS <code>auth.uid() = user_id</code> · <code>anon</code> ไม่มีสิทธิ์ · <code>authenticated</code> CRUD</p></div>
+  </section>
+
+  <section>
+    <h2>8. Weekly check-in — วิธีคำนวณ measured maintenance</h2>
+    <pre class="mermaid">flowchart TB
+  w["weight_logs in window&lt;br/&gt;14 / 28 / 56 / 90 days"] --&gt; gate{"enough weigh-ins&lt;br/&gt;and spread?"}
+  gate --&gt;|no| need["Not ready yet&lt;br/&gt;shows what's missing"]
+  gate --&gt;|yes| ols["OLS slope on raw weights&lt;br/&gt;+ 95% CI (t, df = n-2)"]
+
+  f["food per day in window"] --&gt; floor["skip days below goal x 0.5&lt;br/&gt;(under-logged)"]
+  floor --&gt; mad{"Exclude outliers?"}
+  mad --&gt;|yes| madf["drop MAD z-score &gt; 3.5&lt;br/&gt;(listed on screen)"]
+  mad --&gt;|no| avg["avg intake"]
+  madf --&gt; avg
+
+  ols --&gt; maint["maintenance =&lt;br/&gt;avg intake - (slope per week / 7) x 7700"]
+  avg --&gt; maint
+  maint --&gt; range["95% range =&lt;br/&gt;slope error ⊕ intake SE"]
+  range --&gt; verdict{"current goal&lt;br/&gt;vs the range"}
+  verdict --&gt;|inside| unclear["Can't tell yet&lt;br/&gt;no change offered"]
+  verdict --&gt;|"clearly below / above"| apply["Suggest new goal&lt;br/&gt;Review &amp; apply → profiles + goal_history"]</pre>
+    
+  </section>
+
+  <section>
+    <h2>9. Calorie colour tiers (ใช้ร่วมทุกหน้า)</h2>
+    <pre class="mermaid">flowchart LR
+  v["day kcal"] --&gt; c1{"&gt; maintenance + band?"}
+  c1 --&gt;|yes| red["red"]
+  c1 --&gt;|no| c2{"&gt; goal + band?"}
+  c2 --&gt;|yes| amber["amber"]
+  c2 --&gt;|no| green["green"]</pre>
+    <div class="notes"><p><code>band</code> (เฉพาะวันเดียว, ค่าเฉลี่ยไม่มี band) = <code>clamp(deficit x 0.30, goal x 2%, goal x 5%)</code> โดย deficit = maintenance − goal · protein: แดงเมื่อ &lt; 75% ของเป้า · carbs/fat: แดงเมื่อ &gt; 125%</p></div>
+  </section>
+
+  <section>
+    <h2>10. Account dependency map — เปลี่ยนอะไรแล้วกระทบอะไร</h2>
+    <pre class="mermaid">flowchart LR
+  ghacc["GitHub account / repo"] --&gt; cfproj["Cloudflare Pages project&lt;br/&gt;(Git connection)"]
+  cfproj --&gt; url["Public URL *.pages.dev"]
+  url --&gt; pwa["Installed PWA on phone&lt;br/&gt;(origin-bound: reinstall + re-login)"]
+  url --&gt; sbauth["Supabase Auth Site URL"]
+
+  sbproj["Supabase project&lt;br/&gt;(URL + anon key)"] --&gt; envc["Cloudflare env&lt;br/&gt;VITE_SUPABASE_URL / ANON_KEY"]
+  sbproj --&gt; envl["local .env"]
+  sbproj --&gt; ka["keepalive.yml&lt;br/&gt;(URL + anon key hard-coded)"]
+  sbproj --&gt; data[("All user data&lt;br/&gt;+ auth users")]
+
+  secret["KEY_ENCRYPTION_SECRET"] --&gt; envc2["Cloudflare secret"]
+  secret --&gt; envl
+  secret --&gt; stored["Every stored Gemini key&lt;br/&gt;(undecryptable if secret changes)"]
+
+  google["Google account(s)&lt;br/&gt;AI Studio keys"] --&gt; stored</pre>
+    <div class="notes"><p>รายละเอียดขั้นตอนดูที่ <a href="ACCOUNT_MIGRATION.md">ACCOUNT_MIGRATION.md</a></p></div>
+  </section>
+</main>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'strict', flowchart: { htmlLabels: true } })
+</script>
+</body>
+</html>
