@@ -1511,9 +1511,11 @@ export default function Weight() {
         </Card>
       )}
 
-      {/* Weight — log / edit, trend, projection, history in one section */}
+      {/* Weight — the weigh-in form is always visible (defaults to today); the
+          toggle only shows/hides the trend chart, projection and history. */}
       <Collapsible
         title="⚖️ Weight"
+        subtitle="Tap to show trend, projection & history"
         right={
           curWeight != null ? (
             <span className="text-xs text-slate-400">
@@ -1528,31 +1530,35 @@ export default function Weight() {
             </span>
           ) : null
         }
+        pinned={
+          // log / edit a weigh-in (the form prefills the selected date)
+          <form ref={formRef} onSubmit={save} className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <Field label="Date">
+                <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
+              </Field>
+            </div>
+            <div className="min-w-0 flex-1">
+              <Field label="Weight (kg)">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  // Last weigh-in as a reference point for today's entry.
+                  placeholder={
+                    weightLogs.length ? Number(weightLogs[weightLogs.length - 1].weight_kg).toFixed(2) : '70.25'
+                  }
+                />
+              </Field>
+            </div>
+            <Button type="submit" className="shrink-0" disabled={busy}>
+              {busy ? '…' : weightLogs.some((l) => l.logged_date === date) ? 'Update' : 'Save'}
+            </Button>
+          </form>
+        }
       >
-        {/* log / edit a weigh-in (the form prefills the selected date) */}
-        <form ref={formRef} onSubmit={save} className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <Field label="Date">
-              <Input type="date" value={date} max={todayISODate()} onChange={(e) => setDate(e.target.value)} />
-            </Field>
-          </div>
-          <div className="min-w-0 flex-1">
-            <Field label="Weight (kg)">
-              <Input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                placeholder="70.25"
-              />
-            </Field>
-          </div>
-          <Button type="submit" className="shrink-0" disabled={busy}>
-            {busy ? '…' : weightLogs.some((l) => l.logged_date === date) ? 'Update' : 'Save'}
-          </Button>
-        </form>
-
         {weightData.length >= 2 ? (
           <>
           <div className="h-48">

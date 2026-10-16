@@ -1,6 +1,6 @@
 # Nutrition Tracker — ภาพรวมโปรเจคฉบับเต็ม
 
-> อัปเดตล่าสุด: 2026-10-15 · commit ล่าสุดตอนเขียน: `6e606c6` (main)
+> อัปเดตล่าสุด: 2026-10-16
 > เอกสารชุดนี้เป็น **source of truth** สำหรับคนที่มารับต่อ (รวมถึงตอนย้าย account)
 > ดู diagram ที่ [ARCHITECTURE.md](ARCHITECTURE.md) · ขั้นตอนย้าย account ที่ [ACCOUNT_MIGRATION.md](ACCOUNT_MIGRATION.md)
 
@@ -123,7 +123,7 @@ nutrition-tracker-blueprint.md    แผนตั้งต้น (ประว�
 - ช่วง: 7d / 15d / 30d / 90d / Custom + Include today (ไม่รวมวันนี้ = เลื่อนหน้าต่างถอยไป 1 วัน จำนวนวันเท่าเดิม)
 - Insight · Energy balance + ประมาณผลต่อน้ำหนัก · Adherence chart (แท่งสี tier, เส้น goal + maintenance, rolling 7 วัน, แกน Y cap กัน outlier — แท่งที่ทะลุเป็นแดงเข้ม + ▲) · Weekday vs weekend · Alcohol · Calories by meal (แท่ง stacked P/C/F ยาว = kcal)
 - **Weekly check-in** (measured maintenance): หน้าต่าง 14/28/56/90 วัน, แสดง maintenance + ช่วง 95% เสมอ, toggle ตัด outlier (MAD), verdict ว่าเป้าขาด/เกินชัดหรือยังบอกไม่ได้, Review & apply ผ่าน TargetsEditor → บันทึก goal_history
-- ⚖️ Weight: log/แก้, กราฟ daily + EWMA + เส้น goal, Low/High ของช่วง, goal projection, history เฉพาะในช่วงที่เลือก
+- ⚖️ Weight: ฟอร์มชั่งน้ำหนัก**โชว์ตลอด** (วันที่ default = วันนี้, placeholder = น้ำหนักล่าสุด) · ปุ่มพับซ่อน/โชว์เฉพาะส่วนที่เหลือ: กราฟ daily + EWMA + เส้น goal, Low/High ของช่วง, goal projection, history เฉพาะในช่วงที่เลือก (ใช้ prop `pinned` ของ `Collapsible`)
 - 📏 Body measurements
 
 ### Settings — `/settings`

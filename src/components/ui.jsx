@@ -12,7 +12,9 @@ export function Card({ className = '', children }) {
 
 // Card with a tap-to-toggle header (title + optional subtitle / right node).
 // Collapsed by default so a long Settings page stays compact as lists grow.
-export function Collapsible({ title, subtitle, right, defaultOpen = false, children }) {
+// `pinned` renders under the header whether or not the section is open (e.g. a
+// quick-entry form), so the toggle only hides the rest (`children`).
+export function Collapsible({ title, subtitle, right, defaultOpen = false, pinned, children }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-900">
@@ -41,6 +43,7 @@ export function Collapsible({ title, subtitle, right, defaultOpen = false, child
           </svg>
         </div>
       </button>
+      {pinned && <div className={`px-4 ${open ? 'pb-3' : 'pb-4'}`}>{pinned}</div>}
       {open && <div className="space-y-3 px-4 pb-4">{children}</div>}
     </div>
   )
