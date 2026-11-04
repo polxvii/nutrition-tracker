@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
+import { fetchAll, dayStartISO, dayEndISO } from '../lib/fetchAll'
 import { Button, Collapsible, Field, Input } from './ui'
 
 // Last N days *including today* (1d = today only).
@@ -77,14 +78,19 @@ export default function ExportCard() {
 
   // Each builder fetches its table for the window and returns CSV pieces:
   // { header:[...], lines:[...csv strings], count, slug } — or { error }.
+  // fetchAll pages past Supabase's 1000-row cap (all-time exports exceed it).
   async function buildFood(f, t) {
-    let query = supabase
-      .from('food_logs')
-      .select('logged_at,meal_type,food_name,grams,unit,calories,protein_g,carbs_g,fat_g,source,components')
-      .order('logged_at', { ascending: true })
-    if (f) query = query.gte('logged_at', f + 'T00:00:00')
-    if (t) query = query.lte('logged_at', t + 'T23:59:59')
-    const { data, error } = await query
+    const { data, error } = await fetchAll(() => {
+      let query = supabase
+        .from('food_logs')
+        .select('logged_at,meal_type,food_name,grams,unit,calories,protein_g,carbs_g,fat_g,source,components')
+        .order('logged_at', { ascending: true })
+        .order('id', { ascending: true }) // stable paging when timestamps tie
+      // Local-day bounds (a bare "T00:00:00" would be read as UTC).
+      if (f) query = query.gte('logged_at', dayStartISO(f))
+      if (t) query = query.lt('logged_at', dayEndISO(t))
+      return query
+    })
     if (error) return { error: error.message }
     const header = ['date', 'time', 'meal', 'dish', 'food', 'grams', 'unit', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'source']
     const lines = []
@@ -118,10 +124,12 @@ export default function ExportCard() {
   }
 
   async function buildWeight(f, t) {
-    let query = supabase.from('weight_logs').select('logged_date,weight_kg').order('logged_date', { ascending: true })
-    if (f) query = query.gte('logged_date', f)
-    if (t) query = query.lte('logged_date', t)
-    const { data, error } = await query
+    const { data, error } = await fetchAll(() => {
+      let query = supabase.from('weight_logs').select('logged_date,weight_kg').order('logged_date', { ascending: true })
+      if (f) query = query.gte('logged_date', f)
+      if (t) query = query.lte('logged_date', t)
+      return query
+    })
     if (error) return { error: error.message }
     const header = ['date', 'weight_kg']
     const lines = (data || []).map((l) => [l.logged_date, l.weight_kg ?? ''].map(esc).join(','))
@@ -129,10 +137,15 @@ export default function ExportCard() {
   }
 
   async function buildBody(f, t) {
-    let query = supabase.from('body_measurements').select('logged_date,measurements').order('logged_date', { ascending: true })
-    if (f) query = query.gte('logged_date', f)
-    if (t) query = query.lte('logged_date', t)
-    const { data, error } = await query
+    const { data, error } = await fetchAll(() => {
+      let query = supabase
+        .from('body_measurements')
+        .select('logged_date,measurements')
+        .order('logged_date', { ascending: true })
+      if (f) query = query.gte('logged_date', f)
+      if (t) query = query.lte('logged_date', t)
+      return query
+    })
     if (error) return { error: error.message }
     const header = ['date', ...SITES]
     const lines = (data || []).map((l) =>

@@ -1,6 +1,6 @@
 # Nutrition Tracker — ภาพรวมโปรเจคฉบับเต็ม
 
-> อัปเดตล่าสุด: 2026-10-16
+> อัปเดตล่าสุด: 2026-11-04
 > เอกสารชุดนี้เป็น **source of truth** สำหรับคนที่มารับต่อ (รวมถึงตอนย้าย account)
 > ดู diagram ที่ [ARCHITECTURE.md](ARCHITECTURE.md) · ขั้นตอนย้าย account ที่ [ACCOUNT_MIGRATION.md](ACCOUNT_MIGRATION.md)
 
@@ -74,7 +74,8 @@ src/
                        BarcodeScanner, SwipeRow, AlcoholField, ProgressRing, ui.jsx (Button/Card/Field/Input/Select/Collapsible)
   lib/                 supabase (remember-me storage), nutrition (BMR/TDEE/macros), tiers (สี),
                        goalHistory, mealWindows, macros (alcohol), foodSearch, image (ย่อรูป),
-                       analyzeApi, dateHelpers, useSwipe, useLongPress
+                       analyzeApi, dateHelpers, fetchAll (แบ่งหน้าเกิน 1000 แถว + ขอบวันตามเวลาท้องถิ่น),
+                       useSwipe, useLongPress
 supabase/schema.sql  schema ทั้งหมด (idempotent — รันซ้ำได้)
 .github/workflows/keepalive.yml   ping Supabase ทุกวัน 03:17 UTC
 docs/                เอกสารชุดนี้
@@ -193,6 +194,8 @@ git push origin main      # Cloudflare build + deploy อัตโนมัต�
 4. **`KEY_ENCRYPTION_SECRET` ไม่ตรงกัน** ระหว่าง local/prod → key ที่เก็บไว้ถอดรหัสไม่ได้
 5. `supabase.auth.onAuthStateChange` — ห้าม `await` supabase call ข้างใน (deadlock) ใช้ `setTimeout` แทน
 6. Login-gated → Claude ตรวจ UI สดไม่ได้ ใช้ `npm run build` + ให้เจ้าของทดสอบบนมือถือ
+7. **Supabase ส่งกลับสูงสุด 1,000 แถวต่อ request แล้วตัดที่เหลือทิ้งเงียบๆ** — query ที่อาจเกิน (export all time, food 90 วัน, ประวัติหลายปี) ต้องผ่าน `fetchAll()` ใน `lib/fetchAll.js` + เรียงด้วย key ที่ไม่ซ้ำ (`logged_at` แล้วต่อด้วย `id`) · เคยทำให้ export All time ขาดวันล่าสุด และ Progress/check-in 90 วันตกข้อมูลช่วงหลัง (แก้ 2026-11-04)
+8. **ขอบวันที่ของ `logged_at` (timestamptz)** ห้ามส่ง `'YYYY-MM-DDT00:00:00'` ตรงๆ — Postgres อ่านเป็น UTC (ไทยคลาดไป 7 ชม.) ใช้ `dayStartISO()` / `dayEndISO()` หรือ `new Date(...).toISOString()`
 
 ## 10. Backlog / ไอเดียที่ค้าง
 

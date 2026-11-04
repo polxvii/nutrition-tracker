@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
+import { fetchAll } from '../lib/fetchAll'
 import { Button, Collapsible, Input } from './ui'
 
 const SITES = [
@@ -44,10 +45,11 @@ export default function BodyMeasurements({ fromDate, toDate }) {
   }
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from('body_measurements')
-      .select('*')
-      .order('logged_date', { ascending: true })
+    // All-time, oldest first → page past the 1000-row cap so the newest entries
+    // never fall off once the history grows.
+    const { data } = await fetchAll(() =>
+      supabase.from('body_measurements').select('*').order('logged_date', { ascending: true })
+    )
     setLogs(data ?? [])
   }, [])
 

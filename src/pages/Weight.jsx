@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
+import { fetchAll, dayStartISO } from '../lib/fetchAll'
 import { Button, Card, Collapsible, Field, Input } from '../components/ui'
 import BodyMeasurements from '../components/BodyMeasurements'
 import TargetsEditor from '../components/TargetsEditor'
@@ -275,25 +276,33 @@ export default function Weight() {
   }
 
   const load = useCallback(async () => {
-    // Fetch far enough back to cover the chosen period, the 30-day check-in
-    // window, AND 6 days before the range start so the rolling 7-day line is a
-    // true trailing average from day one (not an expanding window). Filter to
-    // the period client-side.
-    const win30 = isoDaysAgo(30)
+    // Fetch far enough back to cover the chosen period, the selected check-in
+    // window (up to 90 days), AND 6 days before the range start so the rolling
+    // 7-day line is a true trailing average from day one (not an expanding
+    // window). Filter to the period client-side.
+    const winStart = isoDaysAgo(tdeeWin)
     const preRoll = todayISODate(new Date(new Date(fromDate + 'T00:00:00').getTime() - 6 * 86400000))
-    const start = [win30, preRoll].sort()[0] // earliest of the two (ISO dates sort lexically)
+    const start = [winStart, preRoll].sort()[0] // earliest of the two (ISO dates sort lexically)
+    // Both go through fetchAll: a 90-day food window easily passes Supabase's
+    // 1000-row cap, and because rows come oldest-first the cap would silently
+    // drop the MOST RECENT days.
     const [wRes, fRes] = await Promise.all([
       // Weigh-ins are few (one per day) — load ALL so history + editing aren't
       // limited to the selected period. Trend/check-in still scope client-side.
-      supabase
-        .from('weight_logs')
-        .select('*')
-        .order('logged_date', { ascending: true }),
-      supabase
-        .from('food_logs')
-        .select('logged_at,calories,protein_g,carbs_g,fat_g,alcohol_g,source,meal_type')
-        .gte('logged_at', start + 'T00:00:00')
-        .order('logged_at', { ascending: true }),
+      fetchAll(() =>
+        supabase
+          .from('weight_logs')
+          .select('*')
+          .order('logged_date', { ascending: true })
+      ),
+      fetchAll(() =>
+        supabase
+          .from('food_logs')
+          .select('logged_at,calories,protein_g,carbs_g,fat_g,alcohol_g,source,meal_type')
+          .gte('logged_at', dayStartISO(start)) // local midnight, not UTC
+          .order('logged_at', { ascending: true })
+          .order('id', { ascending: true }) // stable paging when timestamps tie
+      ),
     ])
     setWeightLogs(wRes.data ?? [])
     // Per-day totals. Gross model: `kcal` is GROSS food intake (exercise is NOT
@@ -333,7 +342,7 @@ export default function Weight() {
       .map((b) => ({ ...b, kcal: b.eaten }))
       .sort((a, b) => (a.date < b.date ? -1 : 1))
     setFoodByDay(rows)
-  }, [fromDate])
+  }, [fromDate, tdeeWin])
 
   useEffect(() => {
     load()

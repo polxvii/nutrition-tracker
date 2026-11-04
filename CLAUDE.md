@@ -20,6 +20,7 @@ Full context lives in `docs/` — read **docs/PROJECT_OVERVIEW.md** first; diagr
 - Match the surrounding code: comment density, naming, Tailwind idioms; reuse `components/ui.jsx` (`Button`, `Card`, `Field`, `Input`, `Select`, `Collapsible`).
 - Shared colour logic lives in `src/lib/tiers.js`; per-day goals come from `src/lib/goalHistory.js` (`goalForDate`). Don't fork these.
 - Calorie model is **gross**: exercise is informational, never subtracted from intake.
+- Supabase returns at most 1000 rows per request and silently drops the rest. Any read that can grow past that (date ranges, all-time lists) goes through `fetchAll()` in `src/lib/fetchAll.js`, ordered on a unique key (`logged_at` then `id`). Filter `logged_at` with local-day bounds (`dayStartISO` / `dayEndISO`), never a bare `'YYYY-MM-DDT00:00:00'` (read as UTC).
 - Macro colours: protein `#22c55e`, carbs `#3b82f6`, fat `#FEC6DF`.
 
 ## Git

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { todayISODate } from '../lib/dateHelpers'
+import { fetchAll } from '../lib/fetchAll'
 import { useSwipe } from '../lib/useSwipe'
 import { loadGoalHistory, goalForDate } from '../lib/goalHistory'
 import { tierName, tierText } from '../lib/tiers'
@@ -33,11 +34,16 @@ export default function Calendar() {
     const endMonth = cursor.m === 11 ? { y: cursor.y + 1, m: 0 } : { y: cursor.y, m: cursor.m + 1 }
     const endYMD = `${endMonth.y}-${pad(endMonth.m + 1)}-01`
     const [foodRes, wRes] = await Promise.all([
-      supabase
-        .from('food_logs')
-        .select('logged_at,source,calories,protein_g,carbs_g,fat_g,alcohol_g')
-        .gte('logged_at', start.toISOString())
-        .lt('logged_at', end.toISOString()),
+      // Paged so a busy month can't hit Supabase's 1000-row cap.
+      fetchAll(() =>
+        supabase
+          .from('food_logs')
+          .select('logged_at,source,calories,protein_g,carbs_g,fat_g,alcohol_g')
+          .gte('logged_at', start.toISOString())
+          .lt('logged_at', end.toISOString())
+          .order('logged_at', { ascending: true })
+          .order('id', { ascending: true })
+      ),
       supabase
         .from('weight_logs')
         .select('logged_date,weight_kg')
