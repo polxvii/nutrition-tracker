@@ -1,6 +1,6 @@
 # Nutrition Tracker — ภาพรวมโปรเจคฉบับเต็ม
 
-> อัปเดตล่าสุด: 2026-11-04
+> อัปเดตล่าสุด: 2026-11-25
 > เอกสารชุดนี้เป็น **source of truth** สำหรับคนที่มารับต่อ (รวมถึงตอนย้าย account)
 > ดู diagram ที่ [ARCHITECTURE.md](ARCHITECTURE.md) · ขั้นตอนย้าย account ที่ [ACCOUNT_MIGRATION.md](ACCOUNT_MIGRATION.md)
 
@@ -114,7 +114,7 @@ nutrition-tracker-blueprint.md    แผนตั้งต้น (ประว�
 - ⭐ Saved foods (แตะชื่อ = เลือก servings/grams, ＋ = add ทันที) · 🍱 Saved meals (แตะชื่อ = confirm เลือก meal + ดู items, ＋ = add ทันที) · Recent (swipe = ⭐ save)
 - 🤖 **AI** (`PhotoLogger`): สูงสุด 12 รูป, paste รูปในช่องข้อความได้, แตะรูปดูเต็มจอ, ย่อรูปฝั่ง client (900px JPEG), แก้ทุก item, servings คูณทั้งหมด, log เป็น dish เดียวหรือแยก item, แอลกอฮอล์คำนวณจาก ml × ABV · Gemini ล่ม (503) แสดงแถบเหลือง 🚧
 - 📷 Barcode: สแกน → cache ส่วนตัวก่อน → OFF → ไม่เจอส่งต่อ AI อ่านฉลาก (แล้ว cache ให้)
-- ✎ Manual (มี alcohol calculator)
+- ✎ Manual (มี alcohol calculator · ใช้มื้อที่เลือกไว้บนหน้า Add food)
 
 ### Calendar — `/calendar`
 - heatmap รายเดือน: kcal/วัน สีเทียบเป้า + maintenance ของวันนั้น, P·C·F, 🔥 exercise, 🍷 alcohol · คอลัมน์ wk avg (≥2 วันที่ log) · swipe เปลี่ยนเดือน · แตะวันไปหน้า Log

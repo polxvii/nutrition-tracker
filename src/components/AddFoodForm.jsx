@@ -25,8 +25,11 @@ const empty = {
   alcohol_g: '',
 }
 
-export default function AddFoodForm({ onSubmit, onCancel, busy }) {
-  const [f, setF] = useState(empty)
+// `defaultMeal` = the meal already picked on the Add food screen, so opening
+// Manual doesn't silently reset it to Lunch.
+export default function AddFoodForm({ onSubmit, onCancel, busy, defaultMeal }) {
+  const blank = { ...empty, meal_type: defaultMeal || empty.meal_type }
+  const [f, setF] = useState(blank)
   const [asFrequent, setAsFrequent] = useState(false)
   const [showAlc, setShowAlc] = useState(false) // reveal the alcohol field (drinks only)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -62,7 +65,7 @@ export default function AddFoodForm({ onSubmit, onCancel, busy }) {
       },
       { asFrequent }
     )
-    setF(empty)
+    setF(blank)
     setShowAlc(false)
   }
 

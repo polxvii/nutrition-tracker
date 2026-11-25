@@ -517,7 +517,7 @@ export default function AddFood({
     )
   }
   if (view === 'manual') {
-    return <AddFoodForm onSubmit={onLog} onCancel={() => setView('home')} busy={busy} />
+    return <AddFoodForm onSubmit={onLog} onCancel={() => setView('home')} busy={busy} defaultMeal={meal} />
   }
 
   // Product amount panel (after picking an OFF result / scanned barcode).
